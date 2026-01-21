@@ -14,9 +14,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
@@ -398,28 +396,49 @@ private fun RecentSolvesDisplay(
 ) {
     val recentSolves = solves.takeLast(5).reversed()
     
-    Row(
-        modifier = modifier.horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        recentSolves.forEach { solve ->
-            Surface(
-                shape = MaterialTheme.shapes.small,
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                modifier = Modifier.padding(horizontal = 2.dp)
-            ) {
-                Text(
-                    text = formatDisplayTime(solve.displayTime),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontSize = 11.sp,
-                    fontFamily = FontFamily.Monospace,
-                    color = when (solve.penalty) {
-                        Penalty.DNF -> MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
-                        Penalty.PLUS_TWO -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.8f)
-                        Penalty.NONE -> MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
-                    },
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                )
+    BoxWithConstraints(modifier = modifier) {
+        val availableWidth = maxWidth
+        val itemCount = recentSolves.size
+        val spacing = 12.dp * (itemCount - 1)
+        val horizontalPadding = 16.dp // Total padding (8dp per item)
+        val availableForItems = availableWidth - spacing - horizontalPadding
+        val itemWidth = availableForItems / itemCount
+        
+        // Calculate dynamic font size based on available width
+        val dynamicFontSize = when {
+            itemWidth < 50.dp -> 9.sp
+            itemWidth < 60.dp -> 10.sp
+            else -> 11.sp
+        }
+        
+        val dynamicHorizontalPadding = when {
+            itemWidth < 50.dp -> 4.dp
+            itemWidth < 60.dp -> 5.dp
+            else -> 6.dp
+        }
+        
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            recentSolves.forEach { solve ->
+                Surface(
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    modifier = Modifier.padding(horizontal = 2.dp)
+                ) {
+                    Text(
+                        text = formatDisplayTime(solve.displayTime),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = dynamicFontSize,
+                        fontFamily = FontFamily.Monospace,
+                        color = when (solve.penalty) {
+                            Penalty.DNF -> MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
+                            Penalty.PLUS_TWO -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.8f)
+                            Penalty.NONE -> MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                        },
+                        modifier = Modifier.padding(horizontal = dynamicHorizontalPadding, vertical = 3.dp)
+                    )
+                }
             }
         }
     }
