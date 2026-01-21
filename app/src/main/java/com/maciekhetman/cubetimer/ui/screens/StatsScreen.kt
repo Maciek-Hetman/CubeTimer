@@ -578,6 +578,8 @@ private fun PenaltyStatsSection(solves: List<SolveTime>) {
 
 @Composable
 private fun AveragesChart(solves: List<SolveTime>) {
+    var selectedRange by remember { mutableStateOf("All") }
+    
     val ao5List = mutableListOf<Long?>()
     val ao12List = mutableListOf<Long?>()
     
@@ -585,6 +587,18 @@ private fun AveragesChart(solves: List<SolveTime>) {
         val subList = solves.take(i + 1)
         ao5List.add(calculateAverageOfN(subList, 5))
         ao12List.add(calculateAverageOfN(subList, 12))
+    }
+    
+    // Filter data based on selected range
+    val displayAo5List = when (selectedRange) {
+        "Last 50" -> ao5List.takeLast(50)
+        "Last 100" -> ao5List.takeLast(100)
+        else -> ao5List
+    }
+    val displayAo12List = when (selectedRange) {
+        "Last 50" -> ao12List.takeLast(50)
+        "Last 100" -> ao12List.takeLast(100)
+        else -> ao12List
     }
     
     Surface(
@@ -610,8 +624,8 @@ private fun AveragesChart(solves: List<SolveTime>) {
         val ao12Color = Color(0xFFFF9800) // Orange
         val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
         
-        val validAo5 = ao5List.filterNotNull()
-        val validAo12 = ao12List.filterNotNull()
+        val validAo5 = displayAo5List.filterNotNull()
+        val validAo12 = displayAo12List.filterNotNull()
         val allValues = validAo5 + validAo12
         
         if (allValues.isEmpty()) {
@@ -647,9 +661,9 @@ private fun AveragesChart(solves: List<SolveTime>) {
             if (validAo12.isNotEmpty()) {
                 val ao12Path = Path()
                 var firstPoint = true
-                ao12List.forEachIndexed { index, value ->
+                displayAo12List.forEachIndexed { index, value ->
                     if (value != null) {
-                        val x = padding + (index.toFloat() / (ao12List.size - 1)) * (width - 2 * padding)
+                        val x = padding + (index.toFloat() / (displayAo12List.size - 1).coerceAtLeast(1)) * (width - 2 * padding)
                         val y = height - padding - ((value - minValue).toFloat() / range) * (height - 2 * padding)
                         
                         if (firstPoint) {
@@ -667,9 +681,9 @@ private fun AveragesChart(solves: List<SolveTime>) {
             if (validAo5.isNotEmpty()) {
                 val ao5Path = Path()
                 var firstPoint = true
-                ao5List.forEachIndexed { index, value ->
+                displayAo5List.forEachIndexed { index, value ->
                     if (value != null) {
-                        val x = padding + (index.toFloat() / (ao5List.size - 1)) * (width - 2 * padding)
+                        val x = padding + (index.toFloat() / (displayAo5List.size - 1).coerceAtLeast(1)) * (width - 2 * padding)
                         val y = height - padding - ((value - minValue).toFloat() / range) * (height - 2 * padding)
                         
                         if (firstPoint) {
@@ -698,6 +712,33 @@ private fun AveragesChart(solves: List<SolveTime>) {
             )
             }
         }
+        
+            // Range selector
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                listOf("Last 50", "Last 100", "All").forEach { range ->
+                    FilterChip(
+                        selected = selectedRange == range,
+                        onClick = { selectedRange = range },
+                        label = {
+                            Text(
+                                text = range,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primary,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                        )
+                    )
+                    if (range != "All") {
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                }
+            }
         
             Row(
                 modifier = Modifier.fillMaxWidth(),
