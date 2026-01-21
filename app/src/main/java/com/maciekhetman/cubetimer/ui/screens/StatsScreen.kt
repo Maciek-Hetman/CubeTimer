@@ -39,6 +39,8 @@ import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sqrt
+import kotlin.math.pow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -102,6 +104,14 @@ fun StatsScreen(
                 
                 item {
                     LargeAveragesSection(solves = solves)
+                }
+                
+                item {
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                }
+                
+                item {
+                    SessionStatsSection(solves = solves)
                 }
                 
                 item {
@@ -266,6 +276,8 @@ private fun StatsHeader(solves: List<SolveTime>, appTimeMillis: Long) {
     val bestTime = validSolves.minOfOrNull { it.displayTime } ?: 0
     val worstTime = validSolves.maxOfOrNull { it.displayTime } ?: 0
     val totalSolvingTime = solves.sumOf { it.timeInMillis }
+    val meanTime = calculateMean(validSolves)
+    val standardDeviation = calculateStandardDeviation(validSolves)
 
     Column(
         modifier = Modifier
@@ -316,6 +328,26 @@ private fun StatsHeader(solves: List<SolveTime>, appTimeMillis: Long) {
                 value = formatTime(avgTime.toLong()),
                 modifier = Modifier.weight(1f),
                 containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                contentColor = MaterialTheme.colorScheme.onSurface
+            )
+        }
+        
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            StatCard(
+                label = "Mean Time",
+                value = formatTime(meanTime),
+                modifier = Modifier.weight(1f),
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                contentColor = MaterialTheme.colorScheme.onSurface
+            )
+            StatCard(
+                label = "Std. Deviation",
+                value = formatTime(standardDeviation.toLong()),
+                modifier = Modifier.weight(1f),
+                containerColor = MaterialTheme.colorScheme.surfaceContainer,
                 contentColor = MaterialTheme.colorScheme.onSurface
             )
         }
@@ -525,6 +557,95 @@ private fun LargeAveragesSection(solves: List<SolveTime>) {
                         Spacer(modifier = Modifier.weight(1f))
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SessionStatsSection(solves: List<SolveTime>) {
+    val sessionStats = calculateSessionStats(solves)
+    
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(
+            text = "Session Statistics",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        
+        if (sessionStats == null) {
+            Text(
+                text = "Not enough data",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
+        } else {
+            Text(
+                text = "Sessions are groups of solves with no more than 1 hour gap between consecutive solves. Total sessions: ${sessionStats.totalSessions}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                StatCard(
+                    label = "Best Session",
+                    value = formatTime(sessionStats.bestSessionTime),
+                    modifier = Modifier.weight(1f),
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                StatCard(
+                    label = "Worst Session",
+                    value = formatTime(sessionStats.worstSessionTime),
+                    modifier = Modifier.weight(1f),
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+            }
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                StatCard(
+                    label = "Session Avg",
+                    value = formatTime(sessionStats.sessionAverage),
+                    modifier = Modifier.weight(1f),
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                )
+                StatCard(
+                    label = "Mean Solve",
+                    value = formatTime(sessionStats.meanSolveTime),
+                    modifier = Modifier.weight(1f),
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                StatCard(
+                    label = "Std. Deviation",
+                    value = formatTime(sessionStats.standardDeviation.toLong()),
+                    modifier = Modifier.weight(1f),
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.weight(1f))
             }
         }
     }
@@ -857,13 +978,25 @@ private fun AverageCard(
                 color = contentColor.copy(alpha = 0.9f),
                 fontWeight = FontWeight.Medium
             )
-            Text(
-                text = value,
-                style = MaterialTheme.typography.headlineMedium,
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Bold,
-                color = contentColor
-            )
+            BoxWithConstraints(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                val fontSize = when {
+                    maxWidth < 120.dp -> 18.sp
+                    maxWidth < 150.dp -> 22.sp
+                    else -> 28.sp
+                }
+                Text(
+                    text = value,
+                    fontSize = fontSize,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                    color = contentColor,
+                    maxLines = 1,
+                    softWrap = false
+                )
+            }
         }
     }
 }
@@ -1059,4 +1192,106 @@ private fun findBestAverageOfN(solves: List<SolveTime>, n: Int): Long? {
     }
     
     return bestAverage
+}
+
+// Session calculation: group solves with max 1 hour gap between consecutive solves
+private data class Session(
+    val solves: List<SolveTime>,
+    val startTime: Long,
+    val endTime: Long
+)
+
+private fun calculateSessions(solves: List<SolveTime>): List<Session> {
+    if (solves.isEmpty()) return emptyList()
+    
+    val sessions = mutableListOf<Session>()
+    val oneHourInMillis = 60 * 60 * 1000L
+    
+    var currentSession = mutableListOf<SolveTime>()
+    var sessionStart = solves.first().timestamp
+    
+    for (i in solves.indices) {
+        val solve = solves[i]
+        
+        if (currentSession.isEmpty()) {
+            currentSession.add(solve)
+            sessionStart = solve.timestamp
+        } else {
+            val timeSinceLastSolve = solve.timestamp - currentSession.last().timestamp
+            
+            if (timeSinceLastSolve > oneHourInMillis) {
+                // Start new session
+                sessions.add(Session(
+                    solves = currentSession.toList(),
+                    startTime = sessionStart,
+                    endTime = currentSession.last().timestamp
+                ))
+                currentSession = mutableListOf(solve)
+                sessionStart = solve.timestamp
+            } else {
+                currentSession.add(solve)
+            }
+        }
+    }
+    
+    // Add the last session
+    if (currentSession.isNotEmpty()) {
+        sessions.add(Session(
+            solves = currentSession.toList(),
+            startTime = sessionStart,
+            endTime = currentSession.last().timestamp
+        ))
+    }
+    
+    return sessions
+}
+
+private fun calculateMean(solves: List<SolveTime>): Long {
+    val validSolves = solves.filter { it.penalty != Penalty.DNF }
+    if (validSolves.isEmpty()) return 0L
+    return validSolves.map { it.displayTime }.average().toLong()
+}
+
+private fun calculateStandardDeviation(solves: List<SolveTime>): Double {
+    val validSolves = solves.filter { it.penalty != Penalty.DNF }
+    if (validSolves.size < 2) return 0.0
+    
+    val times = validSolves.map { it.displayTime.toDouble() }
+    val mean = times.average()
+    val variance = times.map { (it - mean).pow(2) }.average()
+    
+    return sqrt(variance)
+}
+
+private data class SessionStats(
+    val bestSessionTime: Long,
+    val worstSessionTime: Long,
+    val sessionAverage: Long,
+    val meanSolveTime: Long,
+    val standardDeviation: Double,
+    val totalSessions: Int
+)
+
+private fun calculateSessionStats(solves: List<SolveTime>): SessionStats? {
+    val sessions = calculateSessions(solves)
+    if (sessions.isEmpty()) return null
+    
+    val sessionAverages = sessions.map { session ->
+        val validSolves = session.solves.filter { it.penalty != Penalty.DNF }
+        if (validSolves.isEmpty()) Long.MAX_VALUE
+        else validSolves.map { it.displayTime }.average().toLong()
+    }.filter { it != Long.MAX_VALUE }
+    
+    if (sessionAverages.isEmpty()) return null
+    
+    val allValidSolves = solves.filter { it.penalty != Penalty.DNF }
+    
+    return SessionStats(
+        bestSessionTime = sessionAverages.minOrNull() ?: 0L,
+        worstSessionTime = sessionAverages.maxOrNull() ?: 0L,
+        sessionAverage = sessionAverages.average().toLong(),
+        meanSolveTime = calculateMean(allValidSolves),
+        standardDeviation = calculateStandardDeviation(allValidSolves),
+        totalSessions = sessions.size
+    )
 }
