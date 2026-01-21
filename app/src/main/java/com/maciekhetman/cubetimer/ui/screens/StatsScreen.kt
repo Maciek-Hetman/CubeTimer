@@ -482,7 +482,9 @@ private fun LargeAveragesSection(solves: List<SolveTime>) {
                         val best = findBestAverageOfN(solves, count)
                         
                         Surface(
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 88.dp),
                             color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f),
                             shape = MaterialTheme.shapes.medium
                         ) {
@@ -502,6 +504,7 @@ private fun LargeAveragesSection(solves: List<SolveTime>) {
                                     fontFamily = FontFamily.Monospace,
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
                                 )
+                                // Always reserve space for PB line
                                 if (best != null && best != current) {
                                     Text(
                                         text = "PB: ${formatTime(best)}",
@@ -509,6 +512,9 @@ private fun LargeAveragesSection(solves: List<SolveTime>) {
                                         color = MaterialTheme.colorScheme.primary,
                                         fontWeight = FontWeight.SemiBold
                                     )
+                                } else {
+                                    // Empty spacer to maintain consistent height
+                                    Spacer(modifier = Modifier.height(16.dp))
                                 }
                             }
                         }
