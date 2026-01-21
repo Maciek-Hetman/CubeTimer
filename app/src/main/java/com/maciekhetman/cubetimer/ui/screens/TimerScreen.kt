@@ -14,7 +14,9 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
@@ -141,9 +143,9 @@ fun TimerScreen(
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 32.dp),
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 AveragesDisplay(solves = solves)
                 RecentSolvesDisplay(solves = solves)
@@ -348,15 +350,21 @@ private fun AveragesDisplay(
         } else null
     } else null
 
-    Row(
+    Surface(
         modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(32.dp)
+        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.7f),
+        shape = MaterialTheme.shapes.large
     ) {
-        if (ao5 != null) {
-            AverageStat(label = "Ao5", time = ao5)
-        }
-        if (ao12 != null) {
-            AverageStat(label = "Ao12", time = ao12)
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(24.dp)
+        ) {
+            if (ao5 != null) {
+                AverageStat(label = "Ao5", time = ao5)
+            }
+            if (ao12 != null) {
+                AverageStat(label = "Ao12", time = ao12)
+            }
         }
     }
 }
@@ -369,13 +377,13 @@ private fun AverageStat(
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             text = label,
-            style = MaterialTheme.typography.labelMedium,
+            style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
         )
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = formatDisplayTime(time),
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleSmall,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground
@@ -391,7 +399,7 @@ private fun RecentSolvesDisplay(
     val recentSolves = solves.takeLast(5).reversed()
     
     Row(
-        modifier = modifier,
+        modifier = modifier.horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         recentSolves.forEach { solve ->
@@ -403,13 +411,14 @@ private fun RecentSolvesDisplay(
                 Text(
                     text = formatDisplayTime(solve.displayTime),
                     style = MaterialTheme.typography.labelSmall,
+                    fontSize = 11.sp,
                     fontFamily = FontFamily.Monospace,
                     color = when (solve.penalty) {
                         Penalty.DNF -> MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
                         Penalty.PLUS_TWO -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.8f)
                         Penalty.NONE -> MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
                     },
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
                 )
             }
         }
