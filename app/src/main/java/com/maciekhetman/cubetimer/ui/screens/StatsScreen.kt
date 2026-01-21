@@ -95,6 +95,22 @@ fun StatsScreen(
                 }
                 
                 item {
+                    SessionStatsSection(solves = solves)
+                }
+                
+                item {
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                }
+                
+                item {
+                    PersonalBestsChart(solves = solves)
+                }
+                
+                item {
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                }
+                
+                item {
                     AveragesSection(solves = solves)
                 }
                 
@@ -104,14 +120,6 @@ fun StatsScreen(
                 
                 item {
                     LargeAveragesSection(solves = solves)
-                }
-                
-                item {
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                }
-                
-                item {
-                    SessionStatsSection(solves = solves)
                 }
                 
                 item {
@@ -278,6 +286,21 @@ private fun StatsHeader(solves: List<SolveTime>, appTimeMillis: Long) {
     val totalSolvingTime = solves.sumOf { it.timeInMillis }
     val meanTime = calculateMean(validSolves)
     val standardDeviation = calculateStandardDeviation(validSolves)
+    
+    // Calculate sessions and average solves per day
+    val sessions = calculateSessions(solves)
+    val totalSessions = sessions.size
+    
+    val avgSolvesPerDay = if (solves.isNotEmpty()) {
+        val firstSolveDate = solves.first().timestamp
+        val lastSolveDate = solves.last().timestamp
+        val daysDifference = ((lastSolveDate - firstSolveDate) / (1000 * 60 * 60 * 24)).toInt() + 1
+        if (daysDifference > 0) {
+            String.format("%.1f", solves.size.toFloat() / daysDifference)
+        } else {
+            solves.size.toString()
+        }
+    } else "0"
 
     Column(
         modifier = Modifier
@@ -349,6 +372,26 @@ private fun StatsHeader(solves: List<SolveTime>, appTimeMillis: Long) {
                 modifier = Modifier.weight(1f),
                 containerColor = MaterialTheme.colorScheme.surfaceContainer,
                 contentColor = MaterialTheme.colorScheme.onSurface
+            )
+        }
+        
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            StatCard(
+                label = "Sessions",
+                value = totalSessions.toString(),
+                modifier = Modifier.weight(1f),
+                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+            StatCard(
+                label = "Avg/Day",
+                value = avgSolvesPerDay,
+                modifier = Modifier.weight(1f),
+                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f),
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
             )
         }
         
@@ -588,7 +631,7 @@ private fun SessionStatsSection(solves: List<SolveTime>) {
             )
         } else {
             Text(
-                text = "Sessions are groups of solves with no more than 1 hour gap between consecutive solves. Total sessions: ${sessionStats.totalSessions}",
+                text = "Sessions are groups of solves with no more than 1 hour gap between consecutive solves.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                 modifier = Modifier.padding(bottom = 4.dp)
@@ -693,6 +736,234 @@ private fun PenaltyStatsSection(solves: List<SolveTime>) {
                 containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                 contentColor = MaterialTheme.colorScheme.onTertiaryContainer
             )
+        }
+    }
+}
+
+@Composable
+private fun PersonalBestsChart(solves: List<SolveTime>) {
+    val validSolves = solves.filter { it.penalty != Penalty.DNF }
+    
+    if (validSolves.isEmpty()) {
+        return
+    }
+    
+    // Track PB progression
+    val singlePBs = mutableListOf<Pair<Int, Long>>() // solve number to PB time
+    val ao5PBs = mutableListOf<Pair<Int, Long>>()
+    val ao12PBs = mutableListOf<Pair<Int, Long>>()
+    
+    var currentBestSingle = Long.MAX_VALUE
+    var currentBestAo5 = Long.MAX_VALUE
+    var currentBestAo12 = Long.MAX_VALUE
+    
+    for (i in solves.indices) {
+        val subList = solves.take(i + 1)
+        val validSubList = subList.filter { it.penalty != Penalty.DNF }
+        
+        // Check single PB
+        if (validSubList.isNotEmpty()) {
+            val bestInSubList = validSubList.minOf { it.displayTime }
+            if (bestInSubList < currentBestSingle) {
+                currentBestSingle = bestInSubList
+                singlePBs.add(Pair(i, currentBestSingle))
+            }
+        }
+        
+        // Check Ao5 PB
+        val ao5 = calculateAverageOfN(subList, 5)
+        if (ao5 != null && ao5 < currentBestAo5) {
+            currentBestAo5 = ao5
+            ao5PBs.add(Pair(i, currentBestAo5))
+        }
+        
+        // Check Ao12 PB
+        val ao12 = calculateAverageOfN(subList, 12)
+        if (ao12 != null && ao12 < currentBestAo12) {
+            currentBestAo12 = ao12
+            ao12PBs.add(Pair(i, currentBestAo12))
+        }
+    }
+    
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = MaterialTheme.shapes.extraLarge,
+        tonalElevation = 1.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = "Personal Best Progress",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            
+            val singleColor = Color(0xFF4CAF50) // Green
+            val ao5Color = Color(0xFF2196F3) // Blue
+            val ao12Color = Color(0xFFFF9800) // Orange
+            val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
+            
+            val allPBs = (singlePBs.map { it.second } + ao5PBs.map { it.second } + ao12PBs.map { it.second })
+            
+            if (allPBs.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "No personal bests yet",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = onSurfaceVariant.copy(alpha = 0.6f)
+                    )
+                }
+            } else {
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
+                ) {
+                    val width = size.width
+                    val height = size.height
+                    val padding = 40f
+                    
+                    val minValue = allPBs.minOrNull() ?: 0L
+                    val maxValue = allPBs.maxOrNull() ?: 1L
+                    val range = (maxValue - minValue).coerceAtLeast(1L)
+                    // Add 10% padding to the range to ensure lines don't overlap with axes
+                    val displayRange = range * 1.1f
+                    val displayMin = minValue - (range * 0.05f).toLong()
+                    val maxSolveIndex = solves.size - 1
+                    
+                    // Helper function to draw PB line
+                    fun drawPBLine(pbs: List<Pair<Int, Long>>, color: Color) {
+                        if (pbs.isEmpty()) return
+                        
+                        val path = Path()
+                        var firstPoint = true
+                        
+                        // Draw line through all PB points
+                        pbs.forEach { (solveIndex, pbTime) ->
+                            val x = padding + (solveIndex.toFloat() / maxSolveIndex.coerceAtLeast(1)) * (width - 2 * padding)
+                            val y = height - padding - ((pbTime - displayMin).toFloat() / displayRange) * (height - 2 * padding)
+                            
+                            if (firstPoint) {
+                                path.moveTo(x, y)
+                                firstPoint = false
+                            } else {
+                                path.lineTo(x, y)
+                            }
+                            // Draw point
+                            drawCircle(color, radius = 5f, center = Offset(x, y))
+                        }
+                        
+                        // Extend line to the end of the chart (current PB holds)
+                        val lastPB = pbs.last()
+                        val lastX = padding + (lastPB.first.toFloat() / maxSolveIndex.coerceAtLeast(1)) * (width - 2 * padding)
+                        val lastY = height - padding - ((lastPB.second - displayMin).toFloat() / displayRange) * (height - 2 * padding)
+                        val endX = width - padding
+                        
+                        if (lastX < endX) {
+                            path.lineTo(endX, lastY)
+                        }
+                        
+                        drawPath(path, color, style = Stroke(width = 3f))
+                    }
+                    
+                    // Draw all three PB lines
+                    drawPBLine(ao12PBs, ao12Color)
+                    drawPBLine(ao5PBs, ao5Color)
+                    drawPBLine(singlePBs, singleColor)
+                    
+                    // Draw axes
+                    drawLine(
+                        onSurfaceVariant,
+                        Offset(padding, height - padding),
+                        Offset(width - padding, height - padding),
+                        strokeWidth = 2f
+                    )
+                    drawLine(
+                        onSurfaceVariant,
+                        Offset(padding, padding),
+                        Offset(padding, height - padding),
+                        strokeWidth = 2f
+                    )
+                }
+                
+                // Legend
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = MaterialTheme.shapes.large
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Surface(
+                                    modifier = Modifier.size(12.dp),
+                                    color = singleColor,
+                                    shape = MaterialTheme.shapes.extraSmall
+                                ) {}
+                                Text(
+                                    text = "Single",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Surface(
+                                    modifier = Modifier.size(12.dp),
+                                    color = ao5Color,
+                                    shape = MaterialTheme.shapes.extraSmall
+                                ) {}
+                                Text(
+                                    text = "Ao5",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Surface(
+                                    modifier = Modifier.size(12.dp),
+                                    color = ao12Color,
+                                    shape = MaterialTheme.shapes.extraSmall
+                                ) {}
+                                Text(
+                                    text = "Ao12",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
