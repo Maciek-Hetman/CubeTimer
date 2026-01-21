@@ -296,7 +296,7 @@ private fun StatsHeader(solves: List<SolveTime>, appTimeMillis: Long) {
         val lastSolveDate = solves.last().timestamp
         val daysDifference = ((lastSolveDate - firstSolveDate) / (1000 * 60 * 60 * 24)).toInt() + 1
         if (daysDifference > 0) {
-            String.format("%.1f", solves.size.toFloat() / daysDifference)
+            (solves.size / daysDifference).toString()
         } else {
             solves.size.toString()
         }
@@ -642,14 +642,14 @@ private fun SessionStatsSection(solves: List<SolveTime>) {
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 StatCard(
-                    label = "Best Session",
+                    label = "Session Best",
                     value = formatTime(sessionStats.bestSessionTime),
                     modifier = Modifier.weight(1f),
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 )
                 StatCard(
-                    label = "Worst Session",
+                    label = "Session Worst",
                     value = formatTime(sessionStats.worstSessionTime),
                     modifier = Modifier.weight(1f),
                     containerColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -688,7 +688,13 @@ private fun SessionStatsSection(solves: List<SolveTime>) {
                     containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                     contentColor = MaterialTheme.colorScheme.onSurface
                 )
-                Spacer(modifier = Modifier.weight(1f))
+                StatCard(
+                    label = "Time Cubing",
+                    value = formatDuration(sessionStats.avgTimeCubingInSession),
+                    modifier = Modifier.weight(1f),
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                )
             }
         }
     }
@@ -1540,7 +1546,8 @@ private data class SessionStats(
     val sessionAverage: Long,
     val meanSolveTime: Long,
     val standardDeviation: Double,
-    val totalSessions: Int
+    val totalSessions: Int,
+    val avgTimeCubingInSession: Long
 )
 
 private fun calculateSessionStats(solves: List<SolveTime>): SessionStats? {
@@ -1557,12 +1564,21 @@ private fun calculateSessionStats(solves: List<SolveTime>): SessionStats? {
     
     val allValidSolves = solves.filter { it.penalty != Penalty.DNF }
     
+    // Calculate average time cubing per session
+    val avgTimeCubingInSession = if (sessions.isNotEmpty()) {
+        val sessionDurations = sessions.map { session ->
+            session.endTime - session.startTime
+        }
+        sessionDurations.average().toLong()
+    } else 0L
+    
     return SessionStats(
         bestSessionTime = sessionAverages.minOrNull() ?: 0L,
         worstSessionTime = sessionAverages.maxOrNull() ?: 0L,
         sessionAverage = sessionAverages.average().toLong(),
         meanSolveTime = calculateMean(allValidSolves),
         standardDeviation = calculateStandardDeviation(allValidSolves),
-        totalSessions = sessions.size
+        totalSessions = sessions.size,
+        avgTimeCubingInSession = avgTimeCubingInSession
     )
 }
