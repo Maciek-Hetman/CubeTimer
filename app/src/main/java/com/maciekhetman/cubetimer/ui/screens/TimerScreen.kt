@@ -461,13 +461,13 @@ private fun ScrambleDisplay(
                 }
             ),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = MaterialTheme.shapes.large,
-        tonalElevation = 2.dp
+        shape = MaterialTheme.shapes.extraLarge,
+        tonalElevation = 3.dp
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(20.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -487,9 +487,9 @@ private fun ScrambleDisplay(
                     .padding(end = 8.dp)
             )
             Spacer(modifier = Modifier.width(12.dp))
-            FilledIconButton(
+            FilledTonalIconButton(
                 onClick = onRefresh,
-                colors = IconButtonDefaults.filledIconButtonColors(
+                colors = IconButtonDefaults.filledTonalIconButtonColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 )
