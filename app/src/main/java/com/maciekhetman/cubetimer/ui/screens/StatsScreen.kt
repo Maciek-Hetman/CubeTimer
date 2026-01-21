@@ -33,6 +33,7 @@ import com.maciekhetman.cubetimer.Mode
 import com.maciekhetman.cubetimer.Penalty
 import com.maciekhetman.cubetimer.SolveTime
 import com.maciekhetman.cubetimer.TimerViewModel
+import com.maciekhetman.cubetimer.ui.components.ActivityTracker
 import com.maciekhetman.cubetimer.ui.components.TopBar
 import java.text.SimpleDateFormat
 import java.util.*
@@ -48,6 +49,7 @@ fun StatsScreen(
     modifier: Modifier = Modifier
 ) {
     val solves by viewModel.solves.collectAsState()
+    val appTimeMillis by viewModel.appTimeMillis.collectAsState()
     var showClearDialog by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -83,7 +85,7 @@ fun StatsScreen(
                     .padding(paddingValues)
             ) {
                 item {
-                    StatsHeader(solves = solves)
+                    StatsHeader(solves = solves, appTimeMillis = appTimeMillis)
                 }
                 
                 item {
@@ -92,6 +94,22 @@ fun StatsScreen(
                 
                 item {
                     AveragesSection(solves = solves)
+                }
+                
+                item {
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                }
+                
+                item {
+                    LargeAveragesSection(solves = solves)
+                }
+                
+                item {
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                }
+                
+                item {
+                    ActivityTracker(solves = solves)
                 }
                 
                 item {
@@ -240,13 +258,14 @@ fun StatsScreen(
 }
 
 @Composable
-private fun StatsHeader(solves: List<SolveTime>) {
+private fun StatsHeader(solves: List<SolveTime>, appTimeMillis: Long) {
     val validSolves = solves.filter { it.penalty != Penalty.DNF }
     val avgTime = if (validSolves.isNotEmpty()) {
         validSolves.map { it.displayTime }.average()
     } else 0.0
     val bestTime = validSolves.minOfOrNull { it.displayTime } ?: 0
     val worstTime = validSolves.maxOfOrNull { it.displayTime } ?: 0
+    val totalSolvingTime = solves.sumOf { it.timeInMillis }
 
     Column(
         modifier = Modifier
@@ -297,6 +316,26 @@ private fun StatsHeader(solves: List<SolveTime>) {
                 value = formatTime(avgTime.toLong()),
                 modifier = Modifier.weight(1f),
                 containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                contentColor = MaterialTheme.colorScheme.onSurface
+            )
+        }
+        
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            StatCard(
+                label = "Time Cubing",
+                value = formatDuration(appTimeMillis),
+                modifier = Modifier.weight(1f),
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                contentColor = MaterialTheme.colorScheme.onSurface
+            )
+            StatCard(
+                label = "Time Solving",
+                value = formatDuration(totalSolvingTime),
+                modifier = Modifier.weight(1f),
+                containerColor = MaterialTheme.colorScheme.surfaceContainer,
                 contentColor = MaterialTheme.colorScheme.onSurface
             )
         }
@@ -399,6 +438,86 @@ private fun AveragesSection(solves: List<SolveTime>) {
                         contentColor = MaterialTheme.colorScheme.onTertiary,
                         highlighted = true
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LargeAveragesSection(solves: List<SolveTime>) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(
+            text = "Session Averages",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        
+        val averages = listOf(
+            50 to "Ao50",
+            100 to "Ao100",
+            200 to "Ao200",
+            500 to "Ao500",
+            1000 to "Ao1000",
+            2000 to "Ao2000"
+        )
+        
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            averages.chunked(2).forEach { row ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    row.forEach { (count, label) ->
+                        val current = calculateAverageOfN(solves, count)
+                        val best = findBestAverageOfN(solves, count)
+                        
+                        Surface(
+                            modifier = Modifier.weight(1f),
+                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f),
+                            shape = MaterialTheme.shapes.medium
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = if (current != null) formatTime(current) else "N/A",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                                )
+                                if (best != null && best != current) {
+                                    Text(
+                                        text = "PB: ${formatTime(best)}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Add spacer if odd number of items in row
+                    if (row.size == 1) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
                 }
             }
         }
@@ -849,6 +968,19 @@ private fun formatTime(millis: Long): String {
 private fun formatTimestamp(timestamp: Long): String {
     val sdf = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
     return sdf.format(Date(timestamp))
+}
+
+private fun formatDuration(millis: Long): String {
+    val totalSeconds = millis / 1000
+    val hours = totalSeconds / 3600
+    val minutes = (totalSeconds % 3600) / 60
+    val seconds = totalSeconds % 60
+    
+    return when {
+        hours > 0 -> String.format("%dh %dm", hours, minutes)
+        minutes > 0 -> String.format("%dm %ds", minutes, seconds)
+        else -> String.format("%ds", seconds)
+    }
 }
 
 private fun calculateAverageOfN(solves: List<SolveTime>, n: Int): Long? {

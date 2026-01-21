@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -20,10 +21,22 @@ class SolvesRepository(private val context: Context) {
         val json = preferences[SOLVES_KEY] ?: "[]"
         parseSolves(json)
     }
+    
+    fun getAppTimeFlow(mode: Mode): Flow<Long> = context.dataStore.data.map { preferences ->
+        val key = longPreferencesKey("app_time_${mode.name}")
+        preferences[key] ?: 0L
+    }
 
     suspend fun saveSolves(solves: List<SolveTime>) {
         context.dataStore.edit { preferences ->
             preferences[SOLVES_KEY] = serializeSolves(solves)
+        }
+    }
+    
+    suspend fun saveAppTime(mode: Mode, timeMillis: Long) {
+        context.dataStore.edit { preferences ->
+            val key = longPreferencesKey("app_time_${mode.name}")
+            preferences[key] = timeMillis
         }
     }
 

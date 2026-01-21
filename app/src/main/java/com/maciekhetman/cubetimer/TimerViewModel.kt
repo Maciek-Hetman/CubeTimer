@@ -17,13 +17,21 @@ enum class Penalty {
 }
 
 enum class Mode {
+    CUBE_2x2,
     CUBE_3x3,
-    CUBE_2x2;
+    CUBE_4x4,
+    CUBE_5x5,
+    MEGAMINX,
+    PYRAMINX;
     
     val displayName: String
         get() = when (this) {
-            CUBE_3x3 -> "3x3"
             CUBE_2x2 -> "2x2"
+            CUBE_3x3 -> "3x3"
+            CUBE_4x4 -> "4x4"
+            CUBE_5x5 -> "5x5"
+            MEGAMINX -> "Megaminx"
+            PYRAMINX -> "Pyraminx"
         }
 }
 
@@ -80,6 +88,12 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     
     private val _recordCelebration = MutableStateFlow<RecordCelebration?>(null)
     val recordCelebration: StateFlow<RecordCelebration?> = _recordCelebration.asStateFlow()
+    
+    private val modeAppTimes = mutableMapOf<Mode, Long>()
+    private val _appTimeMillis = MutableStateFlow(0L)
+    val appTimeMillis: StateFlow<Long> = _appTimeMillis.asStateFlow()
+    
+    private var appStartTime: Long = 0L
 
     private var timerJob: Job? = null
     private var holdJob: Job? = null
@@ -91,6 +105,18 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
             repository.solvesFlow.collect { savedSolves ->
                 _allSolves.value = savedSolves
                 _solves.value = savedSolves.filter { it.mode == _currentMode.value }
+            }
+        }
+        
+        // Load saved app time for all modes
+        Mode.values().forEach { mode ->
+            viewModelScope.launch {
+                repository.getAppTimeFlow(mode).collect { savedTime ->
+                    modeAppTimes[mode] = savedTime
+                    if (mode == _currentMode.value) {
+                        _appTimeMillis.value = savedTime
+                    }
+                }
             }
         }
     }
@@ -234,6 +260,7 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     fun setMode(mode: Mode) {
         _currentMode.value = mode
         _solves.value = _allSolves.value.filter { it.mode == mode }
+        _appTimeMillis.value = modeAppTimes[mode] ?: 0L
         generateNewScramble()
     }
     
@@ -335,9 +362,31 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         
         return bestAverage
     }
+    
+    fun resetAppStartTime() {
+        appStartTime = System.currentTimeMillis()
+    }
+    
+    fun updateAppTime() {
+        if (appStartTime == 0L) return // Don't update if we haven't started tracking yet
+        
+        val currentTime = System.currentTimeMillis()
+        val sessionTime = currentTime - appStartTime
+        val currentMode = _currentMode.value
+        val savedTime = modeAppTimes[currentMode] ?: 0L
+        val newTotalTime = savedTime + sessionTime
+        modeAppTimes[currentMode] = newTotalTime
+        _appTimeMillis.value = newTotalTime
+        appStartTime = currentTime
+        
+        viewModelScope.launch {
+            repository.saveAppTime(currentMode, newTotalTime)
+        }
+    }
 
     override fun onCleared() {
         super.onCleared()
+        updateAppTime()
         timerJob?.cancel()
         holdJob?.cancel()
     }

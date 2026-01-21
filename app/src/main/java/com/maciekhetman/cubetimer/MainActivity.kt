@@ -31,31 +31,45 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.maciekhetman.cubetimer.ui.screens.StatsScreen
 import com.maciekhetman.cubetimer.ui.screens.TimerScreen
 import com.maciekhetman.cubetimer.ui.theme.CubeTimerTheme
 
 class MainActivity : ComponentActivity() {
+    private lateinit var timerViewModel: TimerViewModel
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        
+        timerViewModel = ViewModelProvider(this)[TimerViewModel::class.java]
         
         // Keep screen on while app is open
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         
         setContent {
             CubeTimerTheme {
-                CubeTimerApp()
+                CubeTimerApp(timerViewModel)
             }
         }
+    }
+    
+    override fun onResume() {
+        super.onResume()
+        timerViewModel.resetAppStartTime()
+    }
+    
+    override fun onPause() {
+        super.onPause()
+        timerViewModel.updateAppTime()
     }
 }
 
 @Composable
-fun CubeTimerApp() {
+fun CubeTimerApp(viewModel: TimerViewModel) {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.TIMER) }
-    val viewModel: TimerViewModel = viewModel()
     val currentMode by viewModel.currentMode.collectAsState()
     val haptic = LocalHapticFeedback.current
 

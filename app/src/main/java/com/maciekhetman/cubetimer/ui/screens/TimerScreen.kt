@@ -32,6 +32,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.maciekhetman.cubetimer.Mode
@@ -428,16 +429,28 @@ private fun formatDisplayTime(millis: Long): String {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ScrambleDisplay(
     scramble: String,
     onRefresh: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var showFullScramble by remember { mutableStateOf(false) }
+    var isTruncated by remember { mutableStateOf(false) }
+    val maxLines = 4
+    
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = 16.dp)
+            .then(
+                if (isTruncated) {
+                    Modifier.clickable { showFullScramble = true }
+                } else {
+                    Modifier
+                }
+            ),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         shape = MaterialTheme.shapes.large,
         tonalElevation = 2.dp
@@ -455,6 +468,11 @@ private fun ScrambleDisplay(
                 fontFamily = FontFamily.Monospace,
                 color = MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Start,
+                maxLines = maxLines,
+                overflow = TextOverflow.Ellipsis,
+                onTextLayout = { textLayoutResult ->
+                    isTruncated = textLayoutResult.hasVisualOverflow
+                },
                 modifier = Modifier
                     .weight(1f)
                     .padding(end = 8.dp)
@@ -473,6 +491,33 @@ private fun ScrambleDisplay(
                 )
             }
         }
+    }
+    
+    // Full scramble dialog
+    if (showFullScramble) {
+        AlertDialog(
+            onDismissRequest = { showFullScramble = false },
+            title = {
+                Text(
+                    text = "Full Scramble",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = scramble,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showFullScramble = false }) {
+                    Text("Close")
+                }
+            }
+        )
     }
 }
 
