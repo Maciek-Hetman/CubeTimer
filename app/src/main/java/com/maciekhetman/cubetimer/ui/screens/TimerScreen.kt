@@ -616,25 +616,27 @@ private fun RecordCelebrationOverlay(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(40.dp),
+                            .padding(48.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(20.dp)
+                        verticalArrangement = Arrangement.spacedBy(24.dp)
                     ) {
                         Text(
                             text = "🎉",
-                            fontSize = 96.sp
+                            fontSize = 72.sp,
+                            modifier = Modifier.align(Alignment.CenterHorizontally)
                         )
                         Text(
                             text = "NEW RECORD!",
                             style = MaterialTheme.typography.displaySmall,
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.ExtraBold,
                             color = MaterialTheme.colorScheme.onSurface,
-                            letterSpacing = 1.5.sp
+                            letterSpacing = 2.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.align(Alignment.CenterHorizontally)
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
                         Surface(
                             color = MaterialTheme.colorScheme.primaryContainer,
-                            shape = MaterialTheme.shapes.large
+                            shape = MaterialTheme.shapes.extraLarge
                         ) {
                             Text(
                                 text = when (it.type) {
@@ -643,29 +645,28 @@ private fun RecordCelebrationOverlay(
                                     RecordType.BEST_AO12 -> "Best Average of 12"
                                 },
                                 style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.SemiBold,
+                                fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)
+                                modifier = Modifier.padding(horizontal = 32.dp, vertical = 16.dp),
+                                textAlign = TextAlign.Center
                             )
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = formatDisplayTime(it.time),
-                            fontSize = 48.sp,
-                            fontFamily = FontFamily.Monospace,
+                            fontSize = 56.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            letterSpacing = 1.sp,
-                            maxLines = 1,
-                            softWrap = false,
-                            modifier = Modifier.fillMaxWidth(0.95f)
+                            color = MaterialTheme.colorScheme.primary,
+                            letterSpacing = 2.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.align(Alignment.CenterHorizontally)
                         )
-                        Spacer(modifier = Modifier.height(12.dp))
                         Text(
                             text = "Tap anywhere to continue",
                             style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                            fontWeight = FontWeight.Medium
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                            fontWeight = FontWeight.Medium,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.align(Alignment.CenterHorizontally)
                         )
                     }
                 }
