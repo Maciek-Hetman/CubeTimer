@@ -108,14 +108,12 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         
-        // Load saved app time for all modes
-        Mode.values().forEach { mode ->
-            viewModelScope.launch {
+        // Load saved app time for current mode
+        viewModelScope.launch {
+            _currentMode.collect { mode ->
                 repository.getAppTimeFlow(mode).collect { savedTime ->
                     modeAppTimes[mode] = savedTime
-                    if (mode == _currentMode.value) {
-                        _appTimeMillis.value = savedTime
-                    }
+                    _appTimeMillis.value = savedTime
                 }
             }
         }
@@ -260,8 +258,8 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     fun setMode(mode: Mode) {
         _currentMode.value = mode
         _solves.value = _allSolves.value.filter { it.mode == mode }
-        _appTimeMillis.value = modeAppTimes[mode] ?: 0L
         generateNewScramble()
+        // Load time for the new mode - it will be updated by the flow collector
     }
     
     fun dismissRecordCelebration() {

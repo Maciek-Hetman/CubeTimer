@@ -128,6 +128,9 @@ fun CubeTimerApp(viewModel: TimerViewModel) {
                         )
                     }
                     AppDestinations.STATS -> {
+                        LaunchedEffect(Unit) {
+                            viewModel.updateAppTime()
+                        }
                         StatsScreen(
                             viewModel = viewModel,
                             currentMode = currentMode,
