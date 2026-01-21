@@ -225,19 +225,19 @@ private fun TimerContent(
                 
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.padding(horizontal = 24.dp)
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.padding(horizontal = 32.dp)
                 ) {
-                    Button(
+                    FilledTonalButton(
                         onClick = { viewModel.saveSolveWithPenalty(Penalty.NONE) },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(56.dp),
+                            .height(64.dp),
                         shape = MaterialTheme.shapes.extraLarge
                     ) {
                         Text(
                             text = "Save Time",
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -246,43 +246,58 @@ private fun TimerContent(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        OutlinedButton(
+                        FilledTonalButton(
                             onClick = { viewModel.saveSolveWithPenalty(Penalty.PLUS_TWO) },
                             modifier = Modifier
                                 .weight(1f)
-                                .height(48.dp),
-                            shape = MaterialTheme.shapes.large
+                                .height(60.dp),
+                            shape = MaterialTheme.shapes.large,
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                            ),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 12.dp)
                         ) {
                             Text(
                                 text = "+2",
                                 style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.Bold
                             )
                         }
-                        OutlinedButton(
+                        FilledTonalButton(
                             onClick = { viewModel.saveSolveWithPenalty(Penalty.DNF) },
                             modifier = Modifier
                                 .weight(1f)
-                                .height(48.dp),
-                            shape = MaterialTheme.shapes.large
+                                .height(60.dp),
+                            shape = MaterialTheme.shapes.large,
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer,
+                                contentColor = MaterialTheme.colorScheme.onErrorContainer
+                            ),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 12.dp)
                         ) {
                             Text(
                                 text = "DNF",
                                 style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.Bold
                             )
                         }
-                        OutlinedButton(
+                        FilledTonalButton(
                             onClick = { viewModel.discardSolve() },
                             modifier = Modifier
                                 .weight(1f)
-                                .height(48.dp),
-                            shape = MaterialTheme.shapes.large
+                                .height(60.dp),
+                            shape = MaterialTheme.shapes.large,
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                contentColor = MaterialTheme.colorScheme.onSurface
+                            ),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 12.dp)
                         ) {
                             Text(
                                 text = "Discard",
                                 style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
