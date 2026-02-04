@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.Locale
 
 enum class Penalty {
     NONE,
@@ -91,6 +92,7 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     val amoledEnabled: StateFlow<Boolean> = _amoledEnabled.asStateFlow()
 
     private val _allSolves = MutableStateFlow<List<SolveTime>>(emptyList())
+    val allSolves: StateFlow<List<SolveTime>> = _allSolves.asStateFlow()
     
     private val _solves = MutableStateFlow<List<SolveTime>>(emptyList())
     val solves: StateFlow<List<SolveTime>> = _solves.asStateFlow()
@@ -321,9 +323,26 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         return root.toString()
     }
 
-    fun importSolvesFromCsTimerJson(json: String, fallbackMode: Mode): Result<Int> {
+    fun detectCsTimerMode(json: String): Mode? {
         return runCatching {
             val root = JSONObject(json)
+            detectModeFromCsTimerJson(root)
+        }.getOrNull()
+    }
+
+    fun importSolvesFromCsTimerJson(
+        json: String,
+        fallbackMode: Mode,
+        replaceExisting: Boolean
+    ): Result<Int> {
+        return runCatching {
+            val root = JSONObject(json)
+            val detectedMode = detectModeFromCsTimerJson(root)
+            if (detectedMode != null && detectedMode != fallbackMode) {
+                throw IllegalArgumentException(
+                    "Detected ${detectedMode.displayName} data, but ${fallbackMode.displayName} was selected."
+                )
+            }
             val imported = mutableListOf<SolveTime>()
             val keys = root.keys()
             while (keys.hasNext()) {
@@ -357,16 +376,75 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
 
             if (imported.isEmpty()) return@runCatching 0
 
-            val merged = (_allSolves.value + imported).sortedBy { it.timestamp }
-            val deduped = merged.distinctBy {
-                "${it.timestamp}_${it.timeInMillis}_${it.penalty}_${it.mode}_${it.scramble}"
+            val merged = if (replaceExisting) {
+                val preserved = _allSolves.value.filter { it.mode != fallbackMode }
+                preserved + imported
+            } else {
+                _allSolves.value + imported
             }
+            val deduped = merged
+                .sortedBy { it.timestamp }
+                .distinctBy {
+                "${it.timestamp}_${it.timeInMillis}_${it.penalty}_${it.mode}_${it.scramble}"
+                }
             _allSolves.value = deduped
             _solves.value = deduped.filter { it.mode == _currentMode.value }
             viewModelScope.launch {
                 repository.saveSolves(deduped)
             }
             imported.size
+        }
+    }
+
+    private fun detectModeFromCsTimerJson(root: JSONObject): Mode? {
+        val explicitMode = root.optString("cubetimer_mode", "")
+        runCatching { Mode.valueOf(explicitMode) }.getOrNull()?.let { return it }
+
+        val directScrType = root.optString("scrType", "")
+        parseScrambleType(directScrType)?.let { return it }
+        val directPuzzle = root.optString("puzzle", "")
+        parseScrambleType(directPuzzle)?.let { return it }
+
+        val candidates = mutableListOf<String>()
+        collectScrTypeValues(root, candidates)
+        return candidates.asSequence()
+            .mapNotNull { parseScrambleType(it) }
+            .firstOrNull()
+    }
+
+    private fun collectScrTypeValues(value: Any?, results: MutableList<String>) {
+        when (value) {
+            is JSONObject -> {
+                val keys = value.keys()
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    if (key.equals("scrType", ignoreCase = true) ||
+                        key.equals("scrambleType", ignoreCase = true) ||
+                        key.equals("puzzle", ignoreCase = true)
+                    ) {
+                        results.add(value.optString(key))
+                    }
+                    collectScrTypeValues(value.opt(key), results)
+                }
+            }
+            is JSONArray -> {
+                for (i in 0 until value.length()) {
+                    collectScrTypeValues(value.opt(i), results)
+                }
+            }
+        }
+    }
+
+    private fun parseScrambleType(raw: String): Mode? {
+        val value = raw.lowercase(Locale.getDefault())
+        return when {
+            value.contains("333") || value.contains("3x3") -> Mode.CUBE_3x3
+            value.contains("222") || value.contains("2x2") -> Mode.CUBE_2x2
+            value.contains("444") || value.contains("4x4") -> Mode.CUBE_4x4
+            value.contains("555") || value.contains("5x5") -> Mode.CUBE_5x5
+            value.contains("pyr") -> Mode.PYRAMINX
+            value.contains("minx") || value.contains("mega") -> Mode.MEGAMINX
+            else -> null
         }
     }
 

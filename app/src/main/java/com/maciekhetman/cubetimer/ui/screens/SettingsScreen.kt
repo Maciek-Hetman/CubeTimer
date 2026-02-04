@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -55,6 +56,7 @@ fun SettingsScreen(
     val dynamicColorEnabled by viewModel.dynamicColorEnabled.collectAsState()
     val defaultMode by viewModel.defaultMode.collectAsState()
     val amoledEnabled by viewModel.amoledEnabled.collectAsState()
+    val allSolves by viewModel.allSolves.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -63,6 +65,8 @@ fun SettingsScreen(
     var importModeMenuExpanded by remember { mutableStateOf(false) }
     var importMode by remember { mutableStateOf(defaultMode) }
     var hasTouchedImportMode by remember { mutableStateOf(false) }
+    var pendingImportJson by remember { mutableStateOf<String?>(null) }
+    var showImportChoiceDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(defaultMode) {
         if (!hasTouchedImportMode) {
@@ -111,18 +115,36 @@ fun SettingsScreen(
             }
 
             val text = textResult.getOrNull().orEmpty()
-            val importResult = viewModel.importSolvesFromCsTimerJson(text, importMode)
-            if (importResult.isSuccess) {
-                val count = importResult.getOrDefault(0)
+            val detected = viewModel.detectCsTimerMode(text)
+            if (detected != null && detected != importMode) {
                 snackbarHostState.showSnackbar(
-                    message = "Imported $count solve(s)",
+                    message = "Detected ${detected.displayName} data. Select that mode to import.",
                     duration = SnackbarDuration.Short
                 )
+                return@launch
+            }
+
+            if (allSolves.isNotEmpty()) {
+                pendingImportJson = text
+                showImportChoiceDialog = true
             } else {
-                snackbarHostState.showSnackbar(
-                    message = "Import failed",
-                    duration = SnackbarDuration.Short
+                val importResult = viewModel.importSolvesFromCsTimerJson(
+                    json = text,
+                    fallbackMode = importMode,
+                    replaceExisting = false
                 )
+                if (importResult.isSuccess) {
+                    val count = importResult.getOrDefault(0)
+                    snackbarHostState.showSnackbar(
+                        message = "Imported $count solve(s)",
+                        duration = SnackbarDuration.Short
+                    )
+                } else {
+                    snackbarHostState.showSnackbar(
+                        message = importResult.exceptionOrNull()?.message ?: "Import failed",
+                        duration = SnackbarDuration.Short
+                    )
+                }
             }
         }
     }
@@ -323,6 +345,104 @@ fun SettingsScreen(
                 }
             }
         }
+    }
+
+    if (showImportChoiceDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showImportChoiceDialog = false
+                pendingImportJson = null
+            },
+            title = { Text("Import Solves") },
+            text = { Text("You already have saved solves. Do you want to add to existing data or replace it?") },
+            confirmButton = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilledTonalButton(
+                        onClick = {
+                            val json = pendingImportJson ?: return@FilledTonalButton
+                            showImportChoiceDialog = false
+                            pendingImportJson = null
+                            scope.launch {
+                                val importResult = viewModel.importSolvesFromCsTimerJson(
+                                    json = json,
+                                    fallbackMode = importMode,
+                                    replaceExisting = false
+                                )
+                                if (importResult.isSuccess) {
+                                    val count = importResult.getOrDefault(0)
+                                    snackbarHostState.showSnackbar(
+                                        message = "Imported $count solve(s)",
+                                        duration = SnackbarDuration.Short
+                                    )
+                                } else {
+                                    snackbarHostState.showSnackbar(
+                                        message = importResult.exceptionOrNull()?.message ?: "Import failed",
+                                        duration = SnackbarDuration.Short
+                                    )
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    ) {
+                        Text("Add to existing data")
+                    }
+                    FilledTonalButton(
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer
+                        ),
+                        onClick = {
+                            val json = pendingImportJson ?: return@FilledTonalButton
+                            showImportChoiceDialog = false
+                            pendingImportJson = null
+                            scope.launch {
+                                val importResult = viewModel.importSolvesFromCsTimerJson(
+                                    json = json,
+                                    fallbackMode = importMode,
+                                    replaceExisting = true
+                                )
+                                if (importResult.isSuccess) {
+                                    val count = importResult.getOrDefault(0)
+                                    snackbarHostState.showSnackbar(
+                                        message = "Replaced with $count solve(s)",
+                                        duration = SnackbarDuration.Short
+                                    )
+                                } else {
+                                    snackbarHostState.showSnackbar(
+                                        message = importResult.exceptionOrNull()?.message ?: "Import failed",
+                                        duration = SnackbarDuration.Short
+                                    )
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Replace existing data")
+                    }
+                    FilledTonalButton(
+                        onClick = {
+                            showImportChoiceDialog = false
+                            pendingImportJson = null
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        )
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            },
+            dismissButton = {}
+        )
     }
 }
 
