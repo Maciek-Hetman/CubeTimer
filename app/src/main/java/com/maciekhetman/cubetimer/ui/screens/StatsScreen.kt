@@ -319,15 +319,13 @@ private fun StatsHeader(solves: List<SolveTime>, appTimeMillis: Long) {
                 label = "Total",
                 value = solves.size.toString(),
                 modifier = Modifier.weight(1f),
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                containerColor = MaterialTheme.colorScheme.primaryContainer
             )
             StatCard(
                 label = "Best",
                 value = formatTime(bestTime),
                 modifier = Modifier.weight(1f),
-                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                containerColor = MaterialTheme.colorScheme.secondaryContainer
             )
         }
         
@@ -339,15 +337,13 @@ private fun StatsHeader(solves: List<SolveTime>, appTimeMillis: Long) {
                 label = "Worst",
                 value = formatTime(worstTime),
                 modifier = Modifier.weight(1f),
-                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                containerColor = MaterialTheme.colorScheme.tertiaryContainer
             )
             StatCard(
                 label = "Average",
                 value = formatTime(avgTime.toLong()),
                 modifier = Modifier.weight(1f),
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                contentColor = MaterialTheme.colorScheme.onSurface
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
             )
         }
         
@@ -359,15 +355,13 @@ private fun StatsHeader(solves: List<SolveTime>, appTimeMillis: Long) {
                 label = "Mean Time",
                 value = formatTime(meanTime),
                 modifier = Modifier.weight(1f),
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                contentColor = MaterialTheme.colorScheme.onSurface
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
             )
             StatCard(
                 label = "Std. Deviation",
                 value = formatTime(standardDeviation.toLong()),
                 modifier = Modifier.weight(1f),
-                containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                contentColor = MaterialTheme.colorScheme.onSurface
+                containerColor = MaterialTheme.colorScheme.surfaceContainer
             )
         }
         
@@ -379,15 +373,13 @@ private fun StatsHeader(solves: List<SolveTime>, appTimeMillis: Long) {
                 label = "Sessions",
                 value = totalSessions.toString(),
                 modifier = Modifier.weight(1f),
-                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
             )
             StatCard(
                 label = "Avg/Day",
                 value = avgSolvesPerDay,
                 modifier = Modifier.weight(1f),
-                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f),
-                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
             )
         }
         
@@ -399,15 +391,13 @@ private fun StatsHeader(solves: List<SolveTime>, appTimeMillis: Long) {
                 label = "Time Cubing",
                 value = formatDuration(appTimeMillis),
                 modifier = Modifier.weight(1f),
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                contentColor = MaterialTheme.colorScheme.onSurface
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
             )
             StatCard(
                 label = "Time Solving",
                 value = formatDuration(totalSolvingTime),
                 modifier = Modifier.weight(1f),
-                containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                contentColor = MaterialTheme.colorScheme.onSurface
+                containerColor = MaterialTheme.colorScheme.surfaceContainer
             )
         }
     }
@@ -457,15 +447,13 @@ private fun AveragesSection(solves: List<SolveTime>) {
                         label = "Current",
                         value = if (ao5Current != null) formatTime(ao5Current) else "N/A",
                         modifier = Modifier.weight(1f),
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
                     )
                     AverageCard(
                         label = "Personal Best",
                         value = if (bestAo5 != null) formatTime(bestAo5) else "N/A",
                         modifier = Modifier.weight(1f),
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
                         highlighted = true
                     )
                 }
@@ -498,15 +486,13 @@ private fun AveragesSection(solves: List<SolveTime>) {
                         label = "Current",
                         value = if (ao12Current != null) formatTime(ao12Current) else "N/A",
                         modifier = Modifier.weight(1f),
-                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer
                     )
                     AverageCard(
                         label = "Personal Best",
                         value = if (bestAo12 != null) formatTime(bestAo12) else "N/A",
                         modifier = Modifier.weight(1f),
-                        containerColor = MaterialTheme.colorScheme.tertiary,
-                        contentColor = MaterialTheme.colorScheme.onTertiary,
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
                         highlighted = true
                     )
                 }
@@ -641,15 +627,13 @@ private fun SessionStatsSection(solves: List<SolveTime>) {
                     label = "Session Best",
                     value = formatTime(sessionStats.bestSessionTime),
                     modifier = Modifier.weight(1f),
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
                 )
                 StatCard(
                     label = "Session Worst",
                     value = formatTime(sessionStats.worstSessionTime),
                     modifier = Modifier.weight(1f),
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer
                 )
             }
             
@@ -661,15 +645,13 @@ private fun SessionStatsSection(solves: List<SolveTime>) {
                     label = "Session Avg",
                     value = formatTime(sessionStats.sessionAverage),
                     modifier = Modifier.weight(1f),
-                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer
                 )
                 StatCard(
                     label = "Mean Solve",
                     value = formatTime(sessionStats.meanSolveTime),
                     modifier = Modifier.weight(1f),
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                    contentColor = MaterialTheme.colorScheme.onSurface
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                 )
             }
             
@@ -681,15 +663,13 @@ private fun SessionStatsSection(solves: List<SolveTime>) {
                     label = "Std. Deviation",
                     value = formatTime(sessionStats.standardDeviation.toLong()),
                     modifier = Modifier.weight(1f),
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    contentColor = MaterialTheme.colorScheme.onSurface
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                 )
                 StatCard(
                     label = "Time Cubing",
                     value = formatDuration(sessionStats.avgTimeCubingInSession),
                     modifier = Modifier.weight(1f),
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                    contentColor = MaterialTheme.colorScheme.onSurface
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer
                 )
             }
         }
@@ -727,16 +707,14 @@ private fun PenaltyStatsSection(solves: List<SolveTime>) {
                 percentage = dnfPercent,
                 count = dnfCount,
                 modifier = Modifier.weight(1f),
-                containerColor = MaterialTheme.colorScheme.errorContainer,
-                contentColor = MaterialTheme.colorScheme.onErrorContainer
+                containerColor = MaterialTheme.colorScheme.errorContainer
             )
             PenaltyCard(
                 label = "+2",
                 percentage = plusTwoPercent,
                 count = plusTwoCount,
                 modifier = Modifier.weight(1f),
-                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                containerColor = MaterialTheme.colorScheme.tertiaryContainer
             )
         }
     }
@@ -1281,7 +1259,7 @@ private fun PenaltyCard(
     count: Int,
     modifier: Modifier = Modifier,
     containerColor: Color,
-    contentColor: Color
+    contentColor: Color = MaterialTheme.colorScheme.onSurface
 ) {
     Surface(
         modifier = modifier,

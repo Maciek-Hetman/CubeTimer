@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
 
 enum class Penalty {
     NONE,
@@ -71,12 +73,19 @@ data class RecordCelebration(
 
 class TimerViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = SolvesRepository(application)
+    private val settingsRepository = SettingsRepository(application)
     
     private val _timerState = MutableStateFlow<TimerState>(TimerState.Idle)
     val timerState: StateFlow<TimerState> = _timerState.asStateFlow()
 
     private val _currentMode = MutableStateFlow(Mode.CUBE_3x3)
     val currentMode: StateFlow<Mode> = _currentMode.asStateFlow()
+
+    private val _dynamicColorEnabled = MutableStateFlow(true)
+    val dynamicColorEnabled: StateFlow<Boolean> = _dynamicColorEnabled.asStateFlow()
+
+    private val _defaultMode = MutableStateFlow(Mode.CUBE_3x3)
+    val defaultMode: StateFlow<Mode> = _defaultMode.asStateFlow()
 
     private val _allSolves = MutableStateFlow<List<SolveTime>>(emptyList())
     
@@ -98,6 +107,7 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     private var timerJob: Job? = null
     private var holdJob: Job? = null
     private var startTime: Long = 0
+    private var hasAppliedDefaultMode = false
 
     init {
         // Load saved solves on initialization
@@ -105,6 +115,22 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
             repository.solvesFlow.collect { savedSolves ->
                 _allSolves.value = savedSolves
                 _solves.value = savedSolves.filter { it.mode == _currentMode.value }
+            }
+        }
+
+        // Load settings
+        viewModelScope.launch {
+            settingsRepository.dynamicColorEnabledFlow.collect { enabled ->
+                _dynamicColorEnabled.value = enabled
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.defaultModeFlow.collect { mode ->
+                _defaultMode.value = mode
+                if (!hasAppliedDefaultMode) {
+                    hasAppliedDefaultMode = true
+                    setMode(mode)
+                }
             }
         }
         
@@ -258,6 +284,84 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun exportSolvesAsCsTimerJson(): String {
+        val sessionsByMode = _allSolves.value.groupBy { it.mode }
+        val root = JSONObject()
+        var sessionIndex = 1
+        sessionsByMode.forEach { (_, modeSolves) ->
+            if (modeSolves.isEmpty()) return@forEach
+            val sessionArray = JSONArray()
+            modeSolves.sortedBy { it.timestamp }.forEach { solve ->
+                val penaltyCode = when (solve.penalty) {
+                    Penalty.NONE -> 0
+                    Penalty.PLUS_TWO -> 1
+                    Penalty.DNF -> 2
+                }
+                val meta = JSONArray()
+                    .put(penaltyCode)
+                    .put(solve.timeInMillis)
+                val entry = JSONArray()
+                    .put(meta)
+                    .put(solve.scramble)
+                    .put("")
+                    .put(solve.timestamp / 1000)
+                sessionArray.put(entry)
+            }
+            root.put("session$sessionIndex", sessionArray)
+            sessionIndex += 1
+        }
+        return root.toString()
+    }
+
+    fun importSolvesFromCsTimerJson(json: String, fallbackMode: Mode): Result<Int> {
+        return runCatching {
+            val root = JSONObject(json)
+            val imported = mutableListOf<SolveTime>()
+            val keys = root.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                if (!key.startsWith("session")) continue
+                val sessionArray = root.optJSONArray(key) ?: continue
+                for (i in 0 until sessionArray.length()) {
+                    val entry = sessionArray.optJSONArray(i) ?: continue
+                    val meta = entry.optJSONArray(0) ?: continue
+                    val penaltyCode = meta.optInt(0, 0)
+                    val timeMs = meta.optLong(1, 0L)
+                    if (timeMs <= 0L) continue
+                    val scramble = entry.optString(1, "")
+                    val timestampSeconds = entry.optLong(3, System.currentTimeMillis() / 1000)
+                    val penalty = when (penaltyCode) {
+                        1 -> Penalty.PLUS_TWO
+                        2 -> Penalty.DNF
+                        else -> Penalty.NONE
+                    }
+                    imported.add(
+                        SolveTime(
+                            timeInMillis = timeMs,
+                            penalty = penalty,
+                            timestamp = timestampSeconds * 1000,
+                            scramble = scramble,
+                            mode = fallbackMode
+                        )
+                    )
+                }
+            }
+
+            if (imported.isEmpty()) return@runCatching 0
+
+            val merged = (_allSolves.value + imported).sortedBy { it.timestamp }
+            val deduped = merged.distinctBy {
+                "${it.timestamp}_${it.timeInMillis}_${it.penalty}_${it.mode}_${it.scramble}"
+            }
+            _allSolves.value = deduped
+            _solves.value = deduped.filter { it.mode == _currentMode.value }
+            viewModelScope.launch {
+                repository.saveSolves(deduped)
+            }
+            imported.size
+        }
+    }
+
     fun addSolve(solve: SolveTime) {
         val newAllSolves = (_allSolves.value + solve).sortedBy { it.timestamp }
         _allSolves.value = newAllSolves
@@ -273,6 +377,19 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             repository.saveSolves(emptyList())
         }
+    }
+
+    fun setDynamicColorEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setDynamicColorEnabled(enabled)
+        }
+    }
+
+    fun setDefaultMode(mode: Mode) {
+        viewModelScope.launch {
+            settingsRepository.setDefaultMode(mode)
+        }
+        setMode(mode)
     }
     
     fun setMode(mode: Mode) {

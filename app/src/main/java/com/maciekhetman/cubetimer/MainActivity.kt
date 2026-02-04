@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -44,6 +45,7 @@ import androidx.activity.SystemBarStyle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.maciekhetman.cubetimer.ui.screens.StatsScreen
+import com.maciekhetman.cubetimer.ui.screens.SettingsScreen
 import com.maciekhetman.cubetimer.ui.screens.TimerScreen
 import com.maciekhetman.cubetimer.ui.theme.CubeTimerTheme
 
@@ -60,7 +62,8 @@ class MainActivity : ComponentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         
         setContent {
-            CubeTimerTheme {
+            val dynamicColorEnabled by timerViewModel.dynamicColorEnabled.collectAsState()
+            CubeTimerTheme(dynamicColor = dynamicColorEnabled) {
                 CubeTimerApp(timerViewModel)
             }
         }
@@ -157,6 +160,14 @@ fun CubeTimerApp(viewModel: TimerViewModel) {
                             modifier = contentModifier
                         )
                     }
+                    AppDestinations.SETTINGS -> {
+                        SettingsScreen(
+                            viewModel = viewModel,
+                            currentMode = currentMode,
+                            onModeSelected = { mode -> viewModel.setMode(mode) },
+                            modifier = contentModifier
+                        )
+                    }
                 }
             }
         }
@@ -186,4 +197,5 @@ enum class AppDestinations(
 ) {
     TIMER("Timer", Icons.Default.Home),
     STATS("Stats", Icons.AutoMirrored.Filled.List),
+    SETTINGS("Settings", Icons.Default.Settings),
 }
