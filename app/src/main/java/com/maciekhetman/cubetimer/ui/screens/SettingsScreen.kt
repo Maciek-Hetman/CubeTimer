@@ -54,6 +54,7 @@ fun SettingsScreen(
 ) {
     val dynamicColorEnabled by viewModel.dynamicColorEnabled.collectAsState()
     val defaultMode by viewModel.defaultMode.collectAsState()
+    val amoledEnabled by viewModel.amoledEnabled.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -174,6 +175,39 @@ fun SettingsScreen(
 
             item {
                 HorizontalDivider()
+            }
+
+            if (!dynamicColorEnabled) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "AMOLED Dark",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Pure black backgrounds in dark theme",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                            )
+                        }
+                        Switch(
+                            checked = amoledEnabled,
+                            onCheckedChange = { enabled ->
+                                viewModel.setAmoledEnabled(enabled)
+                            }
+                        )
+                    }
+                }
+
+                item {
+                    HorizontalDivider()
+                }
             }
 
             item {

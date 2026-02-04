@@ -63,7 +63,11 @@ class MainActivity : ComponentActivity() {
         
         setContent {
             val dynamicColorEnabled by timerViewModel.dynamicColorEnabled.collectAsState()
-            CubeTimerTheme(dynamicColor = dynamicColorEnabled) {
+            val amoledEnabled by timerViewModel.amoledEnabled.collectAsState()
+            CubeTimerTheme(
+                dynamicColor = dynamicColorEnabled,
+                amoled = amoledEnabled && !dynamicColorEnabled
+            ) {
                 CubeTimerApp(timerViewModel)
             }
         }

@@ -87,6 +87,9 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     private val _defaultMode = MutableStateFlow(Mode.CUBE_3x3)
     val defaultMode: StateFlow<Mode> = _defaultMode.asStateFlow()
 
+    private val _amoledEnabled = MutableStateFlow(false)
+    val amoledEnabled: StateFlow<Boolean> = _amoledEnabled.asStateFlow()
+
     private val _allSolves = MutableStateFlow<List<SolveTime>>(emptyList())
     
     private val _solves = MutableStateFlow<List<SolveTime>>(emptyList())
@@ -131,6 +134,11 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
                     hasAppliedDefaultMode = true
                     setMode(mode)
                 }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.amoledEnabledFlow.collect { enabled ->
+                _amoledEnabled.value = enabled
             }
         }
         
@@ -390,6 +398,12 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
             settingsRepository.setDefaultMode(mode)
         }
         setMode(mode)
+    }
+
+    fun setAmoledEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setAmoledEnabled(enabled)
+        }
     }
     
     fun setMode(mode: Mode) {

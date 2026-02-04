@@ -50,6 +50,45 @@ private val DarkColorScheme = darkColorScheme(
     scrim = Gray10
 )
 
+private val AmoledDarkColorScheme = darkColorScheme(
+    primary = Blue80,
+    onPrimary = Blue10,
+    primaryContainer = Blue10,
+    onPrimaryContainer = Blue95,
+    secondary = Gray80,
+    onSecondary = Gray20,
+    secondaryContainer = Gray20,
+    onSecondaryContainer = Gray90,
+    tertiary = Gray70,
+    onTertiary = Gray10,
+    tertiaryContainer = Gray30,
+    onTertiaryContainer = Gray95,
+    background = Black,
+    onBackground = Gray90,
+    surface = Black,
+    onSurface = Gray90,
+    surfaceDim = Black,
+    surfaceBright = Gray20,
+    surfaceContainerLowest = Black,
+    surfaceContainerLow = Black,
+    surfaceContainer = Gray20,
+    surfaceContainerHigh = Gray20,
+    surfaceContainerHighest = Gray30,
+    surfaceVariant = Gray20,
+    onSurfaceVariant = Gray80,
+    outline = Gray60,
+    outlineVariant = Gray50,
+    error = Red40,
+    onError = Gray98,
+    errorContainer = Red10,
+    onErrorContainer = Red90,
+    inverseSurface = Gray90,
+    inverseOnSurface = Gray10,
+    inversePrimary = Blue40,
+    surfaceTint = Blue80,
+    scrim = Black
+)
+
 private val LightColorScheme = lightColorScheme(
     primary = Blue40,
     onPrimary = Gray98,
@@ -94,6 +133,7 @@ fun CubeTimerTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     // Dynamic color is available on Android 12+
     dynamicColor: Boolean = true,
+    amoled: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
@@ -102,6 +142,7 @@ fun CubeTimerTheme(
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
 
+        darkTheme && amoled -> AmoledDarkColorScheme
         darkTheme -> DarkColorScheme
         else -> LightColorScheme
     }
