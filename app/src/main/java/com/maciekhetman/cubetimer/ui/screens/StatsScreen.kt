@@ -8,6 +8,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
@@ -18,13 +19,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -34,7 +34,9 @@ import com.maciekhetman.cubetimer.Penalty
 import com.maciekhetman.cubetimer.SolveTime
 import com.maciekhetman.cubetimer.TimerViewModel
 import com.maciekhetman.cubetimer.ui.components.ActivityTracker
-import com.maciekhetman.cubetimer.ui.components.TopBar
+import com.maciekhetman.cubetimer.ui.components.ExpressiveDropdownMenu
+import com.maciekhetman.cubetimer.ui.components.ExpressiveDropdownMenuItem
+import com.maciekhetman.cubetimer.ui.components.CollapsingTopBar
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.math.max
@@ -55,15 +57,20 @@ fun StatsScreen(
     var showClearDialog by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
+    val layoutDirection = LocalLayoutDirection.current
 
     Scaffold(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .nestedScroll(scrollBehavior.nestedScrollConnection),
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            TopBar(
+            CollapsingTopBar(
                 title = "Statistics",
                 currentMode = currentMode,
-                onModeSelected = onModeSelected
+                onModeSelected = onModeSelected,
+                scrollBehavior = scrollBehavior
             )
         }
     ) { paddingValues ->
@@ -81,10 +88,21 @@ fun StatsScreen(
                 )
             }
         } else {
+            val collapsedFraction = scrollBehavior.state.collapsedFraction
+            val topPadding = paddingValues.calculateTopPadding() * (1f - collapsedFraction)
+            val startPadding = paddingValues.calculateStartPadding(layoutDirection)
+            val endPadding = paddingValues.calculateEndPadding(layoutDirection)
+            val bottomPadding = paddingValues.calculateBottomPadding()
+
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(paddingValues)
+                    .padding(
+                        start = startPadding,
+                        top = topPadding,
+                        end = endPadding,
+                        bottom = bottomPadding
+                    )
             ) {
                 item {
                     StatsHeader(solves = solves, appTimeMillis = appTimeMillis)
@@ -179,69 +197,47 @@ fun StatsScreen(
                     items = solves.reversed(),
                     key = { _, solve -> solve.timestamp }
                 ) { index, solve ->
-                    val haptic = LocalHapticFeedback.current
-                    var hasTriggeredHaptic by remember { mutableStateOf(false) }
-                    
-                    val density = LocalDensity.current
-                    val dismissState = rememberSwipeToDismissBoxState(
-                        confirmValueChange = { value ->
-                            if (value == SwipeToDismissBoxValue.EndToStart) {
-                                viewModel.deleteSolve(solve)
-                                scope.launch {
-                                    val result = snackbarHostState.showSnackbar(
-                                        message = "Solve deleted",
-                                        actionLabel = "Undo",
-                                        duration = SnackbarDuration.Short
-                                    )
-                                    if (result == SnackbarResult.ActionPerformed) {
-                                        viewModel.addSolve(solve)
-                                    }
-                                }
-                                true
-                            } else {
-                                false
+                    val deleteSolve: () -> Unit = {
+                        viewModel.deleteSolve(solve)
+                        scope.launch {
+                            val result = snackbarHostState.showSnackbar(
+                                message = "Solve deleted",
+                                actionLabel = "Undo",
+                                duration = SnackbarDuration.Short
+                            )
+                            if (result == SnackbarResult.ActionPerformed) {
+                                viewModel.addSolve(solve)
                             }
-                        },
-                        positionalThreshold = { with(density) { 400.dp.toPx() } }
-                    )
-                    
-                    LaunchedEffect(dismissState.progress) {
-                        if (dismissState.progress >= 0.5f && !hasTriggeredHaptic) {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            hasTriggeredHaptic = true
-                        } else if (dismissState.progress < 0.5f && hasTriggeredHaptic) {
-                            hasTriggeredHaptic = false
                         }
                     }
-                    
-                    SwipeToDismissBox(
-                        state = dismissState,
-                        enableDismissFromStartToEnd = false,
-                        backgroundContent = {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(
-                                        color = MaterialTheme.colorScheme.errorContainer,
-                                        shape = MaterialTheme.shapes.extraLarge
-                                    )
-                                    .padding(horizontal = 20.dp),
-                                contentAlignment = Alignment.CenterEnd
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Delete,
-                                    contentDescription = "Delete",
-                                    tint = MaterialTheme.colorScheme.onErrorContainer
-                                )
+                    val setPenalty: (Penalty) -> Unit = setPenalty@{ penalty ->
+                        if (solve.penalty == penalty) return@setPenalty
+                        val previousPenalty = solve.penalty
+                        viewModel.updateSolvePenalty(solve, penalty)
+                        val penaltyLabel = when (penalty) {
+                            Penalty.DNF -> "DNF"
+                            Penalty.PLUS_TWO -> "+2"
+                            Penalty.NONE -> "None"
+                        }
+                        scope.launch {
+                            val result = snackbarHostState.showSnackbar(
+                                message = "Penalty set to $penaltyLabel",
+                                actionLabel = "Undo",
+                                duration = SnackbarDuration.Short
+                            )
+                            if (result == SnackbarResult.ActionPerformed) {
+                                viewModel.updateSolvePenalty(solve, previousPenalty)
                             }
-                        },
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-                    ) {
-                        SolveCard(
-                            solve = solve,
-                            solveNumber = solves.size - index
-                        )
+                        }
                     }
+
+                    SolveCard(
+                        solve = solve,
+                        solveNumber = solves.size - index,
+                        onDelete = deleteSolve,
+                        onSetPenalty = setPenalty,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                    )
                 }
                 
                 item {
@@ -317,7 +313,7 @@ private fun StatsHeader(solves: List<SolveTime>, appTimeMillis: Long) {
         
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(StatCardSpacing)
         ) {
             StatCard(
                 label = "Total",
@@ -337,7 +333,7 @@ private fun StatsHeader(solves: List<SolveTime>, appTimeMillis: Long) {
         
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(StatCardSpacing)
         ) {
             StatCard(
                 label = "Worst",
@@ -357,7 +353,7 @@ private fun StatsHeader(solves: List<SolveTime>, appTimeMillis: Long) {
         
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(StatCardSpacing)
         ) {
             StatCard(
                 label = "Mean Time",
@@ -377,7 +373,7 @@ private fun StatsHeader(solves: List<SolveTime>, appTimeMillis: Long) {
         
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(StatCardSpacing)
         ) {
             StatCard(
                 label = "Sessions",
@@ -397,7 +393,7 @@ private fun StatsHeader(solves: List<SolveTime>, appTimeMillis: Long) {
         
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(StatCardSpacing)
         ) {
             StatCard(
                 label = "Time Cubing",
@@ -455,7 +451,7 @@ private fun AveragesSection(solves: List<SolveTime>) {
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(StatCardSpacing)
                 ) {
                     AverageCard(
                         label = "Current",
@@ -496,7 +492,7 @@ private fun AveragesSection(solves: List<SolveTime>) {
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(StatCardSpacing)
                 ) {
                     AverageCard(
                         label = "Current",
@@ -639,7 +635,7 @@ private fun SessionStatsSection(solves: List<SolveTime>) {
             
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(StatCardSpacing)
             ) {
                 StatCard(
                     label = "Session Best",
@@ -659,7 +655,7 @@ private fun SessionStatsSection(solves: List<SolveTime>) {
             
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(StatCardSpacing)
             ) {
                 StatCard(
                     label = "Session Avg",
@@ -679,7 +675,7 @@ private fun SessionStatsSection(solves: List<SolveTime>) {
             
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(StatCardSpacing)
             ) {
                 StatCard(
                     label = "Std. Deviation",
@@ -724,7 +720,7 @@ private fun PenaltyStatsSection(solves: List<SolveTime>) {
         
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(StatCardSpacing)
         ) {
             PenaltyCard(
                 label = "DNF",
@@ -1208,7 +1204,7 @@ private fun StatCard(
         tonalElevation = 2.dp
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
+            modifier = Modifier.padding(StatCardContentPadding),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -1245,7 +1241,7 @@ private fun AverageCard(
         tonalElevation = if (highlighted) 3.dp else 1.dp
     ) {
         Column(
-            modifier = Modifier.padding(24.dp),
+            modifier = Modifier.padding(StatCardContentPadding),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -1294,7 +1290,7 @@ private fun PenaltyCard(
         tonalElevation = 2.dp
     ) {
         Column(
-            modifier = Modifier.padding(24.dp),
+            modifier = Modifier.padding(StatCardContentPadding),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -1323,8 +1319,12 @@ private fun PenaltyCard(
 private fun SolveCard(
     solve: SolveTime,
     solveNumber: Int,
+    onDelete: () -> Unit,
+    onSetPenalty: (Penalty) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var menuExpanded by remember { mutableStateOf(false) }
+
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.extraLarge,
@@ -1339,12 +1339,63 @@ private fun SolveCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = "Solve #$solveNumber",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                    fontWeight = FontWeight.Medium
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Solve #$solveNumber",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        fontWeight = FontWeight.Medium
+                    )
+                    Box {
+                        IconButton(onClick = { menuExpanded = true }) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = "Solve options",
+                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
+                        }
+                        ExpressiveDropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false }
+                        ) {
+                            ExpressiveDropdownMenuItem(
+                                text = { Text("Delete") },
+                                onClick = {
+                                    menuExpanded = false
+                                    onDelete()
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = null
+                                    )
+                                },
+                                colors = MenuDefaults.itemColors(
+                                    textColor = MaterialTheme.colorScheme.error,
+                                    leadingIconColor = MaterialTheme.colorScheme.error
+                                )
+                            )
+                            ExpressiveDropdownMenuItem(
+                                text = { Text("Add DNF") },
+                                onClick = {
+                                    menuExpanded = false
+                                    onSetPenalty(Penalty.DNF)
+                                }
+                            )
+                            ExpressiveDropdownMenuItem(
+                                text = { Text("Add +2") },
+                                onClick = {
+                                    menuExpanded = false
+                                    onSetPenalty(Penalty.PLUS_TWO)
+                                }
+                            )
+                        }
+                    }
+                }
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -1408,6 +1459,9 @@ private fun SolveCard(
         }
     }
 }
+
+private val StatCardContentPadding = 20.dp
+private val StatCardSpacing = 10.dp
 
 private fun formatTime(millis: Long): String {
     val totalSeconds = millis / 1000

@@ -238,6 +238,26 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun updateSolvePenalty(solve: SolveTime, penalty: Penalty) {
+        val newAllSolves = _allSolves.value.map { existing ->
+            if (
+                existing.timestamp == solve.timestamp &&
+                existing.timeInMillis == solve.timeInMillis &&
+                existing.mode == solve.mode
+            ) {
+                existing.copy(penalty = penalty)
+            } else {
+                existing
+            }
+        }
+        if (newAllSolves == _allSolves.value) return
+        _allSolves.value = newAllSolves
+        _solves.value = newAllSolves.filter { it.mode == _currentMode.value }
+        viewModelScope.launch {
+            repository.saveSolves(newAllSolves)
+        }
+    }
+
     fun addSolve(solve: SolveTime) {
         val newAllSolves = (_allSolves.value + solve).sortedBy { it.timestamp }
         _allSolves.value = newAllSolves
