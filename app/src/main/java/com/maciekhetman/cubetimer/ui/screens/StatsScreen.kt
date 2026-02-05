@@ -2,18 +2,12 @@ package com.maciekhetman.cubetimer.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.runtime.*
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
@@ -27,6 +21,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.maciekhetman.cubetimer.Mode
@@ -39,8 +34,6 @@ import com.maciekhetman.cubetimer.ui.components.ExpressiveDropdownMenuItem
 import com.maciekhetman.cubetimer.ui.components.CollapsingTopBar
 import java.text.SimpleDateFormat
 import java.util.*
-import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.sqrt
 import kotlin.math.pow
 
@@ -111,7 +104,7 @@ fun StatsScreen(
                 }
                 
                 item {
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+                    SectionDivider()
                 }
                 
                 item {
@@ -119,7 +112,7 @@ fun StatsScreen(
                 }
                 
                 item {
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+                    SectionDivider()
                 }
                 
                 item {
@@ -127,7 +120,7 @@ fun StatsScreen(
                 }
                 
                 item {
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+                    SectionDivider()
                 }
                 
                 item {
@@ -135,7 +128,7 @@ fun StatsScreen(
                 }
                 
                 item {
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+                    SectionDivider()
                 }
                 
                 item {
@@ -143,7 +136,7 @@ fun StatsScreen(
                 }
                 
                 item {
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+                    SectionDivider()
                 }
                 
                 item {
@@ -151,7 +144,7 @@ fun StatsScreen(
                 }
                 
                 item {
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+                    SectionDivider()
                 }
                 
                 item {
@@ -159,7 +152,7 @@ fun StatsScreen(
                 }
                 
                 item {
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+                    SectionDivider()
                 }
                 
                 item {
@@ -167,7 +160,7 @@ fun StatsScreen(
                 }
                 
                 item {
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+                    SectionDivider()
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -175,13 +168,10 @@ fun StatsScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-        Text(
-            text = "Solve History",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(top = SectionTitleTopPadding)
-        )
+                        SectionHeader(
+                            title = "Solve History",
+                            modifier = Modifier.weight(1f)
+                        )
                         if (solves.isNotEmpty()) {
                             FilledTonalButton(
                                 onClick = { showClearDialog = true },
@@ -309,13 +299,7 @@ private fun StatsHeader(solves: List<SolveTime>, appTimeMillis: Long) {
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(
-            text = "Overview",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(top = SectionTitleTopPadding)
-        )
+        SectionHeader(title = "Overview")
         
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -417,13 +401,7 @@ private fun AveragesSection(solves: List<SolveTime>) {
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Text(
-            text = "Averages",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(top = SectionTitleTopPadding)
-        )
+        SectionHeader(title = "Averages")
         
         val ao5Current = calculateAverageOfN(solves, 5)
         val ao12Current = calculateAverageOfN(solves, 12)
@@ -516,13 +494,7 @@ private fun LargeAveragesSection(solves: List<SolveTime>) {
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(
-            text = "Session Averages",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(top = SectionTitleTopPadding)
-        )
+        SectionHeader(title = "Session Averages")
         
         val averages = listOf(
             50 to "Ao50",
@@ -605,13 +577,7 @@ private fun SessionStatsSection(solves: List<SolveTime>) {
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(
-            text = "Session Statistics",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(top = SectionTitleTopPadding)
-        )
+        SectionHeader(title = "Session Statistics")
         
         if (sessionStats == null) {
             Text(
@@ -700,13 +666,7 @@ private fun PenaltyStatsSection(solves: List<SolveTime>) {
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(
-            text = "Penalties",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(top = SectionTitleTopPadding)
-        )
+        SectionHeader(title = "Penalties")
         
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -787,13 +747,7 @@ private fun PersonalBestsChart(solves: List<SolveTime>) {
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text(
-                text = "Personal Best Progress",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(top = ChartTitleTopPadding)
-            )
+            SectionHeader(title = "Personal Best Progress")
             
             val singleColor = Color(0xFF4CAF50) // Green
             val ao5Color = Color(0xFF2196F3) // Blue
@@ -996,13 +950,7 @@ private fun AveragesChart(solves: List<SolveTime>) {
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text(
-                text = "Progress Chart",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(top = ChartTitleTopPadding)
-            )
+            SectionHeader(title = "Progress Chart")
         
         val ao5Color = Color(0xFF2196F3) // Blue
         val ao12Color = Color(0xFFFF9800) // Orange
@@ -1459,8 +1407,27 @@ private fun SolveCard(
     }
 }
 
+@Composable
+private fun SectionHeader(
+    title: String,
+    modifier: Modifier = Modifier,
+    topPadding: Dp = SectionTitleTopPadding
+) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.headlineSmall,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onSurface,
+        modifier = modifier.padding(top = topPadding)
+    )
+}
+
+@Composable
+private fun SectionDivider(modifier: Modifier = Modifier) {
+    HorizontalDivider(modifier = modifier.padding(vertical = 6.dp))
+}
+
 private val SectionTitleTopPadding = 8.dp
-private val ChartTitleTopPadding = 8.dp
 private val StatCardContentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
 private val StatCardSpacing = 10.dp
 
