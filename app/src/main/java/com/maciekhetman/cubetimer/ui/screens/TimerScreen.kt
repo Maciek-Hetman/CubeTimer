@@ -390,6 +390,10 @@ private fun AveragesDisplay(
         } else null
     } else null
 
+    if (ao5 == null && ao12 == null) {
+        return
+    }
+
     Surface(
         modifier = modifier,
         color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.7f),
@@ -701,7 +705,12 @@ private fun RecordCelebrationOverlay(
                             color = MaterialTheme.colorScheme.primary,
                             letterSpacing = 2.sp,
                             textAlign = TextAlign.Center,
-                            modifier = Modifier.align(Alignment.CenterHorizontally)
+                            lineHeight = 56.sp,
+                            softWrap = true,
+                            maxLines = 2,
+                            modifier = Modifier
+                                .align(Alignment.CenterHorizontally)
+                                .fillMaxWidth()
                         )
                         Text(
                             text = "Tap anywhere to continue",
