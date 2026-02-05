@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.ViewInAr
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -209,7 +210,7 @@ enum class AppDestinations(
     val icon: ImageVector,
 ) {
     TIMER("Timer", Icons.Default.Home),
-    CUBES("Cubes", Icons.Default.Settings),
+    CUBES("Cubes", Icons.Default.ViewInAr),
     STATS("Stats", Icons.AutoMirrored.Filled.List),
     SETTINGS("Settings", Icons.Default.Settings),
 }

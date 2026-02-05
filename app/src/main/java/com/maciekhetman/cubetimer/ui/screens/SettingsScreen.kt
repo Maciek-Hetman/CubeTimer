@@ -22,6 +22,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -177,10 +178,10 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .padding(paddingValues),
             contentPadding = PaddingValues(
-                horizontal = 16.dp,
-                vertical = 20.dp
+                horizontal = 12.dp,
+                vertical = 12.dp
             ),
-            verticalArrangement = Arrangement.spacedBy(18.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             item {
                 SettingsSectionCard(
@@ -195,6 +196,7 @@ fun SettingsScreen(
                     )
 
                     if (!dynamicColorEnabled) {
+                        SettingsCardDivider()
                         SettingToggleRow(
                             title = "AMOLED Dark",
                             checked = amoledEnabled,
@@ -218,6 +220,7 @@ fun SettingsScreen(
                         }
                     )
 
+                    SettingsCardDivider()
                     SettingMenuRow(
                         title = "Scramble Size",
                         buttonLabel = "${scrambleScalePercent}%",
@@ -266,6 +269,13 @@ fun SettingsScreen(
                 SettingsSectionCard(
                     title = "Data"
                 ) {
+                    Text(
+                        text = "Import",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                    )
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -302,8 +312,7 @@ fun SettingsScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
-
+                    SettingsCardDivider()
                     SettingMenuRow(
                         title = "Import Mode",
                         buttonLabel = importMode.displayName,
@@ -448,14 +457,9 @@ private fun SettingsSectionCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
             content()
         }
     }
@@ -537,7 +541,15 @@ private fun SettingMenuRow(
     }
 }
 
-private val SettingsButtonPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp)
+private val SettingsButtonPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
 private val SettingsButtonMinHeight = 48.dp
 private val ScrambleScaleOptions = listOf(80, 90, 100, 110, 120, 130, 140)
+
+@Composable
+private fun SettingsCardDivider() {
+    HorizontalDivider(
+        thickness = 1.dp,
+        color = MaterialTheme.colorScheme.outlineVariant
+    )
+}
 

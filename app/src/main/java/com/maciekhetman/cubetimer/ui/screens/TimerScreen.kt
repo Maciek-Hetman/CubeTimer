@@ -111,7 +111,7 @@ fun TimerScreen(
                 .fillMaxSize()
                 .padding(
                     top = 100.dp,
-                    bottom = if (solves.isNotEmpty()) 100.dp else 16.dp
+                    bottom = if (solves.isNotEmpty()) 100.dp else 12.dp
                 )
                 .then(
                     if (timerState !is TimerState.Finished && recordCelebration == null) {
@@ -145,9 +145,9 @@ fun TimerScreen(
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 AveragesDisplay(solves = solves)
                 RecentSolvesDisplay(solves = solves)
@@ -260,7 +260,7 @@ private fun TimerContent(
                                 containerColor = MaterialTheme.colorScheme.secondaryContainer,
                                 contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                             ),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 12.dp)
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
                         ) {
                             Text(
                                 text = "+2",
@@ -278,7 +278,7 @@ private fun TimerContent(
                                 containerColor = MaterialTheme.colorScheme.errorContainer,
                                 contentColor = MaterialTheme.colorScheme.onErrorContainer
                             ),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 12.dp)
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
                         ) {
                             Text(
                                 text = "DNF",
@@ -296,7 +296,7 @@ private fun TimerContent(
                                 containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                                 contentColor = MaterialTheme.colorScheme.onSurface
                             ),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 12.dp)
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
                         ) {
                             Text(
                                 text = "Discard",
@@ -373,7 +373,7 @@ private fun AveragesDisplay(
         shape = MaterialTheme.shapes.large
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             if (ao5 != null) {
@@ -455,7 +455,7 @@ private fun RecentSolvesDisplay(
                             Penalty.PLUS_TWO -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.8f)
                             Penalty.NONE -> MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
                         },
-                        modifier = Modifier.padding(horizontal = dynamicHorizontalPadding, vertical = 3.dp)
+                        modifier = Modifier.padding(horizontal = dynamicHorizontalPadding, vertical = 2.dp)
                     )
                 }
             }
@@ -502,7 +502,7 @@ private fun ScrambleDisplay(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
+            .padding(horizontal = 12.dp)
             .then(
                 if (isTruncated) {
                     Modifier.clickable { showFullScramble = true }
@@ -667,7 +667,7 @@ private fun RecordCelebrationOverlay(
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.padding(horizontal = 32.dp, vertical = 16.dp),
+                                modifier = Modifier.padding(horizontal = 32.dp, vertical = 12.dp),
                                 textAlign = TextAlign.Center
                             )
                         }

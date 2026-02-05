@@ -109,7 +109,7 @@ fun StatsScreen(
                 }
                 
                 item {
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
                 }
                 
                 item {
@@ -117,7 +117,7 @@ fun StatsScreen(
                 }
                 
                 item {
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
                 }
                 
                 item {
@@ -125,7 +125,7 @@ fun StatsScreen(
                 }
                 
                 item {
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
                 }
                 
                 item {
@@ -133,7 +133,7 @@ fun StatsScreen(
                 }
                 
                 item {
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
                 }
                 
                 item {
@@ -141,7 +141,7 @@ fun StatsScreen(
                 }
                 
                 item {
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
                 }
                 
                 item {
@@ -149,7 +149,7 @@ fun StatsScreen(
                 }
                 
                 item {
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
                 }
                 
                 item {
@@ -157,7 +157,7 @@ fun StatsScreen(
                 }
                 
                 item {
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
                 }
                 
                 item {
@@ -165,20 +165,21 @@ fun StatsScreen(
                 }
                 
                 item {
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp),
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "Solve History",
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+        Text(
+            text = "Solve History",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(top = SectionTitleTopPadding)
+        )
                         if (solves.isNotEmpty()) {
                             FilledTonalButton(
                                 onClick = { showClearDialog = true },
@@ -237,7 +238,7 @@ fun StatsScreen(
                         solveNumber = solves.size - index,
                         onDelete = deleteSolve,
                         onSetPenalty = setPenalty,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                     )
                 }
                 
@@ -302,14 +303,15 @@ private fun StatsHeader(solves: List<SolveTime>, appTimeMillis: Long) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(
             text = "Overview",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(top = SectionTitleTopPadding)
         )
         
         Row(
@@ -409,14 +411,15 @@ private fun AveragesSection(solves: List<SolveTime>) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(
             text = "Averages",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(top = SectionTitleTopPadding)
         )
         
         val ao5Current = calculateAverageOfN(solves, 5)
@@ -431,7 +434,7 @@ private fun AveragesSection(solves: List<SolveTime>) {
             shape = MaterialTheme.shapes.large
         ) {
             Column(
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
@@ -470,7 +473,7 @@ private fun AveragesSection(solves: List<SolveTime>) {
             shape = MaterialTheme.shapes.large
         ) {
             Column(
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
@@ -507,14 +510,15 @@ private fun LargeAveragesSection(solves: List<SolveTime>) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(
             text = "Session Averages",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(top = SectionTitleTopPadding)
         )
         
         val averages = listOf(
@@ -595,14 +599,15 @@ private fun SessionStatsSection(solves: List<SolveTime>) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(
             text = "Session Statistics",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(top = SectionTitleTopPadding)
         )
         
         if (sessionStats == null) {
@@ -610,7 +615,7 @@ private fun SessionStatsSection(solves: List<SolveTime>) {
                 text = "Not enough data",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                modifier = Modifier.padding(vertical = 8.dp)
+                modifier = Modifier.padding(vertical = 6.dp)
             )
         } else {
             Text(
@@ -689,14 +694,15 @@ private fun PenaltyStatsSection(solves: List<SolveTime>) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(
             text = "Penalties",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(top = SectionTitleTopPadding)
         )
         
         Row(
@@ -769,20 +775,21 @@ private fun PersonalBestsChart(solves: List<SolveTime>) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         shape = MaterialTheme.shapes.extraLarge,
         tonalElevation = 1.dp
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
                 text = "Personal Best Progress",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(top = ChartTitleTopPadding)
             )
             
             val singleColor = Color(0xFF4CAF50) // Green
@@ -889,7 +896,7 @@ private fun PersonalBestsChart(solves: List<SolveTime>) {
                         shape = MaterialTheme.shapes.large
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
@@ -977,20 +984,21 @@ private fun AveragesChart(solves: List<SolveTime>) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         shape = MaterialTheme.shapes.extraLarge,
         tonalElevation = 1.dp
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
                 text = "Progress Chart",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(top = ChartTitleTopPadding)
             )
         
         val ao5Color = Color(0xFF2196F3) // Blue
@@ -1123,7 +1131,7 @@ private fun AveragesChart(solves: List<SolveTime>) {
                     shape = MaterialTheme.shapes.large
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
@@ -1146,7 +1154,7 @@ private fun AveragesChart(solves: List<SolveTime>) {
                     shape = MaterialTheme.shapes.large
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
@@ -1314,7 +1322,7 @@ private fun SolveCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -1439,7 +1447,9 @@ private fun SolveCard(
     }
 }
 
-private val StatCardContentPadding = 20.dp
+private val SectionTitleTopPadding = 8.dp
+private val ChartTitleTopPadding = 8.dp
+private val StatCardContentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
 private val StatCardSpacing = 10.dp
 
 private fun formatTime(millis: Long): String {
@@ -1615,3 +1625,6 @@ private fun calculateSessionStats(solves: List<SolveTime>): SessionStats? {
         avgTimeCubingInSession = avgTimeCubingInSession
     )
 }
+
+
+

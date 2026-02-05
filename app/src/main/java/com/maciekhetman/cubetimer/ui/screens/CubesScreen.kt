@@ -26,6 +26,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -97,7 +98,13 @@ fun CubesScreen(
 
     val activeCubeId = activeCubeIdByMode[currentMode]
     val cubesForMode = cubes.filter { it.type == currentMode }
-    val activeCubeLabel = cubesForMode.firstOrNull { it.id == activeCubeId }?.displayName ?: "None"
+    val activeCube = cubesForMode.firstOrNull { it.id == activeCubeId }
+    val activeCubeLabel = activeCube?.displayName ?: "None"
+    val activeCubeHint = when {
+        cubesForMode.isEmpty() -> "No cubes for this type"
+        activeCube == null -> "Choose a cube"
+        else -> "Tap to change"
+    }
 
     val brands = cubes.map { it.brand.trim() }
     val knownBrands = brands.filter { it.isNotEmpty() }.distinct().sorted()
@@ -144,34 +151,89 @@ fun CubesScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             item {
-                SectionCard(title = "Active Cube") {
-                    MenuRow(
-                        title = "Current Mode",
-                        buttonLabel = activeCubeLabel,
-                        onClick = { activeCubeMenuExpanded = true },
-                        menuExpanded = activeCubeMenuExpanded,
-                        onDismissMenu = { activeCubeMenuExpanded = false }
-                    ) {
-                        ExpressiveDropdownMenuItem(
-                            text = { Text("None") },
-                            onClick = {
-                                activeCubeMenuExpanded = false
-                                viewModel.setActiveCubeForMode(currentMode, null)
+                SectionCard(title = "Manage") {
+                    Box {
+                        FilledTonalButton(
+                            onClick = { activeCubeMenuExpanded = true },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = SettingsButtonMinHeight),
+                            shape = MaterialTheme.shapes.large,
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Text(
+                                    text = activeCubeLabel,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = activeCubeHint,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
-                        )
-                        cubesForMode.forEach { cube ->
-                            ExpressiveDropdownMenuItem(
-                                text = { Text(cube.displayName) },
-                                onClick = {
-                                    activeCubeMenuExpanded = false
-                                    viewModel.setActiveCubeForMode(currentMode, cube.id)
-                                }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = "Select cube"
                             )
                         }
+
+                        ExpressiveDropdownMenu(
+                            expanded = activeCubeMenuExpanded,
+                            onDismissRequest = { activeCubeMenuExpanded = false }
+                        ) {
+                            ExpressiveDropdownMenuItem(
+                                text = { Text("None") },
+                                onClick = {
+                                    activeCubeMenuExpanded = false
+                                    viewModel.setActiveCubeForMode(currentMode, null)
+                                }
+                            )
+                            cubesForMode.forEach { cube ->
+                                ExpressiveDropdownMenuItem(
+                                    text = { Text(cube.displayName) },
+                                    onClick = {
+                                        activeCubeMenuExpanded = false
+                                        viewModel.setActiveCubeForMode(currentMode, cube.id)
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    CardItemDivider()
+                    FilledTonalButton(
+                        onClick = {
+                            newCubeBrand = ""
+                            newCubeModel = ""
+                            newCubeFeatures = emptySet()
+                            newCubeType = currentMode
+                            newCubeTension = ""
+                            newCubeCenterTravel = ""
+                            newCubeLubes = ""
+                            showAddCubeDialog = true
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = SettingsButtonMinHeight),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                        ),
+                        contentPadding = SettingsButtonPadding
+                    ) {
+                        Text("Add Cube")
                     }
                 }
             }
@@ -220,6 +282,7 @@ fun CubesScreen(
                         }
                     }
 
+                    CardItemDivider()
                     MenuRow(
                         title = "Brand",
                         buttonLabel = when (brandFilter) {
@@ -258,6 +321,7 @@ fun CubesScreen(
                         }
                     }
 
+                    CardItemDivider()
                     MenuRow(
                         title = "Sort",
                         buttonLabel = sortOption.label,
@@ -276,6 +340,7 @@ fun CubesScreen(
                         }
                     }
 
+                    CardItemDivider()
                     Text(
                         text = "Features",
                         style = MaterialTheme.typography.labelLarge,
@@ -311,33 +376,6 @@ fun CubesScreen(
                                 )
                             }
                         }
-                    }
-                }
-            }
-
-            item {
-                SectionCard(title = "Manage") {
-                    FilledTonalButton(
-                        onClick = {
-                            newCubeBrand = ""
-                            newCubeModel = ""
-                            newCubeFeatures = emptySet()
-                            newCubeType = currentMode
-                            newCubeTension = ""
-                            newCubeCenterTravel = ""
-                            newCubeLubes = ""
-                            showAddCubeDialog = true
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = SettingsButtonMinHeight),
-                        colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                        ),
-                        contentPadding = SettingsButtonPadding
-                    ) {
-                        Text("Add Cube")
                     }
                 }
             }
@@ -729,11 +767,13 @@ private fun SectionCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -890,6 +930,10 @@ private fun CubeCard(
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val hasFeatures = cube.features.isNotEmpty()
+    val hasDetails = cube.tension.isNotBlank() || cube.centerTravel.isNotBlank() || cube.lubes.isNotEmpty()
+    val hasInfoSection = hasFeatures || hasDetails
+
     Surface(
         modifier = modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -899,11 +943,13 @@ private fun CubeCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(
@@ -912,7 +958,7 @@ private fun CubeCard(
                 ) {
                     Text(
                         text = cube.displayName,
-                        style = MaterialTheme.typography.headlineSmall,
+                        style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
@@ -925,52 +971,60 @@ private fun CubeCard(
                 }
             }
 
-            if (cube.features.isNotEmpty()) {
-                Row(
-                    modifier = Modifier.horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    cube.features.forEach { feature ->
-                        Surface(
-                            color = MaterialTheme.colorScheme.surfaceContainer,
-                            shape = MaterialTheme.shapes.small
-                        ) {
-                            Text(
+            if (hasInfoSection) {
+                CardItemDivider()
+                if (hasFeatures) {
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        cube.features.forEach { feature ->
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceContainer,
+                                shape = MaterialTheme.shapes.large
+                            ) {
+                                Text(
                                 text = feature,
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                             )
                         }
                     }
                 }
-            }
+                }
 
-            if (cube.tension.isNotBlank() || cube.centerTravel.isNotBlank()) {
-                val details = listOf(
-                    cube.tension.takeIf { it.isNotBlank() }?.let { "Tension: $it" },
-                    cube.centerTravel.takeIf { it.isNotBlank() }?.let { "Center: $it" }
-                ).filterNotNull().joinToString(" • ")
-                Text(
-                    text = details,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            if (cube.lubes.isNotEmpty()) {
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceContainerLow,
-                    shape = MaterialTheme.shapes.medium
-                ) {
+                if (hasFeatures && hasDetails) {
+                    CardItemDivider()
+                }
+
+                if (cube.tension.isNotBlank() || cube.centerTravel.isNotBlank()) {
+                    val details = listOf(
+                        cube.tension.takeIf { it.isNotBlank() }?.let { "Tension: $it" },
+                        cube.centerTravel.takeIf { it.isNotBlank() }?.let { "Center: $it" }
+                    ).filterNotNull().joinToString(" • ")
                     Text(
+                        text = details,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (cube.lubes.isNotEmpty()) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        shape = MaterialTheme.shapes.large
+                    ) {
+                        Text(
                         text = "Lubes: ${cube.lubes.joinToString(", ")}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                     )
                 }
             }
+            }
 
+            CardItemDivider()
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -986,6 +1040,7 @@ private fun CubeCard(
                     modifier = Modifier.weight(1f)
                 )
             }
+            CardItemDivider()
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -1002,6 +1057,7 @@ private fun CubeCard(
                 )
             }
 
+            CardItemDivider()
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -1015,7 +1071,7 @@ private fun CubeCard(
                         containerColor = MaterialTheme.colorScheme.secondaryContainer,
                         contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                     ),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Text("Edit")
                 }
@@ -1028,7 +1084,7 @@ private fun CubeCard(
                         containerColor = MaterialTheme.colorScheme.errorContainer,
                         contentColor = MaterialTheme.colorScheme.onErrorContainer
                     ),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Text("Delete")
                 }
@@ -1050,7 +1106,7 @@ private fun CubeStatCard(
         tonalElevation = 1.dp
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Text(
@@ -1068,6 +1124,14 @@ private fun CubeStatCard(
     }
 }
 
+@Composable
+private fun CardItemDivider() {
+    HorizontalDivider(
+        thickness = 1.dp,
+        color = MaterialTheme.colorScheme.outlineVariant
+    )
+}
+
 private fun formatDisplayTime(millis: Long): String {
     val totalSeconds = millis / 1000
     val milliseconds = (millis % 1000) / 10
@@ -1083,7 +1147,7 @@ private fun formatDisplayTime(millis: Long): String {
 
 private const val UnknownBrandFilter = "__UNKNOWN__"
 
-private val SettingsButtonPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp)
+private val SettingsButtonPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
 private val SettingsButtonMinHeight = 48.dp
 
 private val FeatureOptions = listOf(

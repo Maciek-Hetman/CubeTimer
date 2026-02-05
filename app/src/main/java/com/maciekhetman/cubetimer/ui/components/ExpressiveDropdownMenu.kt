@@ -47,7 +47,7 @@ fun ExpressiveDropdownMenuItem(
     trailingIcon: @Composable (() -> Unit)? = null,
     enabled: Boolean = true,
     colors: MenuItemColors = MenuDefaults.itemColors(),
-    contentPadding: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 10.dp)
+    contentPadding: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
 ) {
     DropdownMenuItem(
         text = text,
