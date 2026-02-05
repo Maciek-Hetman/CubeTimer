@@ -21,7 +21,6 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.maciekhetman.cubetimer.Mode
@@ -29,6 +28,8 @@ import com.maciekhetman.cubetimer.Penalty
 import com.maciekhetman.cubetimer.SolveTime
 import com.maciekhetman.cubetimer.TimerViewModel
 import com.maciekhetman.cubetimer.ui.components.ActivityTracker
+import com.maciekhetman.cubetimer.ui.components.SectionDivider
+import com.maciekhetman.cubetimer.ui.components.SectionHeader
 import com.maciekhetman.cubetimer.ui.components.ExpressiveDropdownMenu
 import com.maciekhetman.cubetimer.ui.components.ExpressiveDropdownMenuItem
 import com.maciekhetman.cubetimer.ui.components.CollapsingTopBar
@@ -1407,27 +1408,6 @@ private fun SolveCard(
     }
 }
 
-@Composable
-private fun SectionHeader(
-    title: String,
-    modifier: Modifier = Modifier,
-    topPadding: Dp = SectionTitleTopPadding
-) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.headlineSmall,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSurface,
-        modifier = modifier.padding(top = topPadding)
-    )
-}
-
-@Composable
-private fun SectionDivider(modifier: Modifier = Modifier) {
-    HorizontalDivider(modifier = modifier.padding(vertical = 6.dp))
-}
-
-private val SectionTitleTopPadding = 8.dp
 private val StatCardContentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
 private val StatCardSpacing = 10.dp
 
