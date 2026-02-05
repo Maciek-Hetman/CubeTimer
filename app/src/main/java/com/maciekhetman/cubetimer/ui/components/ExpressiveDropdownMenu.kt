@@ -10,6 +10,7 @@ import androidx.compose.material3.MenuItemColors
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.maciekhetman.cubetimer.ui.theme.Black
 
 @Composable
 fun ExpressiveDropdownMenu(
@@ -18,12 +19,19 @@ fun ExpressiveDropdownMenu(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val isAmoled = MaterialTheme.colorScheme.surface == Black
+    val menuContainerColor = if (isAmoled) {
+        MaterialTheme.colorScheme.surfaceContainerHighest
+    } else {
+        MaterialTheme.colorScheme.surfaceContainerHigh
+    }
+
     DropdownMenu(
         expanded = expanded,
         onDismissRequest = onDismissRequest,
         modifier = modifier,
         shape = MaterialTheme.shapes.extraLarge,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        containerColor = menuContainerColor,
         tonalElevation = 4.dp,
         shadowElevation = 8.dp,
         content = content

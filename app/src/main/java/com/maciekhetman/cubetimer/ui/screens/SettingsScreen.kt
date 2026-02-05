@@ -64,6 +64,8 @@ fun SettingsScreen(
     val dynamicColorEnabled by viewModel.dynamicColorEnabled.collectAsState()
     val defaultMode by viewModel.defaultMode.collectAsState()
     val amoledEnabled by viewModel.amoledEnabled.collectAsState()
+    val showScrambleRefreshButton by viewModel.showScrambleRefreshButton.collectAsState()
+    val scrambleScalePercent by viewModel.scrambleScalePercent.collectAsState()
     val allSolves by viewModel.allSolves.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -71,6 +73,7 @@ fun SettingsScreen(
 
     var defaultModeMenuExpanded by remember { mutableStateOf(false) }
     var importModeMenuExpanded by remember { mutableStateOf(false) }
+    var scrambleScaleMenuExpanded by remember { mutableStateOf(false) }
     var importMode by remember { mutableStateOf(defaultMode) }
     var hasTouchedImportMode by remember { mutableStateOf(false) }
     var pendingImportJson by remember { mutableStateOf<String?>(null) }
@@ -198,6 +201,38 @@ fun SettingsScreen(
                                 viewModel.setAmoledEnabled(enabled)
                             }
                         )
+                    }
+                }
+            }
+
+            item {
+                SettingsSectionCard(
+                    title = "Scramble"
+                ) {
+                    SettingToggleRow(
+                        title = "Show New Scramble Button",
+                        checked = showScrambleRefreshButton,
+                        onCheckedChange = { show ->
+                            viewModel.setShowScrambleRefreshButton(show)
+                        }
+                    )
+
+                    SettingMenuRow(
+                        title = "Scramble Size",
+                        buttonLabel = "${scrambleScalePercent}%",
+                        onClick = { scrambleScaleMenuExpanded = true },
+                        menuExpanded = scrambleScaleMenuExpanded,
+                        onDismissMenu = { scrambleScaleMenuExpanded = false }
+                    ) {
+                        ScrambleScaleOptions.forEach { percent ->
+                            ExpressiveDropdownMenuItem(
+                                text = { Text("$percent%") },
+                                onClick = {
+                                    scrambleScaleMenuExpanded = false
+                                    viewModel.setScrambleScalePercent(percent)
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -502,3 +537,4 @@ private fun SettingMenuRow(
 
 private val SettingsButtonPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp)
 private val SettingsButtonMinHeight = 48.dp
+private val ScrambleScaleOptions = listOf(80, 90, 100, 110, 120, 130, 140)

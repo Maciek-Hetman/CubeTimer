@@ -59,6 +59,8 @@ fun TimerScreen(
     val solves by viewModel.solves.collectAsState()
     val scramble by viewModel.currentScramble.collectAsState()
     val recordCelebration by viewModel.recordCelebration.collectAsState()
+    val showScrambleRefreshButton by viewModel.showScrambleRefreshButton.collectAsState()
+    val scrambleScalePercent by viewModel.scrambleScalePercent.collectAsState()
     val haptic = LocalHapticFeedback.current
     
     // Trigger haptic feedback only once when timer starts
@@ -97,6 +99,8 @@ fun TimerScreen(
             ScrambleDisplay(
                 scramble = scramble,
                 onRefresh = { viewModel.generateNewScramble() },
+                showRefreshButton = showScrambleRefreshButton,
+                scale = scrambleScalePercent / 100f,
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .padding(top = 8.dp)
@@ -477,11 +481,23 @@ private fun formatDisplayTime(millis: Long): String {
 private fun ScrambleDisplay(
     scramble: String,
     onRefresh: () -> Unit,
+    showRefreshButton: Boolean,
+    scale: Float,
     modifier: Modifier = Modifier
 ) {
     var showFullScramble by remember { mutableStateOf(false) }
     var isTruncated by remember { mutableStateOf(false) }
     val maxLines = 4
+    val safeScale = scale.coerceIn(0.8f, 1.4f)
+    val contentPadding = 20.dp * safeScale
+    val spacerWidth = 12.dp * safeScale
+    val textEndPadding = 8.dp * safeScale
+    val buttonSize = 40.dp * safeScale
+    val iconSize = 20.dp * safeScale
+    val baseTextStyle = MaterialTheme.typography.bodyLarge
+    val scrambleTextStyle = baseTextStyle.copy(
+        fontSize = baseTextStyle.fontSize * safeScale
+    )
     
     Surface(
         modifier = modifier
@@ -501,13 +517,13 @@ private fun ScrambleDisplay(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp),
+                .padding(contentPadding),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = scramble,
-                style = MaterialTheme.typography.bodyLarge,
+                style = scrambleTextStyle,
                 fontFamily = FontFamily.Monospace,
                 color = MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Start,
@@ -518,20 +534,24 @@ private fun ScrambleDisplay(
                 },
                 modifier = Modifier
                     .weight(1f)
-                    .padding(end = 8.dp)
+                    .padding(end = textEndPadding)
             )
-            Spacer(modifier = Modifier.width(12.dp))
-            FilledTonalIconButton(
-                onClick = onRefresh,
-                colors = IconButtonDefaults.filledTonalIconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Refresh,
-                    contentDescription = "Generate new scramble"
-                )
+            if (showRefreshButton) {
+                Spacer(modifier = Modifier.width(spacerWidth))
+                FilledTonalIconButton(
+                    onClick = onRefresh,
+                    modifier = Modifier.size(buttonSize),
+                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Generate new scramble",
+                        modifier = Modifier.size(iconSize)
+                    )
+                }
             }
         }
     }

@@ -91,6 +91,12 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     private val _amoledEnabled = MutableStateFlow(false)
     val amoledEnabled: StateFlow<Boolean> = _amoledEnabled.asStateFlow()
 
+    private val _showScrambleRefreshButton = MutableStateFlow(true)
+    val showScrambleRefreshButton: StateFlow<Boolean> = _showScrambleRefreshButton.asStateFlow()
+
+    private val _scrambleScalePercent = MutableStateFlow(100)
+    val scrambleScalePercent: StateFlow<Int> = _scrambleScalePercent.asStateFlow()
+
     private val _allSolves = MutableStateFlow<List<SolveTime>>(emptyList())
     val allSolves: StateFlow<List<SolveTime>> = _allSolves.asStateFlow()
     
@@ -141,6 +147,16 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             settingsRepository.amoledEnabledFlow.collect { enabled ->
                 _amoledEnabled.value = enabled
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.showScrambleRefreshButtonFlow.collect { show ->
+                _showScrambleRefreshButton.value = show
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.scrambleScalePercentFlow.collect { percent ->
+                _scrambleScalePercent.value = percent
             }
         }
         
@@ -481,6 +497,18 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     fun setAmoledEnabled(enabled: Boolean) {
         viewModelScope.launch {
             settingsRepository.setAmoledEnabled(enabled)
+        }
+    }
+
+    fun setShowScrambleRefreshButton(show: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setShowScrambleRefreshButton(show)
+        }
+    }
+
+    fun setScrambleScalePercent(percent: Int) {
+        viewModelScope.launch {
+            settingsRepository.setScrambleScalePercent(percent)
         }
     }
     

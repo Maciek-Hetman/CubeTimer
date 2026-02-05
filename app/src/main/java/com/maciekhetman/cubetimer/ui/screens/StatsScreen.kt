@@ -193,8 +193,9 @@ fun StatsScreen(
                     }
                 }
                 
+                val recentSolves = if (solves.size > 200) solves.takeLast(200) else solves
                 itemsIndexed(
-                    items = solves.reversed(),
+                    items = recentSolves.reversed(),
                     key = { _, solve -> solve.timestamp }
                 ) { index, solve ->
                     val deleteSolve: () -> Unit = {
