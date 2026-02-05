@@ -12,6 +12,7 @@ import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
+import java.util.UUID
 
 enum class Penalty {
     NONE,
@@ -43,7 +44,8 @@ data class SolveTime(
     val penalty: Penalty = Penalty.NONE,
     val timestamp: Long = System.currentTimeMillis(),
     val scramble: String = "",
-    val mode: Mode = Mode.CUBE_3x3
+    val mode: Mode = Mode.CUBE_3x3,
+    val cubeId: String? = null
 ) {
     val displayTime: Long
         get() = when (penalty) {
@@ -96,6 +98,12 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _scrambleScalePercent = MutableStateFlow(100)
     val scrambleScalePercent: StateFlow<Int> = _scrambleScalePercent.asStateFlow()
+
+    private val _cubes = MutableStateFlow<List<Cube>>(emptyList())
+    val cubes: StateFlow<List<Cube>> = _cubes.asStateFlow()
+
+    private val _activeCubeIdByMode = MutableStateFlow<Map<Mode, String?>>(emptyMap())
+    val activeCubeIdByMode: StateFlow<Map<Mode, String?>> = _activeCubeIdByMode.asStateFlow()
 
     private val _allSolves = MutableStateFlow<List<SolveTime>>(emptyList())
     val allSolves: StateFlow<List<SolveTime>> = _allSolves.asStateFlow()
@@ -157,6 +165,20 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             settingsRepository.scrambleScalePercentFlow.collect { percent ->
                 _scrambleScalePercent.value = percent
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.cubesFlow.collect { savedCubes ->
+                _cubes.value = savedCubes
+            }
+        }
+        Mode.entries.forEach { mode ->
+            viewModelScope.launch {
+                settingsRepository.activeCubeIdFlow(mode).collect { cubeId ->
+                    val updated = _activeCubeIdByMode.value.toMutableMap()
+                    updated[mode] = cubeId
+                    _activeCubeIdByMode.value = updated
+                }
             }
         }
         
@@ -253,7 +275,8 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
                 timeInMillis = currentState.time,
                 penalty = penalty,
                 scramble = _currentScramble.value,
-                mode = _currentMode.value
+                mode = _currentMode.value,
+                cubeId = _activeCubeIdByMode.value[_currentMode.value]
             )
             val newAllSolves = _allSolves.value + newSolve
             
@@ -509,6 +532,46 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     fun setScrambleScalePercent(percent: Int) {
         viewModelScope.launch {
             settingsRepository.setScrambleScalePercent(percent)
+        }
+    }
+
+    fun addCube(
+        brand: String,
+        model: String,
+        type: Mode,
+        features: List<String>
+    ) {
+        val newCube = Cube(
+            id = UUID.randomUUID().toString(),
+            brand = brand.trim(),
+            model = model.trim(),
+            type = type,
+            features = features.map { it.trim() }.filter { it.isNotEmpty() }
+        )
+        val updated = _cubes.value + newCube
+        _cubes.value = updated
+        viewModelScope.launch {
+            settingsRepository.saveCubes(updated)
+        }
+    }
+
+    fun deleteCube(cubeId: String) {
+        val updated = _cubes.value.filterNot { it.id == cubeId }
+        if (updated.size == _cubes.value.size) return
+        _cubes.value = updated
+        viewModelScope.launch {
+            settingsRepository.saveCubes(updated)
+        }
+        Mode.entries.forEach { mode ->
+            if (_activeCubeIdByMode.value[mode] == cubeId) {
+                setActiveCubeForMode(mode, null)
+            }
+        }
+    }
+
+    fun setActiveCubeForMode(mode: Mode, cubeId: String?) {
+        viewModelScope.launch {
+            settingsRepository.setActiveCubeId(mode, cubeId)
         }
     }
     
