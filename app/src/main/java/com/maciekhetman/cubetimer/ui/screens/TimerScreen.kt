@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
@@ -42,6 +43,8 @@ import com.maciekhetman.cubetimer.RecordType
 import com.maciekhetman.cubetimer.SolveTime
 import com.maciekhetman.cubetimer.TimerState
 import com.maciekhetman.cubetimer.TimerViewModel
+import com.maciekhetman.cubetimer.ui.components.ExpressiveDropdownMenu
+import com.maciekhetman.cubetimer.ui.components.ExpressiveDropdownMenuItem
 import com.maciekhetman.cubetimer.ui.components.TopBar
 import kotlinx.coroutines.delay
 import kotlin.math.cos
@@ -64,8 +67,14 @@ fun TimerScreen(
     val cubes by viewModel.cubes.collectAsState()
     val activeCubeIdByMode by viewModel.activeCubeIdByMode.collectAsState()
     val haptic = LocalHapticFeedback.current
-    val activeCubeName = activeCubeIdByMode[currentMode]
-        ?.let { activeId -> cubes.firstOrNull { it.id == activeId }?.displayName }
+    val activeCubeId = activeCubeIdByMode[currentMode]
+    val cubesForMode = cubes.filter { it.type == currentMode }
+    val activeCubeName = activeCubeId?.let { activeId ->
+        cubesForMode.firstOrNull { it.id == activeId }?.displayName
+    }
+    var activeCubeMenuExpanded by remember { mutableStateOf(false) }
+    var activeCubePillWidthPx by remember { mutableStateOf(0) }
+    val activeCubePillWidthDp = with(LocalDensity.current) { activeCubePillWidthPx.toDp() }
     
     // Trigger haptic feedback only once when timer starts
     LaunchedEffect(timerState is TimerState.Running) {
@@ -113,18 +122,59 @@ fun TimerScreen(
                     scale = scrambleScalePercent / 100f
                 )
                 if (!activeCubeName.isNullOrBlank()) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceContainerLow,
-                        shape = MaterialTheme.shapes.large,
-                        tonalElevation = 1.dp,
-                        modifier = Modifier.padding(top = 6.dp)
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = activeCubeName,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                        )
+                        Box {
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                shape = MaterialTheme.shapes.large,
+                                tonalElevation = 1.dp,
+                                modifier = Modifier
+                                    .padding(top = 8.dp)
+                                    .defaultMinSize(minHeight = 36.dp)
+                                    .onSizeChanged { activeCubePillWidthPx = it.width }
+                                    .clickable {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        activeCubeMenuExpanded = true
+                                    }
+                            ) {
+                                Text(
+                                    text = activeCubeName,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                                )
+                            }
+
+                            ExpressiveDropdownMenu(
+                                expanded = activeCubeMenuExpanded,
+                                onDismissRequest = { activeCubeMenuExpanded = false },
+                                modifier = if (activeCubePillWidthPx > 0) {
+                                    Modifier.width(activeCubePillWidthDp)
+                                } else {
+                                    Modifier
+                                }
+                            ) {
+                                ExpressiveDropdownMenuItem(
+                                    text = { Text("None") },
+                                    onClick = {
+                                        activeCubeMenuExpanded = false
+                                        viewModel.setActiveCubeForMode(currentMode, null)
+                                    }
+                                )
+                                cubesForMode.forEach { cube ->
+                                    ExpressiveDropdownMenuItem(
+                                        text = { Text(cube.displayName) },
+                                        onClick = {
+                                            activeCubeMenuExpanded = false
+                                            viewModel.setActiveCubeForMode(currentMode, cube.id)
+                                        }
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
