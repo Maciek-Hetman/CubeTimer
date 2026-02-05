@@ -3,21 +3,29 @@ package com.maciekhetman.cubetimer.ui.screens
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -163,62 +171,28 @@ fun SettingsScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(paddingValues),
+            contentPadding = PaddingValues(
+                horizontal = 16.dp,
+                vertical = 20.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             item {
-                SettingsSectionTitle(text = "Appearance")
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                SettingsSectionCard(
+                    title = "Appearance"
                 ) {
-                    Column {
-                        Text(
-                            text = "Material You",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            text = "Use system dynamic colors",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                        )
-                    }
-                    Switch(
+                    SettingToggleRow(
+                        title = "Material You",
                         checked = dynamicColorEnabled,
                         onCheckedChange = { enabled ->
                             viewModel.setDynamicColorEnabled(enabled)
                         }
                     )
-                }
-            }
 
-            item {
-                HorizontalDivider()
-            }
-
-            if (!dynamicColorEnabled) {
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text(
-                                text = "AMOLED Dark",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                text = "Pure black backgrounds in dark theme",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                            )
-                        }
-                        Switch(
+                    if (!dynamicColorEnabled) {
+                        SettingToggleRow(
+                            title = "AMOLED Dark",
                             checked = amoledEnabled,
                             onCheckedChange = { enabled ->
                                 viewModel.setAmoledEnabled(enabled)
@@ -226,120 +200,90 @@ fun SettingsScreen(
                         )
                     }
                 }
-
-                item {
-                    HorizontalDivider()
-                }
             }
 
             item {
-                SettingsSectionTitle(text = "Defaults")
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                SettingsSectionCard(
+                    title = "Defaults"
                 ) {
-                    Column {
-                        Text(
-                            text = "Default Mode",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            text = "Used when the app starts",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                        )
-                    }
-
-                    Column(horizontalAlignment = Alignment.End) {
-                        FilledTonalButton(onClick = { defaultModeMenuExpanded = true }) {
-                            Text(defaultMode.displayName)
-                        }
-                        ExpressiveDropdownMenu(
-                            expanded = defaultModeMenuExpanded,
-                            onDismissRequest = { defaultModeMenuExpanded = false }
-                        ) {
-                            Mode.entries.forEach { mode ->
-                                ExpressiveDropdownMenuItem(
-                                    text = { Text(mode.displayName) },
-                                    onClick = {
-                                        defaultModeMenuExpanded = false
-                                        viewModel.setDefaultMode(mode)
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            item {
-                HorizontalDivider()
-            }
-
-            item {
-                SettingsSectionTitle(text = "Data")
-                Text(
-                    text = "Import or export data using csTimer session JSON format.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    FilledTonalButton(
-                        onClick = { exportLauncher.launch("cubetimer-cstimer.json") },
-                        colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        ),
-                        modifier = Modifier.weight(1f)
+                    SettingMenuRow(
+                        title = "Default Mode",
+                        buttonLabel = defaultMode.displayName,
+                        onClick = { defaultModeMenuExpanded = true },
+                        menuExpanded = defaultModeMenuExpanded,
+                        onDismissMenu = { defaultModeMenuExpanded = false }
                     ) {
-                        Text("Export")
-                    }
-                    FilledTonalButton(
-                        onClick = {
-                            importLauncher.launch(arrayOf("application/json", "text/plain", "text/*"))
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Import")
+                        Mode.entries.forEach { mode ->
+                            ExpressiveDropdownMenuItem(
+                                text = { Text(mode.displayName) },
+                                onClick = {
+                                    defaultModeMenuExpanded = false
+                                    viewModel.setDefaultMode(mode)
+                                }
+                            )
+                        }
                     }
                 }
+            }
 
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+            item {
+                SettingsSectionCard(
+                    title = "Data"
                 ) {
-                    Text(
-                        text = "Import Mode",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Column(horizontalAlignment = Alignment.End) {
-                        FilledTonalButton(onClick = { importModeMenuExpanded = true }) {
-                            Text(importMode.displayName)
-                        }
-                        ExpressiveDropdownMenu(
-                            expanded = importModeMenuExpanded,
-                            onDismissRequest = { importModeMenuExpanded = false }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = SettingsButtonMinHeight),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        FilledTonalButton(
+                            onClick = { exportLauncher.launch("cubetimer-cstimer.json") },
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = SettingsButtonMinHeight),
+                            contentPadding = SettingsButtonPadding
                         ) {
-                            Mode.entries.forEach { mode ->
-                                ExpressiveDropdownMenuItem(
-                                    text = { Text(mode.displayName) },
-                                    onClick = {
-                                        importModeMenuExpanded = false
-                                        importMode = mode
-                                        hasTouchedImportMode = true
-                                    }
-                                )
-                            }
+                            Text("Export")
+                        }
+                        FilledTonalButton(
+                            onClick = {
+                                importLauncher.launch(arrayOf("application/json", "text/plain", "text/*"))
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = SettingsButtonMinHeight),
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                            ),
+                            contentPadding = SettingsButtonPadding
+                        ) {
+                            Text("Import")
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    SettingMenuRow(
+                        title = "Import Mode",
+                        buttonLabel = importMode.displayName,
+                        onClick = { importModeMenuExpanded = true },
+                        menuExpanded = importModeMenuExpanded,
+                        onDismissMenu = { importModeMenuExpanded = false }
+                    ) {
+                        Mode.entries.forEach { mode ->
+                            ExpressiveDropdownMenuItem(
+                                text = { Text(mode.displayName) },
+                                onClick = {
+                                    importModeMenuExpanded = false
+                                    importMode = mode
+                                    hasTouchedImportMode = true
+                                }
+                            )
                         }
                     }
                 }
@@ -385,11 +329,14 @@ fun SettingsScreen(
                                 }
                             }
                         },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = SettingsButtonMinHeight),
                         colors = ButtonDefaults.filledTonalButtonColors(
                             containerColor = MaterialTheme.colorScheme.primaryContainer,
                             contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
+                        ),
+                        contentPadding = SettingsButtonPadding
                     ) {
                         Text("Add to existing data")
                     }
@@ -422,7 +369,10 @@ fun SettingsScreen(
                                 }
                             }
                         },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = SettingsButtonMinHeight),
+                        contentPadding = SettingsButtonPadding
                     ) {
                         Text("Replace existing data")
                     }
@@ -435,7 +385,8 @@ fun SettingsScreen(
                         colors = ButtonDefaults.filledTonalButtonColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainer,
                             contentColor = MaterialTheme.colorScheme.onSurface
-                        )
+                        ),
+                        contentPadding = SettingsButtonPadding
                     ) {
                         Text("Cancel")
                     }
@@ -447,11 +398,107 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun SettingsSectionTitle(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.headlineSmall,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSurface
-    )
+private fun SettingsSectionCard(
+    title: String,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shape = MaterialTheme.shapes.extraLarge,
+        tonalElevation = 2.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            content()
+        }
+    }
 }
+
+@Composable
+private fun SettingToggleRow(
+    title: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange
+        )
+    }
+}
+
+@Composable
+private fun SettingMenuRow(
+    title: String,
+    buttonLabel: String,
+    onClick: () -> Unit,
+    menuExpanded: Boolean,
+    onDismissMenu: () -> Unit,
+    menuContent: @Composable ColumnScope.() -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+        Box {
+            FilledTonalButton(
+                onClick = onClick,
+                modifier = Modifier.heightIn(min = SettingsButtonMinHeight),
+                contentPadding = SettingsButtonPadding
+            ) {
+                Text(buttonLabel)
+                Spacer(modifier = Modifier.width(4.dp))
+                Icon(
+                    imageVector = Icons.Default.ArrowDropDown,
+                    contentDescription = "Open menu"
+                )
+            }
+
+            ExpressiveDropdownMenu(
+                expanded = menuExpanded,
+                onDismissRequest = onDismissMenu
+            ) {
+                menuContent()
+            }
+        }
+    }
+}
+
+private val SettingsButtonPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp)
+private val SettingsButtonMinHeight = 48.dp
