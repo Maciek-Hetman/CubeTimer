@@ -20,10 +20,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -46,10 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.maciekhetman.cubetimer.Cube
 import com.maciekhetman.cubetimer.Mode
-import com.maciekhetman.cubetimer.Penalty
-import com.maciekhetman.cubetimer.SolveTime
 import com.maciekhetman.cubetimer.TimerViewModel
 import com.maciekhetman.cubetimer.ui.components.ExpressiveDropdownMenu
 import com.maciekhetman.cubetimer.ui.components.ExpressiveDropdownMenuItem
@@ -57,7 +52,6 @@ import com.maciekhetman.cubetimer.ui.components.TopBar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.math.sqrt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -72,8 +66,6 @@ fun SettingsScreen(
     val amoledEnabled by viewModel.amoledEnabled.collectAsState()
     val showScrambleRefreshButton by viewModel.showScrambleRefreshButton.collectAsState()
     val scrambleScalePercent by viewModel.scrambleScalePercent.collectAsState()
-    val cubes by viewModel.cubes.collectAsState()
-    val activeCubeIdByMode by viewModel.activeCubeIdByMode.collectAsState()
     val allSolves by viewModel.allSolves.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -82,14 +74,6 @@ fun SettingsScreen(
     var defaultModeMenuExpanded by remember { mutableStateOf(false) }
     var importModeMenuExpanded by remember { mutableStateOf(false) }
     var scrambleScaleMenuExpanded by remember { mutableStateOf(false) }
-    var activeCubeMenuExpanded by remember { mutableStateOf(false) }
-    var cubeTypeMenuExpanded by remember { mutableStateOf(false) }
-    var showAddCubeDialog by remember { mutableStateOf(false) }
-    var newCubeBrand by remember { mutableStateOf("") }
-    var newCubeModel by remember { mutableStateOf("") }
-    var newCubeFeatures by remember { mutableStateOf(setOf<String>()) }
-    var newCubeType by remember { mutableStateOf(currentMode) }
-    var cubePendingDelete by remember { mutableStateOf<Cube?>(null) }
     var importMode by remember { mutableStateOf(defaultMode) }
     var hasTouchedImportMode by remember { mutableStateOf(false) }
     var pendingImportJson by remember { mutableStateOf<String?>(null) }
@@ -101,11 +85,6 @@ fun SettingsScreen(
         }
     }
 
-    LaunchedEffect(currentMode, showAddCubeDialog) {
-        if (!showAddCubeDialog) {
-            newCubeType = currentMode
-        }
-    }
 
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json")
@@ -284,75 +263,6 @@ fun SettingsScreen(
             }
 
             item {
-                val activeCubeId = activeCubeIdByMode[currentMode]
-                val cubesForMode = cubes.filter { it.type == currentMode }
-                val activeCubeLabel = cubesForMode.firstOrNull { it.id == activeCubeId }?.displayName ?: "None"
-
-                SettingsSectionCard(
-                    title = "Cubes"
-                ) {
-                    SettingMenuRow(
-                        title = "Active Cube",
-                        buttonLabel = activeCubeLabel,
-                        onClick = { activeCubeMenuExpanded = true },
-                        menuExpanded = activeCubeMenuExpanded,
-                        onDismissMenu = { activeCubeMenuExpanded = false }
-                    ) {
-                        ExpressiveDropdownMenuItem(
-                            text = { Text("None") },
-                            onClick = {
-                                activeCubeMenuExpanded = false
-                                viewModel.setActiveCubeForMode(currentMode, null)
-                            }
-                        )
-                        cubesForMode.forEach { cube ->
-                            ExpressiveDropdownMenuItem(
-                                text = { Text(cube.displayName) },
-                                onClick = {
-                                    activeCubeMenuExpanded = false
-                                    viewModel.setActiveCubeForMode(currentMode, cube.id)
-                                }
-                            )
-                        }
-                    }
-
-                    FilledTonalButton(
-                        onClick = { showAddCubeDialog = true },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = SettingsButtonMinHeight),
-                        colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                        ),
-                        contentPadding = SettingsButtonPadding
-                    ) {
-                        Text("Add Cube")
-                    }
-
-                    if (cubes.isEmpty()) {
-                        Text(
-                            text = "No cubes added yet",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    } else {
-                        cubes
-                            .sortedWith(compareBy<Cube> { it.type.ordinal }.thenBy { it.displayName })
-                            .forEach { cube ->
-                                val cubeSolves = allSolves.filter { it.cubeId == cube.id }
-                                val stats = calculateCubeStats(cubeSolves)
-                                CubeCard(
-                                    cube = cube,
-                                    stats = stats,
-                                    onDelete = { cubePendingDelete = cube }
-                                )
-                            }
-                    }
-                }
-            }
-
-            item {
                 SettingsSectionCard(
                     title = "Data"
                 ) {
@@ -522,140 +432,6 @@ fun SettingsScreen(
         )
     }
 
-    if (showAddCubeDialog) {
-        AlertDialog(
-            onDismissRequest = { showAddCubeDialog = false },
-            title = { Text("Add Cube") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = newCubeBrand,
-                        onValueChange = { newCubeBrand = it },
-                        label = { Text("Brand") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = newCubeModel,
-                        onValueChange = { newCubeModel = it },
-                        label = { Text("Model") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Text(
-                        text = "Features",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    FeatureOptions.forEach { feature ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = feature,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Checkbox(
-                                checked = newCubeFeatures.contains(feature),
-                                onCheckedChange = { checked ->
-                                    newCubeFeatures = if (checked) {
-                                        newCubeFeatures + feature
-                                    } else {
-                                        newCubeFeatures - feature
-                                    }
-                                }
-                            )
-                        }
-                    }
-
-                    SettingMenuRow(
-                        title = "Type",
-                        buttonLabel = newCubeType.displayName,
-                        onClick = { cubeTypeMenuExpanded = true },
-                        menuExpanded = cubeTypeMenuExpanded,
-                        onDismissMenu = { cubeTypeMenuExpanded = false }
-                    ) {
-                        Mode.entries.forEach { mode ->
-                            ExpressiveDropdownMenuItem(
-                                text = { Text(mode.displayName) },
-                                onClick = {
-                                    cubeTypeMenuExpanded = false
-                                    newCubeType = mode
-                                }
-                            )
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                FilledTonalButton(
-                    onClick = {
-                        viewModel.addCube(
-                            brand = newCubeBrand,
-                            model = newCubeModel,
-                            type = newCubeType,
-                            features = newCubeFeatures.toList()
-                        )
-                        newCubeBrand = ""
-                        newCubeModel = ""
-                        newCubeFeatures = emptySet()
-                        newCubeType = currentMode
-                        showAddCubeDialog = false
-                    }
-                ) {
-                    Text("Add")
-                }
-            },
-            dismissButton = {
-                FilledTonalButton(
-                    onClick = { showAddCubeDialog = false },
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                        contentColor = MaterialTheme.colorScheme.onSurface
-                    )
-                ) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
-
-    if (cubePendingDelete != null) {
-        val cube = cubePendingDelete!!
-        AlertDialog(
-            onDismissRequest = { cubePendingDelete = null },
-            title = { Text("Delete Cube") },
-            text = { Text("Delete ${cube.displayName}? This won't delete any solves.") },
-            confirmButton = {
-                FilledTonalButton(
-                    onClick = {
-                        viewModel.deleteCube(cube.id)
-                        cubePendingDelete = null
-                    },
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                ) {
-                    Text("Delete")
-                }
-            },
-            dismissButton = {
-                FilledTonalButton(
-                    onClick = { cubePendingDelete = null },
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                        contentColor = MaterialTheme.colorScheme.onSurface
-                    )
-                ) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
 }
 
 @Composable
@@ -764,178 +540,4 @@ private fun SettingMenuRow(
 private val SettingsButtonPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp)
 private val SettingsButtonMinHeight = 48.dp
 private val ScrambleScaleOptions = listOf(80, 90, 100, 110, 120, 130, 140)
-private val FeatureOptions = listOf(
-    "Maglev",
-    "UV coating",
-    "Adjustable corner magnets",
-    "Dual adjustment system",
-    "Ball core",
-    "Corner-to-core magnets",
-    "Edge magnets",
-    "Magnetic core"
-)
 
-private data class CubeStats(
-    val totalSolves: Int,
-    val averageLast50: Long?,
-    val meanLast50: Long?,
-    val stdDevLast50: Long?
-)
-
-private fun calculateCubeStats(solves: List<SolveTime>): CubeStats {
-    if (solves.isEmpty()) {
-        return CubeStats(0, null, null, null)
-    }
-    val sorted = solves.sortedBy { it.timestamp }
-    val last50 = sorted.takeLast(50)
-    val valid = last50.filter { it.penalty != Penalty.DNF }
-    if (valid.isEmpty()) {
-        return CubeStats(solves.size, null, null, null)
-    }
-    val times = valid.map { it.displayTime.toDouble() }
-    val average = times.average()
-    val mean = average
-    val variance = times
-        .map { value ->
-            val diff = value - mean
-            diff * diff
-        }
-        .average()
-    val stdDev = sqrt(variance)
-
-    return CubeStats(
-        totalSolves = solves.size,
-        averageLast50 = average.toLong(),
-        meanLast50 = mean.toLong(),
-        stdDevLast50 = stdDev.toLong()
-    )
-}
-
-@Composable
-private fun CubeCard(
-    cube: Cube,
-    stats: CubeStats,
-    onDelete: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = MaterialTheme.shapes.extraLarge,
-        tonalElevation = 1.dp
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    Text(
-                        text = cube.displayName,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = cube.type.displayName,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                FilledTonalButton(
-                    onClick = onDelete,
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer
-                    ),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                ) {
-                    Text("Delete")
-                }
-            }
-
-            if (cube.features.isNotEmpty()) {
-                Text(
-                    text = "Features: ${cube.features.joinToString(", ")}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                CubeStatItem(
-                    label = "Solves",
-                    value = stats.totalSolves.toString(),
-                    modifier = Modifier.weight(1f)
-                )
-                CubeStatItem(
-                    label = "Avg (50)",
-                    value = stats.averageLast50?.let { formatDisplayTime(it) } ?: "—",
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                CubeStatItem(
-                    label = "Mean (50)",
-                    value = stats.meanLast50?.let { formatDisplayTime(it) } ?: "—",
-                    modifier = Modifier.weight(1f)
-                )
-                CubeStatItem(
-                    label = "Std (50)",
-                    value = stats.stdDevLast50?.let { formatDisplayTime(it) } ?: "—",
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun CubeStatItem(
-    label: String,
-    value: String,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-    }
-}
-
-private fun formatDisplayTime(millis: Long): String {
-    val totalSeconds = millis / 1000
-    val milliseconds = (millis % 1000) / 10
-
-    return if (totalSeconds >= 60) {
-        val minutes = totalSeconds / 60
-        val seconds = totalSeconds % 60
-        String.format("%d:%02d.%02d", minutes, seconds, milliseconds)
-    } else {
-        String.format("%d.%02d", totalSeconds, milliseconds)
-    }
-}

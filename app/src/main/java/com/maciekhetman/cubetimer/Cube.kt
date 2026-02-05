@@ -6,6 +6,9 @@ data class Cube(
     val model: String,
     val type: Mode,
     val features: List<String> = emptyList(),
+    val tension: String = "",
+    val centerTravel: String = "",
+    val lubes: List<String> = emptyList(),
     val createdAt: Long = System.currentTimeMillis()
 ) {
     val displayName: String

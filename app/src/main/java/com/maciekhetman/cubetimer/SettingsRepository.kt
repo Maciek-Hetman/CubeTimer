@@ -111,6 +111,13 @@ class SettingsRepository(private val context: Context) {
                 featuresArray.put(feature)
             }
             jsonObject.put("features", featuresArray)
+            jsonObject.put("tension", cube.tension)
+            jsonObject.put("centerTravel", cube.centerTravel)
+            val lubesArray = JSONArray()
+            cube.lubes.forEach { lube ->
+                lubesArray.put(lube)
+            }
+            jsonObject.put("lubes", lubesArray)
             jsonArray.put(jsonObject)
         }
         return jsonArray.toString()
@@ -137,6 +144,16 @@ class SettingsRepository(private val context: Context) {
                         }
                     }
                 }
+                val lubesJson = jsonObject.optJSONArray("lubes")
+                val lubes = mutableListOf<String>()
+                if (lubesJson != null) {
+                    for (j in 0 until lubesJson.length()) {
+                        val lube = lubesJson.optString(j, "").trim()
+                        if (lube.isNotEmpty()) {
+                            lubes.add(lube)
+                        }
+                    }
+                }
                 cubes.add(
                     Cube(
                         id = jsonObject.optString("id", ""),
@@ -144,6 +161,9 @@ class SettingsRepository(private val context: Context) {
                         model = jsonObject.optString("model", ""),
                         type = type,
                         features = features,
+                        tension = jsonObject.optString("tension", ""),
+                        centerTravel = jsonObject.optString("centerTravel", ""),
+                        lubes = lubes,
                         createdAt = jsonObject.optLong("createdAt", System.currentTimeMillis())
                     )
                 )

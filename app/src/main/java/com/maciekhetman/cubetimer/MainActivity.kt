@@ -47,6 +47,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.maciekhetman.cubetimer.ui.screens.StatsScreen
 import com.maciekhetman.cubetimer.ui.screens.SettingsScreen
 import com.maciekhetman.cubetimer.ui.screens.TimerScreen
+import com.maciekhetman.cubetimer.ui.screens.CubesScreen
 import com.maciekhetman.cubetimer.ui.theme.CubeTimerTheme
 
 class MainActivity : ComponentActivity() {
@@ -153,6 +154,14 @@ fun CubeTimerApp(viewModel: TimerViewModel) {
                             modifier = contentModifier
                         )
                     }
+                    AppDestinations.CUBES -> {
+                        CubesScreen(
+                            viewModel = viewModel,
+                            currentMode = currentMode,
+                            onModeSelected = { mode -> viewModel.setMode(mode) },
+                            modifier = contentModifier
+                        )
+                    }
                     AppDestinations.STATS -> {
                         LaunchedEffect(Unit) {
                             viewModel.updateAppTime()
@@ -200,6 +209,7 @@ enum class AppDestinations(
     val icon: ImageVector,
 ) {
     TIMER("Timer", Icons.Default.Home),
+    CUBES("Cubes", Icons.Default.Settings),
     STATS("Stats", Icons.AutoMirrored.Filled.List),
     SETTINGS("Settings", Icons.Default.Settings),
 }

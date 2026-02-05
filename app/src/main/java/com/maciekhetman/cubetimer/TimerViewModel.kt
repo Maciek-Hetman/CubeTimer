@@ -539,19 +539,59 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         brand: String,
         model: String,
         type: Mode,
-        features: List<String>
+        features: List<String>,
+        tension: String = "",
+        centerTravel: String = "",
+        lubes: List<String> = emptyList()
     ) {
         val newCube = Cube(
             id = UUID.randomUUID().toString(),
             brand = brand.trim(),
             model = model.trim(),
             type = type,
-            features = features.map { it.trim() }.filter { it.isNotEmpty() }
+            features = features.map { it.trim() }.filter { it.isNotEmpty() },
+            tension = tension.trim(),
+            centerTravel = centerTravel.trim(),
+            lubes = lubes.map { it.trim() }.filter { it.isNotEmpty() }
         )
         val updated = _cubes.value + newCube
         _cubes.value = updated
         viewModelScope.launch {
             settingsRepository.saveCubes(updated)
+        }
+    }
+
+    fun updateCube(
+        cubeId: String,
+        brand: String,
+        model: String,
+        type: Mode,
+        features: List<String>,
+        tension: String,
+        centerTravel: String,
+        lubes: List<String>
+    ) {
+        val existing = _cubes.value.firstOrNull { it.id == cubeId } ?: return
+        val updatedCube = existing.copy(
+            brand = brand.trim(),
+            model = model.trim(),
+            type = type,
+            features = features.map { it.trim() }.filter { it.isNotEmpty() },
+            tension = tension.trim(),
+            centerTravel = centerTravel.trim(),
+            lubes = lubes.map { it.trim() }.filter { it.isNotEmpty() }
+        )
+        val updated = _cubes.value.map { cube ->
+            if (cube.id == cubeId) updatedCube else cube
+        }
+        _cubes.value = updated
+        viewModelScope.launch {
+            settingsRepository.saveCubes(updated)
+        }
+        Mode.entries.forEach { mode ->
+            if (mode != type && _activeCubeIdByMode.value[mode] == cubeId) {
+                setActiveCubeForMode(mode, null)
+            }
         }
     }
 
