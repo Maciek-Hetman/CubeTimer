@@ -42,7 +42,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.maciekhetman.cubetimer.Mode
@@ -471,6 +473,7 @@ private fun SettingToggleRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -488,7 +491,10 @@ private fun SettingToggleRow(
         }
         Switch(
             checked = checked,
-            onCheckedChange = onCheckedChange
+            onCheckedChange = { enabled ->
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onCheckedChange(enabled)
+            }
         )
     }
 }
@@ -502,6 +508,7 @@ private fun SettingMenuRow(
     onDismissMenu: () -> Unit,
     menuContent: @Composable ColumnScope.() -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -519,7 +526,10 @@ private fun SettingMenuRow(
         }
         Box {
             FilledTonalButton(
-                onClick = onClick,
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onClick()
+                },
                 modifier = Modifier.heightIn(min = SettingsButtonMinHeight),
                 contentPadding = SettingsButtonPadding
             ) {

@@ -8,7 +8,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.MenuItemColors
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import com.maciekhetman.cubetimer.ui.theme.Black
 
@@ -49,9 +51,13 @@ fun ExpressiveDropdownMenuItem(
     colors: MenuItemColors = MenuDefaults.itemColors(),
     contentPadding: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
 ) {
+    val haptic = LocalHapticFeedback.current
     DropdownMenuItem(
         text = text,
-        onClick = onClick,
+        onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            onClick()
+        },
         modifier = modifier,
         leadingIcon = leadingIcon,
         trailingIcon = trailingIcon,

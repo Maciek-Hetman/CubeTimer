@@ -514,6 +514,7 @@ private fun ScrambleDisplay(
 ) {
     var showFullScramble by remember { mutableStateOf(false) }
     var isTruncated by remember { mutableStateOf(false) }
+    val haptic = LocalHapticFeedback.current
     val maxLines = 4
     val safeScale = scale.coerceIn(0.8f, 1.4f)
     val contentPadding = 20.dp * safeScale
@@ -566,7 +567,10 @@ private fun ScrambleDisplay(
             if (showRefreshButton) {
                 Spacer(modifier = Modifier.width(spacerWidth))
                 FilledTonalIconButton(
-                    onClick = onRefresh,
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onRefresh()
+                    },
                     modifier = Modifier.size(buttonSize),
                     colors = IconButtonDefaults.filledTonalIconButtonColors(
                         containerColor = MaterialTheme.colorScheme.primaryContainer,

@@ -43,6 +43,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -68,6 +70,7 @@ fun CubesScreen(
     val cubes by viewModel.cubes.collectAsState()
     val allSolves by viewModel.allSolves.collectAsState()
     val activeCubeIdByMode by viewModel.activeCubeIdByMode.collectAsState()
+    val haptic = LocalHapticFeedback.current
 
     var showAddCubeDialog by remember { mutableStateOf(false) }
     var cubePendingDelete by remember { mutableStateOf<Cube?>(null) }
@@ -158,7 +161,10 @@ fun CubesScreen(
                 SectionCard(title = "Manage") {
                     Box {
                         FilledTonalButton(
-                            onClick = { activeCubeMenuExpanded = true },
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                activeCubeMenuExpanded = true
+                            },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .heightIn(min = SettingsButtonMinHeight),
@@ -798,6 +804,7 @@ private fun MenuRow(
     onDismissMenu: () -> Unit,
     menuContent: @Composable ColumnScope.() -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -808,12 +815,15 @@ private fun MenuRow(
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold
         )
-        Box {
-            FilledTonalButton(
-                onClick = onClick,
-                modifier = Modifier.heightIn(min = SettingsButtonMinHeight),
-                contentPadding = SettingsButtonPadding
-            ) {
+    Box {
+        FilledTonalButton(
+            onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onClick()
+            },
+            modifier = Modifier.heightIn(min = SettingsButtonMinHeight),
+            contentPadding = SettingsButtonPadding
+        ) {
                 Text(buttonLabel)
                 Spacer(modifier = Modifier.width(4.dp))
                 Icon(
