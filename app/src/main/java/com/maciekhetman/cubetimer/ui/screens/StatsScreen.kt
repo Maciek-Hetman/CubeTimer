@@ -53,12 +53,14 @@ fun StatsScreen(
     modifier: Modifier = Modifier
 ) {
     val solves by viewModel.solves.collectAsState()
+    val cubes by viewModel.cubes.collectAsState()
     val appTimeMillis by viewModel.appTimeMillis.collectAsState()
     var showClearDialog by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
     val layoutDirection = LocalLayoutDirection.current
+    val cubeNameById = remember(cubes) { cubes.associate { it.id to it.displayName } }
 
     Scaffold(
         modifier = modifier
@@ -236,6 +238,7 @@ fun StatsScreen(
                     SolveCard(
                         solve = solve,
                         solveNumber = solves.size - index,
+                        cubeName = solve.cubeId?.let { cubeNameById[it] },
                         onDelete = deleteSolve,
                         onSetPenalty = setPenalty,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
@@ -412,7 +415,7 @@ private fun AveragesSection(solves: List<SolveTime>) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Text(
             text = "Averages",
@@ -434,7 +437,7 @@ private fun AveragesSection(solves: List<SolveTime>) {
             shape = MaterialTheme.shapes.large
         ) {
             Column(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
@@ -464,7 +467,7 @@ private fun AveragesSection(solves: List<SolveTime>) {
             }
         }
         
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(4.dp))
         
         // Ao12 Section
         Surface(
@@ -473,7 +476,7 @@ private fun AveragesSection(solves: List<SolveTime>) {
             shape = MaterialTheme.shapes.large
         ) {
             Column(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
@@ -1187,7 +1190,7 @@ private fun StatCard(
     Surface(
         modifier = modifier,
         color = containerColor,
-        shape = MaterialTheme.shapes.extraLarge,
+        shape = MaterialTheme.shapes.large,
         tonalElevation = 2.dp
     ) {
         Column(
@@ -1224,7 +1227,7 @@ private fun AverageCard(
     Surface(
         modifier = modifier,
         color = containerColor,
-        shape = MaterialTheme.shapes.extraLarge,
+        shape = MaterialTheme.shapes.large,
         tonalElevation = if (highlighted) 3.dp else 1.dp
     ) {
         Column(
@@ -1273,7 +1276,7 @@ private fun PenaltyCard(
     Surface(
         modifier = modifier,
         color = containerColor,
-        shape = MaterialTheme.shapes.extraLarge,
+        shape = MaterialTheme.shapes.large,
         tonalElevation = 2.dp
     ) {
         Column(
@@ -1306,23 +1309,24 @@ private fun PenaltyCard(
 private fun SolveCard(
     solve: SolveTime,
     solveNumber: Int,
+    cubeName: String?,
     onDelete: () -> Unit,
     onSetPenalty: (Penalty) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
-    Card(
+    Surface(
         modifier = modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurface,
         shape = MaterialTheme.shapes.extraLarge,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        )
+        tonalElevation = 1.dp
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(start = 12.dp, top = 8.dp, end = 12.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -1333,7 +1337,7 @@ private fun SolveCard(
                 ) {
                     Text(
                         text = "Solve #$solveNumber",
-                        style = MaterialTheme.typography.labelLarge,
+                        style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                         fontWeight = FontWeight.Medium
                     )
@@ -1383,7 +1387,7 @@ private fun SolveCard(
                         }
                     }
                 }
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -1425,6 +1429,14 @@ private fun SolveCard(
                             )
                         }
                     }
+                }
+                if (!cubeName.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Cube: $cubeName",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(

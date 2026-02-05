@@ -61,7 +61,11 @@ fun TimerScreen(
     val recordCelebration by viewModel.recordCelebration.collectAsState()
     val showScrambleRefreshButton by viewModel.showScrambleRefreshButton.collectAsState()
     val scrambleScalePercent by viewModel.scrambleScalePercent.collectAsState()
+    val cubes by viewModel.cubes.collectAsState()
+    val activeCubeIdByMode by viewModel.activeCubeIdByMode.collectAsState()
     val haptic = LocalHapticFeedback.current
+    val activeCubeName = activeCubeIdByMode[currentMode]
+        ?.let { activeId -> cubes.firstOrNull { it.id == activeId }?.displayName }
     
     // Trigger haptic feedback only once when timer starts
     LaunchedEffect(timerState is TimerState.Running) {
@@ -96,15 +100,34 @@ fun TimerScreen(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            ScrambleDisplay(
-                scramble = scramble,
-                onRefresh = { viewModel.generateNewScramble() },
-                showRefreshButton = showScrambleRefreshButton,
-                scale = scrambleScalePercent / 100f,
+            Column(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 8.dp)
-            )
+                    .padding(top = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                ScrambleDisplay(
+                    scramble = scramble,
+                    onRefresh = { viewModel.generateNewScramble() },
+                    showRefreshButton = showScrambleRefreshButton,
+                    scale = scrambleScalePercent / 100f
+                )
+                if (!activeCubeName.isNullOrBlank()) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        shape = MaterialTheme.shapes.large,
+                        tonalElevation = 1.dp,
+                        modifier = Modifier.padding(top = 6.dp)
+                    ) {
+                        Text(
+                            text = activeCubeName,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+            }
         
         Box(
             modifier = Modifier
