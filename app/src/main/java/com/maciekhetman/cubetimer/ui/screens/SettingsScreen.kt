@@ -11,22 +11,22 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -49,8 +49,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.maciekhetman.cubetimer.Mode
 import com.maciekhetman.cubetimer.TimerViewModel
-import com.maciekhetman.cubetimer.ui.components.ExpressiveDropdownMenu
-import com.maciekhetman.cubetimer.ui.components.ExpressiveDropdownMenuItem
 import com.maciekhetman.cubetimer.ui.components.TopBar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -231,7 +229,7 @@ fun SettingsScreen(
                         onDismissMenu = { scrambleScaleMenuExpanded = false }
                     ) {
                         ScrambleScaleOptions.forEach { percent ->
-                            ExpressiveDropdownMenuItem(
+                            DropdownMenuItem(
                                 text = { Text("$percent%") },
                                 onClick = {
                                     scrambleScaleMenuExpanded = false
@@ -255,7 +253,7 @@ fun SettingsScreen(
                         onDismissMenu = { defaultModeMenuExpanded = false }
                     ) {
                         Mode.entries.forEach { mode ->
-                            ExpressiveDropdownMenuItem(
+                            DropdownMenuItem(
                                 text = { Text(mode.displayName) },
                                 onClick = {
                                     defaultModeMenuExpanded = false
@@ -279,21 +277,12 @@ fun SettingsScreen(
                     )
 
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = SettingsButtonMinHeight),
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         FilledTonalButton(
                             onClick = { exportLauncher.launch("cubetimer-cstimer.json") },
-                            colors = ButtonDefaults.filledTonalButtonColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                            ),
-                            modifier = Modifier
-                                .weight(1f)
-                                .heightIn(min = SettingsButtonMinHeight),
-                            contentPadding = SettingsButtonPadding
+                            modifier = Modifier.weight(1f)
                         ) {
                             Text("Export")
                         }
@@ -301,14 +290,7 @@ fun SettingsScreen(
                             onClick = {
                                 importLauncher.launch(arrayOf("application/json", "text/plain", "text/*"))
                             },
-                            modifier = Modifier
-                                .weight(1f)
-                                .heightIn(min = SettingsButtonMinHeight),
-                            colors = ButtonDefaults.filledTonalButtonColors(
-                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                            ),
-                            contentPadding = SettingsButtonPadding
+                            modifier = Modifier.weight(1f)
                         ) {
                             Text("Import")
                         }
@@ -323,7 +305,7 @@ fun SettingsScreen(
                         onDismissMenu = { importModeMenuExpanded = false }
                     ) {
                         Mode.entries.forEach { mode ->
-                            ExpressiveDropdownMenuItem(
+                            DropdownMenuItem(
                                 text = { Text(mode.displayName) },
                                 onClick = {
                                     importModeMenuExpanded = false
@@ -376,22 +358,11 @@ fun SettingsScreen(
                                 }
                             }
                         },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = SettingsButtonMinHeight),
-                        colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        ),
-                        contentPadding = SettingsButtonPadding
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("Add to existing data")
                     }
                     FilledTonalButton(
-                        colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer,
-                            contentColor = MaterialTheme.colorScheme.onErrorContainer
-                        ),
                         onClick = {
                             val json = pendingImportJson ?: return@FilledTonalButton
                             showImportChoiceDialog = false
@@ -416,10 +387,7 @@ fun SettingsScreen(
                                 }
                             }
                         },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = SettingsButtonMinHeight),
-                        contentPadding = SettingsButtonPadding
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("Replace existing data")
                     }
@@ -428,12 +396,7 @@ fun SettingsScreen(
                             showImportChoiceDialog = false
                             pendingImportJson = null
                         },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                            contentColor = MaterialTheme.colorScheme.onSurface
-                        ),
-                        contentPadding = SettingsButtonPadding
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("Cancel")
                     }
@@ -450,11 +413,11 @@ private fun SettingsSectionCard(
     title: String,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        shape = MaterialTheme.shapes.extraLarge,
-        tonalElevation = 2.dp
+    OutlinedCard(
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.outlinedCardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        )
     ) {
         Column(
             modifier = Modifier
@@ -529,9 +492,7 @@ private fun SettingMenuRow(
                 onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     onClick()
-                },
-                modifier = Modifier.heightIn(min = SettingsButtonMinHeight),
-                contentPadding = SettingsButtonPadding
+                }
             ) {
                 Text(buttonLabel)
                 Spacer(modifier = Modifier.width(4.dp))
@@ -541,9 +502,13 @@ private fun SettingMenuRow(
                 )
             }
 
-            ExpressiveDropdownMenu(
+            DropdownMenu(
                 expanded = menuExpanded,
-                onDismissRequest = onDismissMenu
+                onDismissRequest = onDismissMenu,
+                shape = MaterialTheme.shapes.extraLarge,
+                containerColor = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp,
+                shadowElevation = 8.dp
             ) {
                 menuContent()
             }
@@ -551,15 +516,10 @@ private fun SettingMenuRow(
     }
 }
 
-private val SettingsButtonPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-private val SettingsButtonMinHeight = 48.dp
 private val ScrambleScaleOptions = listOf(80, 90, 100, 110, 120, 130, 140)
 
 @Composable
 private fun SettingsCardDivider() {
-    HorizontalDivider(
-        thickness = 1.dp,
-        color = MaterialTheme.colorScheme.outlineVariant
-    )
+    HorizontalDivider()
 }
 

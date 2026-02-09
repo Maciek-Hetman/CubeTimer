@@ -30,8 +30,6 @@ import com.maciekhetman.cubetimer.TimerViewModel
 import com.maciekhetman.cubetimer.ui.components.ActivityTracker
 import com.maciekhetman.cubetimer.ui.components.SectionDivider
 import com.maciekhetman.cubetimer.ui.components.SectionHeader
-import com.maciekhetman.cubetimer.ui.components.ExpressiveDropdownMenu
-import com.maciekhetman.cubetimer.ui.components.ExpressiveDropdownMenuItem
 import com.maciekhetman.cubetimer.ui.components.CollapsingTopBar
 import java.text.SimpleDateFormat
 import java.util.*
@@ -175,11 +173,7 @@ fun StatsScreen(
                         )
                         if (solves.isNotEmpty()) {
                             FilledTonalButton(
-                                onClick = { showClearDialog = true },
-                                colors = ButtonDefaults.filledTonalButtonColors(
-                                    containerColor = MaterialTheme.colorScheme.errorContainer,
-                                    contentColor = MaterialTheme.colorScheme.onErrorContainer
-                                )
+                                onClick = { showClearDialog = true }
                             ) {
                                 Text("Clear All")
                             }
@@ -1061,11 +1055,7 @@ private fun AveragesChart(solves: List<SolveTime>) {
                                 text = range,
                                 style = MaterialTheme.typography.labelSmall
                             )
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primary,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary
-                        )
+                        }
                     )
                     if (range != "All") {
                         Spacer(modifier = Modifier.width(8.dp))
@@ -1265,13 +1255,7 @@ private fun SolveCard(
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        shape = MaterialTheme.shapes.extraLarge,
-        tonalElevation = 1.dp
-    ) {
+    Card(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1298,11 +1282,15 @@ private fun SolveCard(
                                 tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
                         }
-                        ExpressiveDropdownMenu(
+                        DropdownMenu(
                             expanded = menuExpanded,
-                            onDismissRequest = { menuExpanded = false }
+                            onDismissRequest = { menuExpanded = false },
+                            shape = MaterialTheme.shapes.extraLarge,
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            tonalElevation = 6.dp,
+                            shadowElevation = 8.dp
                         ) {
-                            ExpressiveDropdownMenuItem(
+                            DropdownMenuItem(
                                 text = { Text("Delete") },
                                 onClick = {
                                     menuExpanded = false
@@ -1313,20 +1301,16 @@ private fun SolveCard(
                                         imageVector = Icons.Default.Delete,
                                         contentDescription = null
                                     )
-                                },
-                                colors = MenuDefaults.itemColors(
-                                    textColor = MaterialTheme.colorScheme.error,
-                                    leadingIconColor = MaterialTheme.colorScheme.error
-                                )
+                                }
                             )
-                            ExpressiveDropdownMenuItem(
+                            DropdownMenuItem(
                                 text = { Text("Add DNF") },
                                 onClick = {
                                     menuExpanded = false
                                     onSetPenalty(Penalty.DNF)
                                 }
                             )
-                            ExpressiveDropdownMenuItem(
+                            DropdownMenuItem(
                                 text = { Text("Add +2") },
                                 onClick = {
                                     menuExpanded = false

@@ -43,8 +43,6 @@ import com.maciekhetman.cubetimer.RecordType
 import com.maciekhetman.cubetimer.SolveTime
 import com.maciekhetman.cubetimer.TimerState
 import com.maciekhetman.cubetimer.TimerViewModel
-import com.maciekhetman.cubetimer.ui.components.ExpressiveDropdownMenu
-import com.maciekhetman.cubetimer.ui.components.ExpressiveDropdownMenuItem
 import com.maciekhetman.cubetimer.ui.components.TopBar
 import kotlinx.coroutines.delay
 import kotlin.math.cos
@@ -148,16 +146,20 @@ fun TimerScreen(
                                 )
                             }
 
-                            ExpressiveDropdownMenu(
+                            DropdownMenu(
                                 expanded = activeCubeMenuExpanded,
                                 onDismissRequest = { activeCubeMenuExpanded = false },
                                 modifier = if (activeCubePillWidthPx > 0) {
                                     Modifier.width(activeCubePillWidthDp)
                                 } else {
                                     Modifier
-                                }
+                                },
+                                shape = MaterialTheme.shapes.extraLarge,
+                                containerColor = MaterialTheme.colorScheme.surface,
+                                tonalElevation = 6.dp,
+                                shadowElevation = 8.dp
                             ) {
-                                ExpressiveDropdownMenuItem(
+                                DropdownMenuItem(
                                     text = { Text("None") },
                                     onClick = {
                                         activeCubeMenuExpanded = false
@@ -165,7 +167,7 @@ fun TimerScreen(
                                     }
                                 )
                                 cubesForMode.forEach { cube ->
-                                    ExpressiveDropdownMenuItem(
+                                    DropdownMenuItem(
                                         text = { Text(cube.displayName) },
                                         onClick = {
                                             activeCubeMenuExpanded = false
@@ -307,10 +309,7 @@ private fun TimerContent(
                 ) {
                     FilledTonalButton(
                         onClick = { viewModel.saveSolveWithPenalty(Penalty.NONE) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(64.dp),
-                        shape = MaterialTheme.shapes.extraLarge
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
                             text = "Save Time",
@@ -325,15 +324,7 @@ private fun TimerContent(
                     ) {
                         FilledTonalButton(
                             onClick = { viewModel.saveSolveWithPenalty(Penalty.PLUS_TWO) },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(60.dp),
-                            shape = MaterialTheme.shapes.large,
-                            colors = ButtonDefaults.filledTonalButtonColors(
-                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                            ),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+                            modifier = Modifier.weight(1f)
                         ) {
                             Text(
                                 text = "+2",
@@ -343,15 +334,7 @@ private fun TimerContent(
                         }
                         FilledTonalButton(
                             onClick = { viewModel.saveSolveWithPenalty(Penalty.DNF) },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(60.dp),
-                            shape = MaterialTheme.shapes.large,
-                            colors = ButtonDefaults.filledTonalButtonColors(
-                                containerColor = MaterialTheme.colorScheme.errorContainer,
-                                contentColor = MaterialTheme.colorScheme.onErrorContainer
-                            ),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+                            modifier = Modifier.weight(1f)
                         ) {
                             Text(
                                 text = "DNF",
@@ -361,15 +344,7 @@ private fun TimerContent(
                         }
                         FilledTonalButton(
                             onClick = { viewModel.discardSolve() },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(60.dp),
-                            shape = MaterialTheme.shapes.large,
-                            colors = ButtonDefaults.filledTonalButtonColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                                contentColor = MaterialTheme.colorScheme.onSurface
-                            ),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+                            modifier = Modifier.weight(1f)
                         ) {
                             Text(
                                 text = "Discard",
@@ -621,11 +596,7 @@ private fun ScrambleDisplay(
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         onRefresh()
                     },
-                    modifier = Modifier.size(buttonSize),
-                    colors = IconButtonDefaults.filledTonalIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
+                    modifier = Modifier.size(buttonSize)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Refresh,

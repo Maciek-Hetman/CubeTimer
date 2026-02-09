@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -20,12 +19,13 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -54,8 +54,6 @@ import com.maciekhetman.cubetimer.Mode
 import com.maciekhetman.cubetimer.Penalty
 import com.maciekhetman.cubetimer.SolveTime
 import com.maciekhetman.cubetimer.TimerViewModel
-import com.maciekhetman.cubetimer.ui.components.ExpressiveDropdownMenu
-import com.maciekhetman.cubetimer.ui.components.ExpressiveDropdownMenuItem
 import com.maciekhetman.cubetimer.ui.components.TopBar
 import kotlin.math.sqrt
 
@@ -165,11 +163,7 @@ fun CubesScreen(
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 activeCubeMenuExpanded = true
                             },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = SettingsButtonMinHeight),
-                            shape = MaterialTheme.shapes.large,
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                            modifier = Modifier.fillMaxWidth()
                         ) {
                             Column(
                                 modifier = Modifier.weight(1f),
@@ -195,11 +189,15 @@ fun CubesScreen(
                             )
                         }
 
-                        ExpressiveDropdownMenu(
+                        DropdownMenu(
                             expanded = activeCubeMenuExpanded,
-                            onDismissRequest = { activeCubeMenuExpanded = false }
+                            onDismissRequest = { activeCubeMenuExpanded = false },
+                            shape = MaterialTheme.shapes.extraLarge,
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            tonalElevation = 6.dp,
+                            shadowElevation = 8.dp
                         ) {
-                            ExpressiveDropdownMenuItem(
+                            DropdownMenuItem(
                                 text = { Text("None") },
                                 onClick = {
                                     activeCubeMenuExpanded = false
@@ -207,7 +205,7 @@ fun CubesScreen(
                                 }
                             )
                             cubesForMode.forEach { cube ->
-                                ExpressiveDropdownMenuItem(
+                                DropdownMenuItem(
                                     text = { Text(cube.displayName) },
                                     onClick = {
                                         activeCubeMenuExpanded = false
@@ -230,14 +228,7 @@ fun CubesScreen(
                             newCubeLubes = ""
                             showAddCubeDialog = true
                         },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = SettingsButtonMinHeight),
-                        colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                        ),
-                        contentPadding = SettingsButtonPadding
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("Add Cube")
                     }
@@ -270,7 +261,7 @@ fun CubesScreen(
                         menuExpanded = typeFilterMenuExpanded,
                         onDismissMenu = { typeFilterMenuExpanded = false }
                     ) {
-                        ExpressiveDropdownMenuItem(
+                        DropdownMenuItem(
                             text = { Text("All types") },
                             onClick = {
                                 typeFilterMenuExpanded = false
@@ -278,7 +269,7 @@ fun CubesScreen(
                             }
                         )
                         Mode.entries.forEach { mode ->
-                            ExpressiveDropdownMenuItem(
+                            DropdownMenuItem(
                                 text = { Text(mode.displayName) },
                                 onClick = {
                                     typeFilterMenuExpanded = false
@@ -300,7 +291,7 @@ fun CubesScreen(
                         menuExpanded = brandFilterMenuExpanded,
                         onDismissMenu = { brandFilterMenuExpanded = false }
                     ) {
-                        ExpressiveDropdownMenuItem(
+                        DropdownMenuItem(
                             text = { Text("All brands") },
                             onClick = {
                                 brandFilterMenuExpanded = false
@@ -308,7 +299,7 @@ fun CubesScreen(
                             }
                         )
                         if (hasUnknownBrand) {
-                            ExpressiveDropdownMenuItem(
+                            DropdownMenuItem(
                                 text = { Text("Unknown") },
                                 onClick = {
                                     brandFilterMenuExpanded = false
@@ -317,7 +308,7 @@ fun CubesScreen(
                             )
                         }
                         knownBrands.forEach { brand ->
-                            ExpressiveDropdownMenuItem(
+                            DropdownMenuItem(
                                 text = { Text(brand) },
                                 onClick = {
                                     brandFilterMenuExpanded = false
@@ -336,13 +327,13 @@ fun CubesScreen(
                         onDismissMenu = { sortMenuExpanded = false }
                     ) {
                         CubeSortOption.entries.forEach { option ->
-                            ExpressiveDropdownMenuItem(
-                                text = { Text(option.label) },
-                                onClick = {
-                                    sortMenuExpanded = false
-                                    sortOption = option
-                                }
-                            )
+                        DropdownMenuItem(
+                            text = { Text(option.label) },
+                            onClick = {
+                                sortMenuExpanded = false
+                                sortOption = option
+                            }
+                        )
                         }
                     }
 
@@ -374,11 +365,7 @@ fun CubesScreen(
                                             featureFilters + feature
                                         }
                                     },
-                                    label = { Text(feature) },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary
-                                    )
+                                    label = { Text(feature) }
                                 )
                             }
                         }
@@ -504,7 +491,7 @@ fun CubesScreen(
                         onDismissMenu = { cubeTypeMenuExpanded = false }
                     ) {
                         Mode.entries.forEach { mode ->
-                            ExpressiveDropdownMenuItem(
+                            DropdownMenuItem(
                                 text = { Text(mode.displayName) },
                                 onClick = {
                                     cubeTypeMenuExpanded = false
@@ -542,11 +529,7 @@ fun CubesScreen(
             },
             dismissButton = {
                 FilledTonalButton(
-                    onClick = { showAddCubeDialog = false },
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                        contentColor = MaterialTheme.colorScheme.onSurface
-                    )
+                    onClick = { showAddCubeDialog = false }
                 ) {
                     Text("Cancel")
                 }
@@ -663,7 +646,7 @@ fun CubesScreen(
                         onDismissMenu = { cubeTypeMenuExpanded = false }
                     ) {
                         Mode.entries.forEach { mode ->
-                            ExpressiveDropdownMenuItem(
+                            DropdownMenuItem(
                                 text = { Text(mode.displayName) },
                                 onClick = {
                                     cubeTypeMenuExpanded = false
@@ -711,11 +694,7 @@ fun CubesScreen(
                         newCubeTension = ""
                         newCubeCenterTravel = ""
                         newCubeLubes = ""
-                    },
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                        contentColor = MaterialTheme.colorScheme.onSurface
-                    )
+                    }
                 ) {
                     Text("Cancel")
                 }
@@ -734,22 +713,14 @@ fun CubesScreen(
                     onClick = {
                         viewModel.deleteCube(cube.id)
                         cubePendingDelete = null
-                    },
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer
-                    )
+                    }
                 ) {
                     Text("Delete")
                 }
             },
             dismissButton = {
                 FilledTonalButton(
-                    onClick = { cubePendingDelete = null },
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                        contentColor = MaterialTheme.colorScheme.onSurface
-                    )
+                    onClick = { cubePendingDelete = null }
                 ) {
                     Text("Cancel")
                 }
@@ -764,12 +735,7 @@ private fun SectionCard(
     action: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        shape = MaterialTheme.shapes.extraLarge,
-        tonalElevation = 2.dp
-    ) {
+    Card {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -820,21 +786,23 @@ private fun MenuRow(
             onClick = {
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 onClick()
-            },
-            modifier = Modifier.heightIn(min = SettingsButtonMinHeight),
-            contentPadding = SettingsButtonPadding
+            }
         ) {
-                Text(buttonLabel)
-                Spacer(modifier = Modifier.width(4.dp))
-                Icon(
-                    imageVector = Icons.Default.ArrowDropDown,
+            Text(buttonLabel)
+            Spacer(modifier = Modifier.width(4.dp))
+            Icon(
+                imageVector = Icons.Default.ArrowDropDown,
                     contentDescription = "Open menu"
                 )
             }
 
-            ExpressiveDropdownMenu(
+            DropdownMenu(
                 expanded = menuExpanded,
-                onDismissRequest = onDismissMenu
+                onDismissRequest = onDismissMenu,
+                shape = MaterialTheme.shapes.extraLarge,
+                containerColor = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp,
+                shadowElevation = 8.dp
             ) {
                 menuContent()
             }
@@ -944,12 +912,7 @@ private fun CubeCard(
     val hasDetails = cube.tension.isNotBlank() || cube.centerTravel.isNotBlank() || cube.lubes.isNotEmpty()
     val hasInfoSection = hasFeatures || hasDetails
 
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = MaterialTheme.shapes.extraLarge,
-        tonalElevation = 1.dp
-    ) {
+    Card(modifier = modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1074,27 +1037,13 @@ private fun CubeCard(
             ) {
                 FilledTonalButton(
                     onClick = onEdit,
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 44.dp),
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                    ),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                    modifier = Modifier.weight(1f)
                 ) {
                     Text("Edit")
                 }
                 FilledTonalButton(
                     onClick = onDelete,
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 44.dp),
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer
-                    ),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                    modifier = Modifier.weight(1f)
                 ) {
                     Text("Delete")
                 }
@@ -1109,12 +1058,7 @@ private fun CubeStatCard(
     value: String,
     modifier: Modifier = Modifier
 ) {
-    Surface(
-        modifier = modifier,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        shape = MaterialTheme.shapes.large,
-        tonalElevation = 1.dp
-    ) {
+    Card(modifier = modifier) {
         Column(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -1136,10 +1080,7 @@ private fun CubeStatCard(
 
 @Composable
 private fun CardItemDivider() {
-    HorizontalDivider(
-        thickness = 1.dp,
-        color = MaterialTheme.colorScheme.outlineVariant
-    )
+    HorizontalDivider()
 }
 
 private fun formatDisplayTime(millis: Long): String {
@@ -1156,9 +1097,6 @@ private fun formatDisplayTime(millis: Long): String {
 }
 
 private const val UnknownBrandFilter = "__UNKNOWN__"
-
-private val SettingsButtonPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-private val SettingsButtonMinHeight = 48.dp
 
 private val FeatureOptions = listOf(
     "Maglev",
