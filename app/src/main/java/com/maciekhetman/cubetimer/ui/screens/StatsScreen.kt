@@ -21,6 +21,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.maciekhetman.cubetimer.Mode
@@ -427,14 +428,13 @@ private fun AveragesSection(solves: List<SolveTime>) {
                         label = "Current",
                         value = if (ao5Current != null) formatTime(ao5Current) else "N/A",
                         modifier = Modifier.weight(1f),
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
                     )
                     AverageCard(
                         label = "Personal Best",
                         value = if (bestAo5 != null) formatTime(bestAo5) else "N/A",
                         modifier = Modifier.weight(1f),
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                        highlighted = true
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
                     )
                 }
             }
@@ -466,14 +466,13 @@ private fun AveragesSection(solves: List<SolveTime>) {
                         label = "Current",
                         value = if (ao12Current != null) formatTime(ao12Current) else "N/A",
                         modifier = Modifier.weight(1f),
-                        containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
                     )
                     AverageCard(
                         label = "Personal Best",
                         value = if (bestAo12 != null) formatTime(bestAo12) else "N/A",
                         modifier = Modifier.weight(1f),
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        highlighted = true
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
                     )
                 }
             }
@@ -1126,14 +1125,17 @@ private fun StatCard(
     containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
     contentColor: Color = MaterialTheme.colorScheme.onSurface
 ) {
-    Surface(
+    ElevatedCard(
         modifier = modifier,
-        color = containerColor,
-        shape = MaterialTheme.shapes.large,
-        tonalElevation = 2.dp
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = containerColor,
+            contentColor = contentColor
+        )
     ) {
         Column(
-            modifier = Modifier.padding(StatCardContentPadding),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(StatCardContentPadding),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -1141,14 +1143,18 @@ private fun StatCard(
                 text = label,
                 style = MaterialTheme.typography.labelLarge,
                 color = contentColor.copy(alpha = 0.8f),
-                fontWeight = FontWeight.Medium
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
             )
             Text(
                 text = value,
                 style = MaterialTheme.typography.headlineSmall,
                 fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.Bold,
-                color = contentColor
+                color = contentColor,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }
@@ -1160,17 +1166,20 @@ private fun AverageCard(
     value: String,
     modifier: Modifier = Modifier,
     containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
-    contentColor: Color = MaterialTheme.colorScheme.onSurface,
-    highlighted: Boolean = false
+    contentColor: Color = MaterialTheme.colorScheme.onSurface
 ) {
-    Surface(
+    OutlinedCard(
         modifier = modifier,
-        color = containerColor,
-        shape = MaterialTheme.shapes.large,
-        tonalElevation = if (highlighted) 3.dp else 1.dp
+        colors = CardDefaults.outlinedCardColors(
+            containerColor = containerColor,
+            contentColor = contentColor
+        ),
+        border = CardDefaults.outlinedCardBorder()
     ) {
         Column(
-            modifier = Modifier.padding(StatCardContentPadding),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(StatCardContentPadding),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -1178,7 +1187,9 @@ private fun AverageCard(
                 text = label,
                 style = MaterialTheme.typography.labelLarge,
                 color = contentColor.copy(alpha = 0.9f),
-                fontWeight = FontWeight.Medium
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
             )
             BoxWithConstraints(
                 modifier = Modifier.fillMaxWidth(),
@@ -1195,6 +1206,7 @@ private fun AverageCard(
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
                     color = contentColor,
+                    textAlign = TextAlign.Center,
                     maxLines = 1,
                     softWrap = false
                 )
@@ -1212,14 +1224,17 @@ private fun PenaltyCard(
     containerColor: Color,
     contentColor: Color = MaterialTheme.colorScheme.onSurface
 ) {
-    Surface(
+    ElevatedCard(
         modifier = modifier,
-        color = containerColor,
-        shape = MaterialTheme.shapes.large,
-        tonalElevation = 2.dp
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = containerColor,
+            contentColor = contentColor
+        )
     ) {
         Column(
-            modifier = Modifier.padding(StatCardContentPadding),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(StatCardContentPadding),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -1227,18 +1242,24 @@ private fun PenaltyCard(
                 text = label,
                 style = MaterialTheme.typography.labelLarge,
                 color = contentColor.copy(alpha = 0.8f),
-                fontWeight = FontWeight.Medium
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
             )
             Text(
                 text = "$percentage%",
                 style = MaterialTheme.typography.displaySmall,
                 fontWeight = FontWeight.Bold,
-                color = contentColor
+                color = contentColor,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
             )
             Text(
                 text = "$count ${if (count == 1) "solve" else "solves"}",
                 style = MaterialTheme.typography.bodyMedium,
-                color = contentColor.copy(alpha = 0.7f)
+                color = contentColor.copy(alpha = 0.7f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }
@@ -1255,7 +1276,7 @@ private fun SolveCard(
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
-    Card(modifier = modifier.fillMaxWidth()) {
+    ElevatedCard(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
