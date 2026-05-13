@@ -25,6 +25,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import com.maciekhetman.cubetimer.Mode
 
@@ -76,6 +78,7 @@ private fun ModeMenu(
     onModeSelected: (Mode) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val haptic = LocalHapticFeedback.current
     val menuItemColors = MenuDefaults.itemColors(
         textColor = MaterialTheme.colorScheme.onSurface,
         leadingIconColor = MaterialTheme.colorScheme.onSurface,
@@ -84,7 +87,10 @@ private fun ModeMenu(
 
     Box {
         FilledTonalButton(
-            onClick = { expanded = true },
+            onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                expanded = true
+            },
             contentPadding = PaddingValues(
                 start = 12.dp,
                 top = 8.dp,
@@ -111,6 +117,7 @@ private fun ModeMenu(
                 DropdownMenuItem(
                     text = { Text(mode.displayName) },
                     onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         onModeSelected(mode)
                         expanded = false
                     },

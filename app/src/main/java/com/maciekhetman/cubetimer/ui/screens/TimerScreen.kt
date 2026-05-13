@@ -167,6 +167,7 @@ private fun TimerContent(
     viewModel: TimerViewModel,
     modifier: Modifier = Modifier
 ) {
+    val haptic = LocalHapticFeedback.current
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -238,7 +239,10 @@ private fun TimerContent(
                     modifier = Modifier.padding(horizontal = 16.dp)
                 ) {
                     Button(
-                        onClick = { viewModel.saveSolveWithPenalty(Penalty.NONE) },
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            viewModel.saveSolveWithPenalty(Penalty.NONE)
+                        },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
@@ -253,7 +257,10 @@ private fun TimerContent(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         FilledTonalButton(
-                            onClick = { viewModel.saveSolveWithPenalty(Penalty.PLUS_TWO) },
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                viewModel.saveSolveWithPenalty(Penalty.PLUS_TWO)
+                            },
                             modifier = Modifier.weight(1f)
                         ) {
                             Text(
@@ -263,7 +270,10 @@ private fun TimerContent(
                             )
                         }
                         FilledTonalButton(
-                            onClick = { viewModel.saveSolveWithPenalty(Penalty.DNF) },
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                viewModel.saveSolveWithPenalty(Penalty.DNF)
+                            },
                             modifier = Modifier.weight(1f)
                         ) {
                             Text(
@@ -273,7 +283,10 @@ private fun TimerContent(
                             )
                         }
                         FilledTonalButton(
-                            onClick = { viewModel.discardSolve() },
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                viewModel.discardSolve()
+                            },
                             modifier = Modifier.weight(1f)
                         ) {
                             Text(
@@ -492,7 +505,10 @@ private fun ScrambleDisplay(
             .padding(horizontal = 16.dp)
             .then(
                 if (isTruncated) {
-                    Modifier.clickable { showFullScramble = true }
+                    Modifier.clickable {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        showFullScramble = true
+                    }
                 } else {
                     Modifier
                 }
@@ -562,7 +578,10 @@ private fun ScrambleDisplay(
                 )
             },
             confirmButton = {
-                TextButton(onClick = { showFullScramble = false }) {
+                TextButton(onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    showFullScramble = false
+                }) {
                     Text("Close")
                 }
             }
@@ -575,6 +594,7 @@ private fun RecordCelebrationOverlay(
     celebration: RecordCelebration?,
     onDismiss: () -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
     AnimatedVisibility(
         visible = celebration != null,
         enter = fadeIn(animationSpec = tween(400, easing = androidx.compose.animation.core.FastOutSlowInEasing)) + 
@@ -597,6 +617,7 @@ private fun RecordCelebrationOverlay(
                 .background(Color.Black.copy(alpha = 0.75f))
                 .pointerInput(Unit) {
                     detectTapGestures {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         onDismiss()
                     }
                 },

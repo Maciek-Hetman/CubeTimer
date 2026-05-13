@@ -78,6 +78,7 @@ fun SettingsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
 
     var defaultModeMenuExpanded by remember { mutableStateOf(false) }
@@ -237,6 +238,7 @@ fun SettingsScreen(
                             DropdownMenuItem(
                                 text = { Text("$percent%") },
                                 onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                     scrambleScaleMenuExpanded = false
                                     viewModel.setScrambleScalePercent(percent)
                                 }
@@ -273,6 +275,7 @@ fun SettingsScreen(
                             DropdownMenuItem(
                                 text = { Text(mode.displayName) },
                                 onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                     defaultModeMenuExpanded = false
                                     viewModel.setDefaultMode(mode)
                                 }
@@ -307,6 +310,7 @@ fun SettingsScreen(
                             DropdownMenuItem(
                                 text = { Text(mode.displayName) },
                                 onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                     importModeMenuExpanded = false
                                     importMode = mode
                                     hasTouchedImportMode = true
@@ -334,6 +338,7 @@ fun SettingsScreen(
                 ) {
                     FilledTonalButton(
                         onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             val json = pendingImportJson ?: return@FilledTonalButton
                             showImportChoiceDialog = false
                             pendingImportJson = null
@@ -363,6 +368,7 @@ fun SettingsScreen(
                     }
                     FilledTonalButton(
                         onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             val json = pendingImportJson ?: return@FilledTonalButton
                             showImportChoiceDialog = false
                             pendingImportJson = null
@@ -392,6 +398,7 @@ fun SettingsScreen(
                     }
                     FilledTonalButton(
                         onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             showImportChoiceDialog = false
                             pendingImportJson = null
                         },
@@ -537,10 +544,16 @@ private fun SettingActionRow(
     title: String,
     onClick: () -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
     SettingsRow(
         title = title,
         trailingContent = {
-            FilledTonalButton(onClick = onClick) {
+            FilledTonalButton(
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onClick()
+                }
+            ) {
                 Text(title.substringBefore(" "))
             }
         }

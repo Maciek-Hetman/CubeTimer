@@ -18,7 +18,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -53,6 +55,7 @@ fun StatsScreen(
     val scope = rememberCoroutineScope()
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
     val layoutDirection = LocalLayoutDirection.current
+    val haptic = LocalHapticFeedback.current
 
     Scaffold(
         modifier = modifier
@@ -178,7 +181,10 @@ fun StatsScreen(
                         )
                         if (solves.isNotEmpty()) {
                             FilledTonalButton(
-                                onClick = { showClearDialog = true }
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    showClearDialog = true
+                                }
                             ) {
                                 Text("Clear All")
                             }
@@ -230,6 +236,9 @@ fun StatsScreen(
                         solveNumber = solves.size - index,
                         onDelete = deleteSolve,
                         onSetPenalty = setPenalty,
+                        onHaptic = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        },
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                     )
                 }
@@ -249,6 +258,7 @@ fun StatsScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         viewModel.clearAllSolves()
                         showClearDialog = false
                     }
@@ -257,7 +267,10 @@ fun StatsScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showClearDialog = false }) {
+                TextButton(onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    showClearDialog = false
+                }) {
                     Text("Cancel")
                 }
             }
@@ -410,7 +423,7 @@ private fun AveragesSection(solves: List<SolveTime>) {
         // Ao5 Section
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
             shape = RoundedCornerShape(16.dp)
         ) {
             Column(
@@ -431,13 +444,13 @@ private fun AveragesSection(solves: List<SolveTime>) {
                         label = "Current",
                         value = if (ao5Current != null) formatTime(ao5Current) else "N/A",
                         modifier = Modifier.weight(1f),
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                     )
                     AverageCard(
                         label = "Personal Best",
                         value = if (bestAo5 != null) formatTime(bestAo5) else "N/A",
                         modifier = Modifier.weight(1f),
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                     )
                 }
             }
@@ -448,7 +461,7 @@ private fun AveragesSection(solves: List<SolveTime>) {
         // Ao12 Section
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
             shape = RoundedCornerShape(16.dp)
         ) {
             Column(
@@ -469,13 +482,13 @@ private fun AveragesSection(solves: List<SolveTime>) {
                         label = "Current",
                         value = if (ao12Current != null) formatTime(ao12Current) else "N/A",
                         modifier = Modifier.weight(1f),
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                     )
                     AverageCard(
                         label = "Personal Best",
                         value = if (bestAo12 != null) formatTime(bestAo12) else "N/A",
                         modifier = Modifier.weight(1f),
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                     )
                 }
             }
@@ -519,7 +532,7 @@ private fun LargeAveragesSection(solves: List<SolveTime>) {
                             modifier = Modifier
                                 .weight(1f)
                                 .heightIn(min = 88.dp),
-                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
                             shape = RoundedCornerShape(16.dp)
                         ) {
                             Column(
@@ -736,7 +749,7 @@ private fun PersonalBestsChart(solves: List<SolveTime>) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
         shape = RoundedCornerShape(16.dp),
         tonalElevation = 1.dp
     ) {
@@ -913,6 +926,7 @@ private fun PersonalBestsChart(solves: List<SolveTime>) {
 @Composable
 private fun AveragesChart(solves: List<SolveTime>) {
     var selectedRange by remember { mutableStateOf("All") }
+    val haptic = LocalHapticFeedback.current
     
     val ao5List = mutableListOf<Long?>()
     val ao12List = mutableListOf<Long?>()
@@ -939,7 +953,7 @@ private fun AveragesChart(solves: List<SolveTime>) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
         shape = RoundedCornerShape(16.dp),
         tonalElevation = 1.dp
     ) {
@@ -1051,7 +1065,10 @@ private fun AveragesChart(solves: List<SolveTime>) {
                 listOf("Last 50", "Last 100", "All").forEach { range ->
                     FilterChip(
                         selected = selectedRange == range,
-                        onClick = { selectedRange = range },
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            selectedRange = range
+                        },
                         label = {
                             Text(
                                 text = range,
@@ -1131,7 +1148,7 @@ private fun StatCard(
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(16.dp),
-        color = containerColor,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
         contentColor = contentColor,
         tonalElevation = 0.dp
     ) {
@@ -1174,7 +1191,7 @@ private fun AverageCard(
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(16.dp),
-        color = containerColor,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
         contentColor = contentColor,
         tonalElevation = 0.dp
     ) {
@@ -1229,7 +1246,7 @@ private fun PenaltyCard(
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(16.dp),
-        color = containerColor,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
         contentColor = contentColor,
         tonalElevation = 0.dp
     ) {
@@ -1273,6 +1290,7 @@ private fun SolveCard(
     solveNumber: Int,
     onDelete: () -> Unit,
     onSetPenalty: (Penalty) -> Unit,
+    onHaptic: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -1280,7 +1298,7 @@ private fun SolveCard(
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
         tonalElevation = 0.dp
     ) {
         Row(
@@ -1302,7 +1320,10 @@ private fun SolveCard(
                         fontWeight = FontWeight.Medium
                     )
                     Box {
-                        IconButton(onClick = { menuExpanded = true }) {
+                        IconButton(onClick = {
+                            onHaptic()
+                            menuExpanded = true
+                        }) {
                             Icon(
                                 imageVector = Icons.Default.MoreVert,
                                 contentDescription = "Solve options",
@@ -1318,6 +1339,7 @@ private fun SolveCard(
                             DropdownMenuItem(
                                 text = { Text("Delete") },
                                 onClick = {
+                                    onHaptic()
                                     menuExpanded = false
                                     onDelete()
                                 },
@@ -1331,6 +1353,7 @@ private fun SolveCard(
                             DropdownMenuItem(
                                 text = { Text("Add DNF") },
                                 onClick = {
+                                    onHaptic()
                                     menuExpanded = false
                                     onSetPenalty(Penalty.DNF)
                                 }
@@ -1338,6 +1361,7 @@ private fun SolveCard(
                             DropdownMenuItem(
                                 text = { Text("Add +2") },
                                 onClick = {
+                                    onHaptic()
                                     menuExpanded = false
                                     onSetPenalty(Penalty.PLUS_TWO)
                                 }
