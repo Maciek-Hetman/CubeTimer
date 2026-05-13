@@ -46,14 +46,12 @@ fun StatsScreen(
     modifier: Modifier = Modifier
 ) {
     val solves by viewModel.solves.collectAsState()
-    val cubes by viewModel.cubes.collectAsState()
     val appTimeMillis by viewModel.appTimeMillis.collectAsState()
     var showClearDialog by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
     val layoutDirection = LocalLayoutDirection.current
-    val cubeNameById = remember(cubes) { cubes.associate { it.id to it.displayName } }
 
     Scaffold(
         modifier = modifier
@@ -224,7 +222,6 @@ fun StatsScreen(
                     SolveCard(
                         solve = solve,
                         solveNumber = solves.size - index,
-                        cubeName = solve.cubeId?.let { cubeNameById[it] },
                         onDelete = deleteSolve,
                         onSetPenalty = setPenalty,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
@@ -1269,7 +1266,6 @@ private fun PenaltyCard(
 private fun SolveCard(
     solve: SolveTime,
     solveNumber: Int,
-    cubeName: String?,
     onDelete: () -> Unit,
     onSetPenalty: (Penalty) -> Unit,
     modifier: Modifier = Modifier
@@ -1383,14 +1379,6 @@ private fun SolveCard(
                             )
                         }
                     }
-                }
-                if (!cubeName.isNullOrBlank()) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "Cube: $cubeName",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(

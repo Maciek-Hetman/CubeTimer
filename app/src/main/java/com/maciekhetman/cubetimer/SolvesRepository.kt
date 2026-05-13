@@ -49,9 +49,6 @@ class SolvesRepository(private val context: Context) {
             jsonObject.put("timestamp", solve.timestamp)
             jsonObject.put("scramble", solve.scramble)
             jsonObject.put("mode", solve.mode.name)
-            if (!solve.cubeId.isNullOrBlank()) {
-                jsonObject.put("cubeId", solve.cubeId)
-            }
             jsonArray.put(jsonObject)
         }
         return jsonArray.toString()
@@ -73,8 +70,7 @@ class SolvesRepository(private val context: Context) {
                             Mode.valueOf(jsonObject.optString("mode", "CUBE_3x3"))
                         } catch (e: Exception) {
                             Mode.CUBE_3x3
-                        },
-                        cubeId = jsonObject.optString("cubeId", "").ifBlank { null }
+                        }
                     )
                 )
             }

@@ -27,7 +27,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
@@ -62,17 +61,7 @@ fun TimerScreen(
     val recordCelebration by viewModel.recordCelebration.collectAsState()
     val showScrambleRefreshButton by viewModel.showScrambleRefreshButton.collectAsState()
     val scrambleScalePercent by viewModel.scrambleScalePercent.collectAsState()
-    val cubes by viewModel.cubes.collectAsState()
-    val activeCubeIdByMode by viewModel.activeCubeIdByMode.collectAsState()
     val haptic = LocalHapticFeedback.current
-    val activeCubeId = activeCubeIdByMode[currentMode]
-    val cubesForMode = cubes.filter { it.type == currentMode }
-    val activeCubeName = activeCubeId?.let { activeId ->
-        cubesForMode.firstOrNull { it.id == activeId }?.displayName
-    }
-    var activeCubeMenuExpanded by remember { mutableStateOf(false) }
-    var activeCubePillWidthPx by remember { mutableStateOf(0) }
-    val activeCubePillWidthDp = with(LocalDensity.current) { activeCubePillWidthPx.toDp() }
     
     // Trigger haptic feedback only once when timer starts
     LaunchedEffect(timerState is TimerState.Running) {
@@ -119,66 +108,6 @@ fun TimerScreen(
                     showRefreshButton = showScrambleRefreshButton,
                     scale = scrambleScalePercent / 100f
                 )
-                if (!activeCubeName.isNullOrBlank()) {
-                    Box(
-                        modifier = Modifier.fillMaxWidth(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Box {
-                            Surface(
-                                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                                shape = MaterialTheme.shapes.large,
-                                tonalElevation = 1.dp,
-                                modifier = Modifier
-                                    .padding(top = 8.dp)
-                                    .defaultMinSize(minHeight = 36.dp)
-                                    .onSizeChanged { activeCubePillWidthPx = it.width }
-                                    .clickable {
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        activeCubeMenuExpanded = true
-                                    }
-                            ) {
-                                Text(
-                                    text = activeCubeName,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
-                                )
-                            }
-
-                            DropdownMenu(
-                                expanded = activeCubeMenuExpanded,
-                                onDismissRequest = { activeCubeMenuExpanded = false },
-                                modifier = if (activeCubePillWidthPx > 0) {
-                                    Modifier.width(activeCubePillWidthDp)
-                                } else {
-                                    Modifier
-                                },
-                                shape = MaterialTheme.shapes.extraLarge,
-                                containerColor = MaterialTheme.colorScheme.surface,
-                                tonalElevation = 6.dp,
-                                shadowElevation = 8.dp
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("None") },
-                                    onClick = {
-                                        activeCubeMenuExpanded = false
-                                        viewModel.setActiveCubeForMode(currentMode, null)
-                                    }
-                                )
-                                cubesForMode.forEach { cube ->
-                                    DropdownMenuItem(
-                                        text = { Text(cube.displayName) },
-                                        onClick = {
-                                            activeCubeMenuExpanded = false
-                                            viewModel.setActiveCubeForMode(currentMode, cube.id)
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
             }
         
         Box(
