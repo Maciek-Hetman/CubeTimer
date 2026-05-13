@@ -131,6 +131,14 @@ fun StatsScreen(
                 }
                 
                 item {
+                    SolveTimesChart(solves = solves)
+                }
+                
+                item {
+                    SectionDivider()
+                }
+                
+                item {
                     AveragesSection(solves = solves)
                 }
                 
@@ -444,13 +452,13 @@ private fun AveragesSection(solves: List<SolveTime>) {
                         label = "Current",
                         value = if (ao5Current != null) formatTime(ao5Current) else "N/A",
                         modifier = Modifier.weight(1f),
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                     )
                     AverageCard(
                         label = "Personal Best",
                         value = if (bestAo5 != null) formatTime(bestAo5) else "N/A",
                         modifier = Modifier.weight(1f),
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                     )
                 }
             }
@@ -482,13 +490,13 @@ private fun AveragesSection(solves: List<SolveTime>) {
                         label = "Current",
                         value = if (ao12Current != null) formatTime(ao12Current) else "N/A",
                         modifier = Modifier.weight(1f),
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                     )
                     AverageCard(
                         label = "Personal Best",
                         value = if (bestAo12 != null) formatTime(bestAo12) else "N/A",
                         modifier = Modifier.weight(1f),
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                     )
                 }
             }
@@ -702,6 +710,8 @@ private fun PenaltyStatsSection(solves: List<SolveTime>) {
 
 @Composable
 private fun PersonalBestsChart(solves: List<SolveTime>) {
+    var selectedRange by remember { mutableStateOf("All") }
+    val haptic = LocalHapticFeedback.current
     val validSolves = solves.filter { it.penalty != Penalty.DNF }
     
     if (validSolves.isEmpty()) {
@@ -764,7 +774,23 @@ private fun PersonalBestsChart(solves: List<SolveTime>) {
             val ao12Color = Color(0xFFFF9800) // Orange
             val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
             
-            val allPBs = (singlePBs.map { it.second } + ao5PBs.map { it.second } + ao12PBs.map { it.second })
+            val rangeStartIndex = rangeStartIndex(solves.size, selectedRange)
+            val rangeEndIndex = (solves.size - 1).coerceAtLeast(0)
+            fun rangePbs(pbs: List<Pair<Int, Long>>): List<Pair<Int, Long>> {
+                if (rangeStartIndex <= 0) return pbs
+                val previous = pbs.lastOrNull { it.first < rangeStartIndex }
+                val inside = pbs.filter { it.first >= rangeStartIndex }
+                return if (previous != null) listOf(rangeStartIndex to previous.second) + inside else inside
+            }
+
+            val visibleSinglePBs = rangePbs(singlePBs)
+            val visibleAo5PBs = rangePbs(ao5PBs)
+            val visibleAo12PBs = rangePbs(ao12PBs)
+            val allPBs = (
+                visibleSinglePBs.map { it.second } +
+                    visibleAo5PBs.map { it.second } +
+                    visibleAo12PBs.map { it.second }
+                )
             
             if (allPBs.isEmpty()) {
                 Box(
@@ -795,7 +821,7 @@ private fun PersonalBestsChart(solves: List<SolveTime>) {
                     // Add 10% padding to the range to ensure lines don't overlap with axes
                     val displayRange = range * 1.1f
                     val displayMin = minValue - (range * 0.05f).toLong()
-                    val maxSolveIndex = solves.size - 1
+                    val indexRange = (rangeEndIndex - rangeStartIndex).coerceAtLeast(1)
                     
                     // Helper function to draw PB line
                     fun drawPBLine(pbs: List<Pair<Int, Long>>, color: Color) {
@@ -806,7 +832,7 @@ private fun PersonalBestsChart(solves: List<SolveTime>) {
                         
                         // Draw line through all PB points
                         pbs.forEach { (solveIndex, pbTime) ->
-                            val x = padding + (solveIndex.toFloat() / maxSolveIndex.coerceAtLeast(1)) * (width - 2 * padding)
+                            val x = padding + ((solveIndex - rangeStartIndex).toFloat() / indexRange) * (width - 2 * padding)
                             val y = height - padding - ((pbTime - displayMin).toFloat() / displayRange) * (height - 2 * padding)
                             
                             if (firstPoint) {
@@ -821,7 +847,7 @@ private fun PersonalBestsChart(solves: List<SolveTime>) {
                         
                         // Extend line to the end of the chart (current PB holds)
                         val lastPB = pbs.last()
-                        val lastX = padding + (lastPB.first.toFloat() / maxSolveIndex.coerceAtLeast(1)) * (width - 2 * padding)
+                        val lastX = padding + ((lastPB.first - rangeStartIndex).toFloat() / indexRange) * (width - 2 * padding)
                         val lastY = height - padding - ((lastPB.second - displayMin).toFloat() / displayRange) * (height - 2 * padding)
                         val endX = width - padding
                         
@@ -833,9 +859,9 @@ private fun PersonalBestsChart(solves: List<SolveTime>) {
                     }
                     
                     // Draw all three PB lines
-                    drawPBLine(ao12PBs, ao12Color)
-                    drawPBLine(ao5PBs, ao5Color)
-                    drawPBLine(singlePBs, singleColor)
+                    drawPBLine(visibleAo12PBs, ao12Color)
+                    drawPBLine(visibleAo5PBs, ao5Color)
+                    drawPBLine(visibleSinglePBs, singleColor)
                     
                     // Draw axes
                     drawLine(
@@ -851,6 +877,14 @@ private fun PersonalBestsChart(solves: List<SolveTime>) {
                         strokeWidth = 2f
                     )
                 }
+
+                ChartRangeSelector(
+                    selectedRange = selectedRange,
+                    onRangeSelected = { range ->
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        selectedRange = range
+                    }
+                )
                 
                 // Legend
                 Row(
@@ -919,6 +953,107 @@ private fun PersonalBestsChart(solves: List<SolveTime>) {
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SolveTimesChart(solves: List<SolveTime>) {
+    var selectedRange by remember { mutableStateOf("All") }
+    val haptic = LocalHapticFeedback.current
+    val rangeStartIndex = rangeStartIndex(solves.size, selectedRange)
+    val visibleSolves = solves
+        .mapIndexed { index, solve -> index to solve }
+        .filter { (index, solve) -> index >= rangeStartIndex && solve.penalty != Penalty.DNF }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = RoundedCornerShape(16.dp),
+        tonalElevation = 1.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            SectionHeader(title = "Solve Times")
+
+            if (visibleSolves.size < 2) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Complete more solves to see solve times",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    )
+                }
+            } else {
+                val smoothed = visibleSolves.mapIndexed { visibleIndex, (solveIndex, solve) ->
+                    val windowStart = (visibleIndex - 2).coerceAtLeast(0)
+                    val windowEnd = (visibleIndex + 2).coerceAtMost(visibleSolves.lastIndex)
+                    val average = visibleSolves
+                        .subList(windowStart, windowEnd + 1)
+                        .map { it.second.displayTime }
+                        .average()
+                        .toLong()
+                    solveIndex to average
+                }
+                val values = smoothed.map { it.second }
+                val lineColor = MaterialTheme.colorScheme.primary
+                val axisColor = MaterialTheme.colorScheme.onSurfaceVariant
+
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
+                ) {
+                    val width = size.width
+                    val height = size.height
+                    val padding = 40f
+                    val minValue = values.minOrNull() ?: 0L
+                    val maxValue = values.maxOrNull() ?: 1L
+                    val range = (maxValue - minValue).coerceAtLeast(1L)
+                    val displayRange = range * 1.1f
+                    val displayMin = minValue - (range * 0.05f).toLong()
+                    val rangeEndIndex = (solves.size - 1).coerceAtLeast(rangeStartIndex + 1)
+                    val indexRange = (rangeEndIndex - rangeStartIndex).coerceAtLeast(1)
+                    val path = Path()
+
+                    smoothed.forEachIndexed { index, (solveIndex, time) ->
+                        val x = padding + ((solveIndex - rangeStartIndex).toFloat() / indexRange) * (width - 2 * padding)
+                        val y = height - padding - ((time - displayMin).toFloat() / displayRange) * (height - 2 * padding)
+                        if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                    }
+
+                    drawPath(path, lineColor, style = Stroke(width = 6f))
+                    drawLine(
+                        axisColor,
+                        Offset(padding, height - padding),
+                        Offset(width - padding, height - padding),
+                        strokeWidth = 2f
+                    )
+                    drawLine(
+                        axisColor,
+                        Offset(padding, padding),
+                        Offset(padding, height - padding),
+                        strokeWidth = 2f
+                    )
+                }
+            }
+
+            ChartRangeSelector(
+                selectedRange = selectedRange,
+                onRangeSelected = { range ->
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    selectedRange = range
+                }
+            )
         }
     }
 }
@@ -1057,30 +1192,13 @@ private fun AveragesChart(solves: List<SolveTime>) {
         }
         
             // Range selector
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                listOf("Last 50", "Last 100", "All").forEach { range ->
-                    FilterChip(
-                        selected = selectedRange == range,
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            selectedRange = range
-                        },
-                        label = {
-                            Text(
-                                text = range,
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        }
-                    )
-                    if (range != "All") {
-                        Spacer(modifier = Modifier.width(8.dp))
-                    }
+            ChartRangeSelector(
+                selectedRange = selectedRange,
+                onRangeSelected = { range ->
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    selectedRange = range
                 }
-            }
+            )
         
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1138,6 +1256,43 @@ private fun AveragesChart(solves: List<SolveTime>) {
 }
 
 @Composable
+private fun ChartRangeSelector(
+    selectedRange: String,
+    onRangeSelected: (String) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        ChartRangeOptions.forEach { range ->
+            FilterChip(
+                selected = selectedRange == range,
+                onClick = { onRangeSelected(range) },
+                label = {
+                    Text(
+                        text = range,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+            )
+            if (range != ChartRangeOptions.last()) {
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+        }
+    }
+}
+
+private fun rangeStartIndex(solveCount: Int, selectedRange: String): Int {
+    val visibleCount = when (selectedRange) {
+        "Last 50" -> 50
+        "Last 100" -> 100
+        else -> solveCount
+    }
+    return (solveCount - visibleCount).coerceAtLeast(0)
+}
+
+@Composable
 private fun StatCard(
     label: String,
     value: String,
@@ -1191,7 +1346,7 @@ private fun AverageCard(
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        color = containerColor,
         contentColor = contentColor,
         tonalElevation = 0.dp
     ) {
@@ -1435,6 +1590,7 @@ private fun SolveCard(
 
 private val StatCardContentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
 private val StatCardSpacing = 10.dp
+private val ChartRangeOptions = listOf("Last 50", "Last 100", "All")
 
 private fun formatTime(millis: Long): String {
     val totalSeconds = millis / 1000
