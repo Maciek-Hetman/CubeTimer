@@ -1,17 +1,19 @@
 package com.maciekhetman.cubetimer.ui.components
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.Text
@@ -55,7 +57,7 @@ fun CollapsingTopBar(
     scrollBehavior: TopAppBarScrollBehavior,
     modifier: Modifier = Modifier
 ) {
-    TopAppBar(
+    LargeTopAppBar(
         title = { Text(title) },
         actions = {
             ModeMenu(
@@ -74,21 +76,22 @@ private fun ModeMenu(
     onModeSelected: (Mode) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val buttonColors = ButtonDefaults.buttonColors(
-        containerColor = MaterialTheme.colorScheme.tertiary,
-        contentColor = MaterialTheme.colorScheme.onTertiary
-    )
     val menuItemColors = MenuDefaults.itemColors(
-        textColor = MaterialTheme.colorScheme.onTertiaryContainer,
-        leadingIconColor = MaterialTheme.colorScheme.onTertiaryContainer,
-        trailingIconColor = MaterialTheme.colorScheme.onTertiaryContainer
+        textColor = MaterialTheme.colorScheme.onSurface,
+        leadingIconColor = MaterialTheme.colorScheme.onSurface,
+        trailingIconColor = MaterialTheme.colorScheme.primary
     )
 
     Box {
-        Button(
+        FilledTonalButton(
             onClick = { expanded = true },
-            colors = buttonColors,
-            shape = MaterialTheme.shapes.extraLarge
+            contentPadding = PaddingValues(
+                start = 12.dp,
+                top = 8.dp,
+                end = 8.dp,
+                bottom = 8.dp
+            ),
+            modifier = Modifier.padding(top = 12.dp, end = 8.dp)
         ) {
             Text(currentMode.displayName)
             Spacer(modifier = Modifier.width(4.dp))
@@ -101,8 +104,6 @@ private fun ModeMenu(
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
-            shape = MaterialTheme.shapes.extraLarge,
-            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
             tonalElevation = 6.dp,
             shadowElevation = 8.dp
         ) {

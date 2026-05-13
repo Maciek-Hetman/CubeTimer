@@ -3,12 +3,19 @@ package com.maciekhetman.cubetimer
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -34,6 +41,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -41,9 +49,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
-import androidx.activity.SystemBarStyle
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.maciekhetman.cubetimer.ui.screens.StatsScreen
 import com.maciekhetman.cubetimer.ui.screens.SettingsScreen
 import com.maciekhetman.cubetimer.ui.screens.TimerScreen
@@ -130,17 +136,30 @@ fun CubeTimerApp(viewModel: TimerViewModel) {
             AnimatedContent(
                 targetState = currentDestination,
                 transitionSpec = {
+                    val springSpec = spring<IntOffset>(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMediumLow
+                    )
+                    val fadeSpec = tween<Float>(durationMillis = 180)
                     if (targetState.ordinal > initialState.ordinal) {
-                        // Moving forward (Timer -> Stats)
-                        (slideInHorizontally { width -> width } + fadeIn()).togetherWith(
-                            slideOutHorizontally { width -> -width } + fadeOut()
-                        )
+                        (slideInHorizontally(springSpec) { width -> width / 4 } +
+                            fadeIn(fadeSpec) +
+                            scaleIn(initialScale = 0.96f, animationSpec = tween(220)))
+                            .togetherWith(
+                                slideOutHorizontally(springSpec) { width -> -width / 5 } +
+                                    fadeOut(fadeSpec) +
+                                    scaleOut(targetScale = 0.98f, animationSpec = tween(180))
+                            )
                     } else {
-                        // Moving backward (Stats -> Timer)
-                        (slideInHorizontally { width -> -width } + fadeIn()).togetherWith(
-                            slideOutHorizontally { width -> width } + fadeOut()
-                        )
-                    }
+                        (slideInHorizontally(springSpec) { width -> -width / 4 } +
+                            fadeIn(fadeSpec) +
+                            scaleIn(initialScale = 0.96f, animationSpec = tween(220)))
+                            .togetherWith(
+                                slideOutHorizontally(springSpec) { width -> width / 5 } +
+                                    fadeOut(fadeSpec) +
+                                    scaleOut(targetScale = 0.98f, animationSpec = tween(180))
+                            )
+                    }.using(SizeTransform(clip = false))
                 },
                 label = "screen_transition"
             ) { destination ->

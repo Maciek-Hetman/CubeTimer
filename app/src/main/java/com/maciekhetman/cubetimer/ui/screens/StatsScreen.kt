@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
@@ -95,7 +96,12 @@ fun StatsScreen(
                         top = topPadding,
                         end = endPadding,
                         bottom = bottomPadding
-                    )
+                    ),
+                contentPadding = PaddingValues(
+                    top = 8.dp,
+                    bottom = 24.dp
+                ),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 item {
                     StatsHeader(solves = solves, appTimeMillis = appTimeMillis)
@@ -162,7 +168,7 @@ fun StatsScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -224,7 +230,7 @@ fun StatsScreen(
                         solveNumber = solves.size - index,
                         onDelete = deleteSolve,
                         onSetPenalty = setPenalty,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                     )
                 }
                 
@@ -289,7 +295,7 @@ private fun StatsHeader(solves: List<SolveTime>, appTimeMillis: Long) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         SectionHeader(title = "Overview")
@@ -391,7 +397,7 @@ private fun AveragesSection(solves: List<SolveTime>) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         SectionHeader(title = "Averages")
@@ -405,10 +411,10 @@ private fun AveragesSection(solves: List<SolveTime>) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
             color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
-            shape = MaterialTheme.shapes.large
+            shape = RoundedCornerShape(16.dp)
         ) {
             Column(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
@@ -443,10 +449,10 @@ private fun AveragesSection(solves: List<SolveTime>) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
             color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f),
-            shape = MaterialTheme.shapes.large
+            shape = RoundedCornerShape(16.dp)
         ) {
             Column(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
@@ -482,7 +488,7 @@ private fun LargeAveragesSection(solves: List<SolveTime>) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         SectionHeader(title = "Session Averages")
@@ -514,10 +520,10 @@ private fun LargeAveragesSection(solves: List<SolveTime>) {
                                 .weight(1f)
                                 .heightIn(min = 88.dp),
                             color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f),
-                            shape = MaterialTheme.shapes.medium
+                            shape = RoundedCornerShape(16.dp)
                         ) {
                             Column(
-                                modifier = Modifier.padding(12.dp),
+                                modifier = Modifier.padding(16.dp),
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Text(
@@ -565,7 +571,7 @@ private fun SessionStatsSection(solves: List<SolveTime>) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         SectionHeader(title = "Session Statistics")
@@ -654,7 +660,7 @@ private fun PenaltyStatsSection(solves: List<SolveTime>) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         SectionHeader(title = "Penalties")
@@ -729,13 +735,13 @@ private fun PersonalBestsChart(solves: List<SolveTime>) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
-        shape = MaterialTheme.shapes.extraLarge,
+        shape = RoundedCornerShape(16.dp),
         tonalElevation = 1.dp
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             SectionHeader(title = "Personal Best Progress")
@@ -932,13 +938,13 @@ private fun AveragesChart(solves: List<SolveTime>) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
-        shape = MaterialTheme.shapes.extraLarge,
+        shape = RoundedCornerShape(16.dp),
         tonalElevation = 1.dp
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             SectionHeader(title = "Progress Chart")
@@ -1122,12 +1128,12 @@ private fun StatCard(
     containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
     contentColor: Color = MaterialTheme.colorScheme.onSurface
 ) {
-    ElevatedCard(
+    Surface(
         modifier = modifier,
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = containerColor,
-            contentColor = contentColor
-        )
+        shape = RoundedCornerShape(16.dp),
+        color = containerColor,
+        contentColor = contentColor,
+        tonalElevation = 0.dp
     ) {
         Column(
             modifier = Modifier
@@ -1165,13 +1171,12 @@ private fun AverageCard(
     containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
     contentColor: Color = MaterialTheme.colorScheme.onSurface
 ) {
-    OutlinedCard(
+    Surface(
         modifier = modifier,
-        colors = CardDefaults.outlinedCardColors(
-            containerColor = containerColor,
-            contentColor = contentColor
-        ),
-        border = CardDefaults.outlinedCardBorder()
+        shape = RoundedCornerShape(16.dp),
+        color = containerColor,
+        contentColor = contentColor,
+        tonalElevation = 0.dp
     ) {
         Column(
             modifier = Modifier
@@ -1221,12 +1226,12 @@ private fun PenaltyCard(
     containerColor: Color,
     contentColor: Color = MaterialTheme.colorScheme.onSurface
 ) {
-    ElevatedCard(
+    Surface(
         modifier = modifier,
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = containerColor,
-            contentColor = contentColor
-        )
+        shape = RoundedCornerShape(16.dp),
+        color = containerColor,
+        contentColor = contentColor,
+        tonalElevation = 0.dp
     ) {
         Column(
             modifier = Modifier
@@ -1272,7 +1277,12 @@ private fun SolveCard(
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
-    ElevatedCard(modifier = modifier.fillMaxWidth()) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        tonalElevation = 0.dp
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1302,8 +1312,6 @@ private fun SolveCard(
                         DropdownMenu(
                             expanded = menuExpanded,
                             onDismissRequest = { menuExpanded = false },
-                            shape = MaterialTheme.shapes.extraLarge,
-                            containerColor = MaterialTheme.colorScheme.surface,
                             tonalElevation = 6.dp,
                             shadowElevation = 8.dp
                         ) {
@@ -1401,7 +1409,7 @@ private fun SolveCard(
     }
 }
 
-private val StatCardContentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+private val StatCardContentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
 private val StatCardSpacing = 10.dp
 
 private fun formatTime(millis: Long): String {

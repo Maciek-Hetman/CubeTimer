@@ -14,6 +14,7 @@ class SettingsRepository(private val context: Context) {
     private val AMOLED_ENABLED_KEY = booleanPreferencesKey("amoled_enabled")
     private val SHOW_SCRAMBLE_REFRESH_KEY = booleanPreferencesKey("show_scramble_refresh_button")
     private val SCRAMBLE_SCALE_PERCENT_KEY = intPreferencesKey("scramble_scale_percent")
+    private val TIMER_START_DELAY_MILLIS_KEY = intPreferencesKey("timer_start_delay_millis")
 
     val dynamicColorEnabledFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[DYNAMIC_COLOR_KEY] ?: false
@@ -34,6 +35,10 @@ class SettingsRepository(private val context: Context) {
 
     val scrambleScalePercentFlow: Flow<Int> = context.dataStore.data.map { preferences ->
         preferences[SCRAMBLE_SCALE_PERCENT_KEY] ?: 100
+    }
+
+    val timerStartDelayMillisFlow: Flow<Int> = context.dataStore.data.map { preferences ->
+        preferences[TIMER_START_DELAY_MILLIS_KEY] ?: 500
     }
 
     suspend fun setDynamicColorEnabled(enabled: Boolean) {
@@ -63,6 +68,12 @@ class SettingsRepository(private val context: Context) {
     suspend fun setScrambleScalePercent(percent: Int) {
         context.dataStore.edit { preferences ->
             preferences[SCRAMBLE_SCALE_PERCENT_KEY] = percent.coerceIn(80, 140)
+        }
+    }
+
+    suspend fun setTimerStartDelayMillis(delayMillis: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[TIMER_START_DELAY_MILLIS_KEY] = delayMillis.coerceIn(200, 1000)
         }
     }
 

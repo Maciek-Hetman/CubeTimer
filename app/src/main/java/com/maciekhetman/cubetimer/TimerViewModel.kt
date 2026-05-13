@@ -97,6 +97,9 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     private val _scrambleScalePercent = MutableStateFlow(100)
     val scrambleScalePercent: StateFlow<Int> = _scrambleScalePercent.asStateFlow()
 
+    private val _timerStartDelayMillis = MutableStateFlow(500)
+    val timerStartDelayMillis: StateFlow<Int> = _timerStartDelayMillis.asStateFlow()
+
     private val _allSolves = MutableStateFlow<List<SolveTime>>(emptyList())
     val allSolves: StateFlow<List<SolveTime>> = _allSolves.asStateFlow()
     
@@ -159,6 +162,11 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
                 _scrambleScalePercent.value = percent
             }
         }
+        viewModelScope.launch {
+            settingsRepository.timerStartDelayMillisFlow.collect { delayMillis ->
+                _timerStartDelayMillis.value = delayMillis
+            }
+        }
         // Load saved app time for current mode
         viewModelScope.launch {
             _currentMode.collect { mode ->
@@ -207,7 +215,7 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     private fun startHoldTimer() {
         holdJob?.cancel()
         holdJob = viewModelScope.launch {
-            val holdDuration = 500L
+            val holdDuration = _timerStartDelayMillis.value.toLong()
             val updateInterval = 16L // ~60fps
             var elapsed = 0L
 
@@ -508,6 +516,12 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     fun setScrambleScalePercent(percent: Int) {
         viewModelScope.launch {
             settingsRepository.setScrambleScalePercent(percent)
+        }
+    }
+
+    fun setTimerStartDelayMillis(delayMillis: Int) {
+        viewModelScope.launch {
+            settingsRepository.setTimerStartDelayMillis(delayMillis)
         }
     }
 

@@ -1,8 +1,6 @@
 package com.maciekhetman.cubetimer.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -27,7 +25,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -44,8 +41,6 @@ import com.maciekhetman.cubetimer.TimerState
 import com.maciekhetman.cubetimer.TimerViewModel
 import com.maciekhetman.cubetimer.ui.components.TopBar
 import kotlinx.coroutines.delay
-import kotlin.math.cos
-import kotlin.math.sin
 import kotlin.random.Random
 
 @Composable
@@ -173,13 +168,27 @@ private fun TimerContent(
     modifier: Modifier = Modifier
 ) {
     Column(
+        modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
+        TimerDisplay(
+            time = when (timerState) {
+                is TimerState.Running -> timerState.elapsedTime
+                is TimerState.Finished -> timerState.time
+                else -> 0
+            },
+            color = when (timerState) {
+                is TimerState.Holding -> MaterialTheme.colorScheme.error
+                is TimerState.Ready -> MaterialTheme.colorScheme.primary
+                is TimerState.Running -> MaterialTheme.colorScheme.primary
+                is TimerState.Finished -> MaterialTheme.colorScheme.primary
+                else -> MaterialTheme.colorScheme.onBackground
+            }
+        )
+        Spacer(modifier = Modifier.height(24.dp))
         when (timerState) {
             is TimerState.Idle -> {
-                TimerDisplay(time = 0, color = MaterialTheme.colorScheme.onBackground)
-                Spacer(modifier = Modifier.height(24.dp))
                 Text(
                     text = "Tap and hold to start",
                     style = MaterialTheme.typography.bodyLarge,
@@ -192,8 +201,6 @@ private fun TimerContent(
                 } else {
                     MaterialTheme.colorScheme.tertiary
                 }
-                TimerDisplay(time = 0, color = color)
-                Spacer(modifier = Modifier.height(24.dp))
                 LinearProgressIndicator(
                     progress = { timerState.progress },
                     modifier = Modifier
@@ -209,8 +216,6 @@ private fun TimerContent(
                 )
             }
             is TimerState.Ready -> {
-                TimerDisplay(time = 0, color = MaterialTheme.colorScheme.tertiary)
-                Spacer(modifier = Modifier.height(24.dp))
                 Text(
                     text = "Release to start!",
                     style = MaterialTheme.typography.bodyLarge,
@@ -219,8 +224,6 @@ private fun TimerContent(
                 )
             }
             is TimerState.Running -> {
-                TimerDisplay(time = timerState.elapsedTime, color = MaterialTheme.colorScheme.primary)
-                Spacer(modifier = Modifier.height(24.dp))
                 Text(
                     text = "Tap to stop",
                     style = MaterialTheme.typography.bodyLarge,
@@ -228,15 +231,13 @@ private fun TimerContent(
                 )
             }
             is TimerState.Finished -> {
-                TimerDisplay(time = timerState.time, color = MaterialTheme.colorScheme.tertiary)
-                Spacer(modifier = Modifier.height(40.dp))
-                
+                Spacer(modifier = Modifier.height(16.dp))
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.padding(horizontal = 32.dp)
+                    modifier = Modifier.padding(horizontal = 16.dp)
                 ) {
-                    FilledTonalButton(
+                    Button(
                         onClick = { viewModel.saveSolveWithPenalty(Penalty.NONE) },
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -289,7 +290,11 @@ private fun TimerContent(
 }
 
 @Composable
-private fun TimerDisplay(time: Long, color: Color) {
+private fun TimerDisplay(
+    time: Long,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
     val totalSeconds = time / 1000
     val milliseconds = (time % 1000) / 10
     
@@ -305,7 +310,7 @@ private fun TimerDisplay(time: Long, color: Color) {
     
     Row(
         verticalAlignment = Alignment.Bottom,
-        modifier = Modifier.padding(bottom = 8.dp)
+        modifier = modifier.padding(bottom = 8.dp)
     ) {
         Text(
             text = mainText,
@@ -471,7 +476,7 @@ private fun ScrambleDisplay(
     val haptic = LocalHapticFeedback.current
     val maxLines = 4
     val safeScale = scale.coerceIn(0.8f, 1.4f)
-    val contentPadding = 20.dp * safeScale
+    val contentPadding = 16.dp * safeScale
     val spacerWidth = 12.dp * safeScale
     val textEndPadding = 8.dp * safeScale
     val buttonSize = 40.dp * safeScale
@@ -484,7 +489,7 @@ private fun ScrambleDisplay(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp)
+            .padding(horizontal = 16.dp)
             .then(
                 if (isTruncated) {
                     Modifier.clickable { showFullScramble = true }
@@ -493,7 +498,7 @@ private fun ScrambleDisplay(
                 }
             ),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = MaterialTheme.shapes.extraLarge,
+        shape = MaterialTheme.shapes.large,
         tonalElevation = 3.dp
     ) {
         Row(
@@ -692,7 +697,6 @@ data class ConfettiParticle(
 
 @Composable
 private fun ConfettiAnimation() {
-    val density = LocalDensity.current
     var progress by remember { mutableStateOf(0f) }
     
     val confettiColors = listOf(
