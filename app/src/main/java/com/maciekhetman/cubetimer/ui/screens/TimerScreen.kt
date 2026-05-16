@@ -8,7 +8,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -19,10 +18,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -43,7 +39,6 @@ import com.maciekhetman.cubetimer.TimerViewModel
 import com.maciekhetman.cubetimer.TimerAverageOptions
 import com.maciekhetman.cubetimer.ui.components.TopBar
 import kotlinx.coroutines.delay
-import kotlin.random.Random
 
 @Composable
 fun TimerScreen(
@@ -256,7 +251,10 @@ private fun TimerContent(
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             viewModel.saveSolveWithPenalty(Penalty.NONE)
                         },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(64.dp),
+                        shape = MaterialTheme.shapes.extraLarge
                     ) {
                         Text(
                             text = "Save Time",
@@ -274,7 +272,10 @@ private fun TimerContent(
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 viewModel.saveSolveWithPenalty(Penalty.PLUS_TWO)
                             },
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(56.dp),
+                            shape = MaterialTheme.shapes.large
                         ) {
                             Text(
                                 text = "+2",
@@ -287,7 +288,14 @@ private fun TimerContent(
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 viewModel.saveSolveWithPenalty(Penalty.DNF)
                             },
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(56.dp),
+                            shape = MaterialTheme.shapes.extraLarge,
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer,
+                                contentColor = MaterialTheme.colorScheme.onErrorContainer
+                            )
                         ) {
                             Text(
                                 text = "DNF",
@@ -300,7 +308,10 @@ private fun TimerContent(
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 viewModel.discardSolve()
                             },
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(56.dp),
+                            shape = MaterialTheme.shapes.medium
                         ) {
                             Text(
                                 text = "Discard",
@@ -644,7 +655,7 @@ private fun RecordCelebrationOverlay(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.75f))
+                .background(Color.Black.copy(alpha = 0.45f))
                 .pointerInput(Unit) {
                     detectTapGestures {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -653,47 +664,34 @@ private fun RecordCelebrationOverlay(
                 },
             contentAlignment = Alignment.Center
         ) {
-            // Confetti animation
-            ConfettiAnimation()
-            
             celebration?.let {
-                Card(
+                Surface(
                     modifier = Modifier
-                        .fillMaxWidth(0.9f)
-                        .padding(32.dp),
+                        .fillMaxWidth(0.84f)
+                        .padding(16.dp),
                     shape = MaterialTheme.shapes.extraLarge,
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        contentColor = MaterialTheme.colorScheme.onSurface
-                    ),
-                    elevation = CardDefaults.cardElevation(
-                        defaultElevation = 24.dp
-                    )
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                    tonalElevation = 6.dp,
+                    shadowElevation = 8.dp
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(48.dp),
+                            .padding(horizontal = 20.dp, vertical = 18.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(24.dp)
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Text(
-                            text = "🎉",
-                            fontSize = 72.sp,
-                            modifier = Modifier.align(Alignment.CenterHorizontally)
-                        )
-                        Text(
-                            text = "NEW RECORD!",
-                            style = MaterialTheme.typography.displaySmall,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            letterSpacing = 2.sp,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.align(Alignment.CenterHorizontally)
+                            text = "New record",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            textAlign = TextAlign.Center
                         )
                         Surface(
                             color = MaterialTheme.colorScheme.primaryContainer,
-                            shape = MaterialTheme.shapes.extraLarge
+                            shape = MaterialTheme.shapes.large
                         ) {
                             Text(
                                 text = when (it.type) {
@@ -701,21 +699,19 @@ private fun RecordCelebrationOverlay(
                                     RecordType.BEST_AO5 -> "Best Average of 5"
                                     RecordType.BEST_AO12 -> "Best Average of 12"
                                 },
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.padding(horizontal = 32.dp, vertical = 12.dp),
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                                 textAlign = TextAlign.Center
                             )
                         }
                         Text(
                             text = formatDisplayTime(it.time),
-                            fontSize = 56.sp,
-                            fontWeight = FontWeight.ExtraBold,
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary,
-                            letterSpacing = 2.sp,
                             textAlign = TextAlign.Center,
-                            lineHeight = 56.sp,
                             softWrap = true,
                             maxLines = 2,
                             modifier = Modifier
@@ -723,87 +719,12 @@ private fun RecordCelebrationOverlay(
                                 .fillMaxWidth()
                         )
                         Text(
-                            text = "Tap anywhere to continue",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                            fontWeight = FontWeight.Medium,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.align(Alignment.CenterHorizontally)
+                            text = "Tap to continue",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
                         )
                     }
-                }
-            }
-        }
-    }
-}
-data class ConfettiParticle(
-    val initialX: Float,
-    val initialY: Float,
-    val velocityX: Float,
-    val velocityY: Float,
-    val color: Color,
-    val size: Float,
-    val rotationSpeed: Float
-)
-
-@Composable
-private fun ConfettiAnimation() {
-    var progress by remember { mutableStateOf(0f) }
-    
-    val confettiColors = listOf(
-        Color(0xFFFF6B6B),
-        Color(0xFF4ECDC4),
-        Color(0xFFFFE66D),
-        Color(0xFF95E1D3),
-        Color(0xFFF38181),
-        Color(0xFFAA96DA),
-        Color(0xFFFCACA3),
-        Color(0xFFFFBE76)
-    )
-    
-    val particles = remember {
-        List(100) {
-            ConfettiParticle(
-                initialX = Random.nextFloat(),
-                initialY = -0.1f,
-                velocityX = (Random.nextFloat() - 0.5f) * 2f,
-                velocityY = Random.nextFloat() * 0.5f + 0.3f,
-                color = confettiColors.random(),
-                size = Random.nextFloat() * 8f + 4f,
-                rotationSpeed = (Random.nextFloat() - 0.5f) * 720f
-            )
-        }
-    }
-    
-    LaunchedEffect(Unit) {
-        val duration = 3000L
-        val startTime = System.currentTimeMillis()
-        while (progress < 1f) {
-            val elapsed = System.currentTimeMillis() - startTime
-            progress = (elapsed.toFloat() / duration).coerceIn(0f, 1f)
-            delay(16)
-        }
-    }
-    
-    Canvas(modifier = Modifier.fillMaxSize()) {
-        val width = size.width
-        val height = size.height
-        
-        particles.forEach { particle ->
-            val x = width * particle.initialX + particle.velocityX * width * progress
-            val y = height * particle.initialY + particle.velocityY * height * progress + 
-                    0.5f * 800f * progress * progress // gravity effect
-            
-            val rotation = particle.rotationSpeed * progress
-            val alpha = (1f - progress).coerceIn(0f, 1f)
-            
-            if (y < height + 50f) {
-                rotate(rotation, pivot = Offset(x, y)) {
-                    drawRect(
-                        color = particle.color.copy(alpha = alpha),
-                        topLeft = Offset(x - particle.size / 2, y - particle.size / 2),
-                        size = Size(particle.size, particle.size * 1.5f)
-                    )
                 }
             }
         }
