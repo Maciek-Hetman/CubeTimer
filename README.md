@@ -14,3 +14,6 @@ will be there some day
 - [ ] Clean up code
 - [ ] Reorder stats
 - [ ] Test app on different screens and android versions
+
+## License
+GPL-3.0-only. See [LICENSE](LICENSE).
