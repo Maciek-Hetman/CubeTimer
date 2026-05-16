@@ -1,10 +1,13 @@
-package com.maciekhetman.cubetimer
+package com.maciekhetman.cubetimer.data
 
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
+import com.maciekhetman.cubetimer.model.Mode
+import com.maciekhetman.cubetimer.model.RunningTimerDisplay
+import com.maciekhetman.cubetimer.model.TimerAverageOptions
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -172,12 +175,4 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
-}
-
-val TimerAverageOptions = listOf(5, 12, 25, 50, 100)
-
-enum class RunningTimerDisplay(val displayName: String) {
-    FULL("Show decimals"),
-    SECONDS_ONLY("Hide decimals"),
-    HIDDEN("Hide timer")
 }

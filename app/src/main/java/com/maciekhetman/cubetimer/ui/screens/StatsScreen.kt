@@ -27,18 +27,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.maciekhetman.cubetimer.Mode
-import com.maciekhetman.cubetimer.Penalty
-import com.maciekhetman.cubetimer.SolveTime
-import com.maciekhetman.cubetimer.TimerViewModel
+import com.maciekhetman.cubetimer.domain.AverageCalculator
+import com.maciekhetman.cubetimer.domain.TimeFormatter
+import com.maciekhetman.cubetimer.model.Mode
+import com.maciekhetman.cubetimer.model.Penalty
+import com.maciekhetman.cubetimer.model.SolveTime
 import com.maciekhetman.cubetimer.ui.components.ActivityTracker
 import com.maciekhetman.cubetimer.ui.components.SectionDivider
 import com.maciekhetman.cubetimer.ui.components.SectionHeader
 import com.maciekhetman.cubetimer.ui.components.CollapsingTopBar
+import com.maciekhetman.cubetimer.viewmodel.TimerViewModel
 import java.text.SimpleDateFormat
 import java.util.*
-import kotlin.math.sqrt
-import kotlin.math.pow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1371,7 +1371,7 @@ private fun StatCard(
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        color = containerColor,
         contentColor = contentColor,
         tonalElevation = 0.dp
     ) {
@@ -1469,7 +1469,7 @@ private fun PenaltyCard(
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        color = containerColor,
         contentColor = contentColor,
         tonalElevation = 0.dp
     ) {
@@ -1661,16 +1661,7 @@ private val StatCardSpacing = 10.dp
 private val ChartRangeOptions = listOf("Last 50", "Last 100", "All")
 
 private fun formatTime(millis: Long): String {
-    val totalSeconds = millis / 1000
-    val milliseconds = (millis % 1000) / 10
-    
-    return if (totalSeconds >= 60) {
-        val minutes = totalSeconds / 60
-        val seconds = totalSeconds % 60
-        String.format("%d:%02d.%02d", minutes, seconds, milliseconds)
-    } else {
-        String.format("%d.%02d", totalSeconds, milliseconds)
-    }
+    return TimeFormatter.formatTime(millis)
 }
 
 private fun formatOptionalTime(millis: Long?): String {
@@ -1683,53 +1674,19 @@ private fun formatTimestamp(timestamp: Long): String {
 }
 
 private fun formatDuration(millis: Long): String {
-    val totalSeconds = millis / 1000
-    val hours = totalSeconds / 3600
-    val minutes = (totalSeconds % 3600) / 60
-    val seconds = totalSeconds % 60
-    
-    return when {
-        hours > 0 -> String.format("%dh %dm", hours, minutes)
-        minutes > 0 -> String.format("%dm %ds", minutes, seconds)
-        else -> String.format("%ds", seconds)
-    }
+    return TimeFormatter.formatDuration(millis)
 }
 
 private fun calculateAverageOfN(solves: List<SolveTime>, n: Int): Long? {
-    if (solves.size < n) return null
-    val lastN = solves.takeLast(n)
-    val validSolves = lastN.filter { it.penalty != Penalty.DNF }
-    
-    // Need at least 60% valid solves for official average
-    if (validSolves.size < (n * 0.6).toInt()) return null
-    
-    return validSolves.map { it.displayTime }.average().toLong()
+    return AverageCalculator.averageOfN(solves, n)
 }
 
 private fun calculateAverage(solves: List<SolveTime>): Long {
-    val validSolves = solves.filter { it.penalty != Penalty.DNF }
-    if (validSolves.isEmpty()) return 0L
-    return validSolves.map { it.displayTime }.average().toLong()
+    return AverageCalculator.average(solves)
 }
 
 private fun findBestAverageOfN(solves: List<SolveTime>, n: Int): Long? {
-    if (solves.size < n) return null
-    
-    var bestAverage: Long? = null
-    
-    for (i in 0..(solves.size - n)) {
-        val subList = solves.subList(i, i + n)
-        val validSolves = subList.filter { it.penalty != Penalty.DNF }
-        
-        if (validSolves.size >= (n * 0.6).toInt()) {
-            val average = validSolves.map { it.displayTime }.average().toLong()
-            if (bestAverage == null || average < bestAverage) {
-                bestAverage = average
-            }
-        }
-    }
-    
-    return bestAverage
+    return AverageCalculator.bestAverageOfN(solves, n)
 }
 
 // Session calculation: group solves with max 1 hour gap between consecutive solves
@@ -1785,20 +1742,11 @@ private fun calculateSessions(solves: List<SolveTime>): List<Session> {
 }
 
 private fun calculateMean(solves: List<SolveTime>): Long {
-    val validSolves = solves.filter { it.penalty != Penalty.DNF }
-    if (validSolves.isEmpty()) return 0L
-    return validSolves.map { it.displayTime }.average().toLong()
+    return AverageCalculator.mean(solves)
 }
 
 private fun calculateStandardDeviation(solves: List<SolveTime>): Double {
-    val validSolves = solves.filter { it.penalty != Penalty.DNF }
-    if (validSolves.size < 2) return 0.0
-    
-    val times = validSolves.map { it.displayTime.toDouble() }
-    val mean = times.average()
-    val variance = times.map { (it - mean).pow(2) }.average()
-    
-    return sqrt(variance)
+    return AverageCalculator.standardDeviation(solves)
 }
 
 private data class SessionStats(

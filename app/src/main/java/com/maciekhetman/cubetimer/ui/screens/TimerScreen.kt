@@ -34,16 +34,18 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.maciekhetman.cubetimer.Mode
-import com.maciekhetman.cubetimer.Penalty
-import com.maciekhetman.cubetimer.RecordCelebration
-import com.maciekhetman.cubetimer.RecordType
-import com.maciekhetman.cubetimer.RunningTimerDisplay
-import com.maciekhetman.cubetimer.SolveTime
-import com.maciekhetman.cubetimer.TimerState
-import com.maciekhetman.cubetimer.TimerViewModel
-import com.maciekhetman.cubetimer.TimerAverageOptions
+import com.maciekhetman.cubetimer.domain.AverageCalculator
+import com.maciekhetman.cubetimer.domain.TimeFormatter
+import com.maciekhetman.cubetimer.model.Mode
+import com.maciekhetman.cubetimer.model.Penalty
+import com.maciekhetman.cubetimer.model.RecordCelebration
+import com.maciekhetman.cubetimer.model.RecordType
+import com.maciekhetman.cubetimer.model.RunningTimerDisplay
+import com.maciekhetman.cubetimer.model.SolveTime
+import com.maciekhetman.cubetimer.model.TimerAverageOptions
+import com.maciekhetman.cubetimer.model.TimerState
 import com.maciekhetman.cubetimer.ui.components.TopBar
+import com.maciekhetman.cubetimer.viewmodel.TimerViewModel
 import kotlinx.coroutines.delay
 
 @Composable
@@ -461,18 +463,7 @@ private fun TimerDisplay(
     showDecimals: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val totalSeconds = time / 1000
-    val milliseconds = (time % 1000) / 10
-    
-    val (mainText, millisecondsText) = if (time == 0L) {
-        "0" to ".00"
-    } else if (totalSeconds >= 60) {
-        val minutes = totalSeconds / 60
-        val seconds = totalSeconds % 60
-        String.format("%d:%02d", minutes, seconds) to String.format(".%02d", milliseconds)
-    } else {
-        String.format("%d", totalSeconds) to String.format(".%02d", milliseconds)
-    }
+    val (mainText, millisecondsText) = TimeFormatter.splitTimerTime(time)
     
     Row(
         verticalAlignment = Alignment.Bottom,
@@ -505,7 +496,7 @@ private fun AveragesDisplay(
     val averages = TimerAverageOptions
         .filter { it in enabledAverages }
         .mapNotNull { count ->
-            calculateTimerAverage(solves, count)?.let { average ->
+            AverageCalculator.averageOfN(solves, count)?.let { average ->
                 count to average
             }
         }
@@ -536,22 +527,6 @@ private fun AveragesDisplay(
             }
         }
     }
-}
-
-private fun calculateTimerAverage(solves: List<SolveTime>, count: Int): Long? {
-    if (solves.size < count) return null
-
-    val lastSolves = solves.takeLast(count)
-    val validSolves = lastSolves.filter { it.penalty != Penalty.DNF }
-    val minimumValidSolves = when (count) {
-        5 -> 3
-        12 -> 10
-        else -> (count * 0.6f).toInt()
-    }
-
-    if (validSolves.size < minimumValidSolves) return null
-
-    return validSolves.map { it.displayTime }.average().toLong()
 }
 
 @Composable
@@ -632,16 +607,7 @@ private fun RecentSolvesDisplay(
 }
 
 private fun formatDisplayTime(millis: Long): String {
-    val totalSeconds = millis / 1000
-    val milliseconds = (millis % 1000) / 10
-    
-    return if (totalSeconds >= 60) {
-        val minutes = totalSeconds / 60
-        val seconds = totalSeconds % 60
-        String.format("%d:%02d.%02d", minutes, seconds, milliseconds)
-    } else {
-        String.format("%d.%02d", totalSeconds, milliseconds)
-    }
+    return TimeFormatter.formatTime(millis)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

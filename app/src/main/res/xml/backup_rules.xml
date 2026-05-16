@@ -2,4 +2,5 @@
 <full-backup-content>
     <exclude domain="database" path="database.db" />
     <exclude domain="sharedpref" path="sharedPref.xml" />
+    <exclude domain="file" path="datastore/" />
 </full-backup-content>

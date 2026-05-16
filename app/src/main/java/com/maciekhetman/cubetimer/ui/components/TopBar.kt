@@ -28,7 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
-import com.maciekhetman.cubetimer.Mode
+import com.maciekhetman.cubetimer.model.Mode
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

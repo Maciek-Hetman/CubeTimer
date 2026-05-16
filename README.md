@@ -1,19 +1,15 @@
 # Cubing timer
 
-Vibecoded this simple cubing timer, because I didn't like UI/UX of other apps. Code is shit, maybe will fix it in future.
+A simple Android cubing timer focused on a fast, clean solving flow.
 
 ## Features
-- Timer (duh)
-- Scramble generator (2x2, 3x3, 4x4, 5x5, Megaminx, Pyraminx)
-- Stats
+- Timer
+- WCA scramble generator (2x2, 3x3, 4x4, 5x5, Megaminx, Pyraminx)
+- Statistics and history
+- Import/export for csTimer-style JSON
+- Customizable timer, scramble, display, and haptic settings
 
-## Screenshot
-will be there some day
-
-## Todo
-- [ ] Clean up code
-- [ ] Reorder stats
-- [ ] Test app on different screens and android versions
-
-## License
-GPL-3.0-only. See [LICENSE](LICENSE).
+## Screenshots
+![Timer screen](/screenshots/timer.png) 
+![Stats screen](/screenshots/stats.png)
+![Settings screen](/screenshots/settings.png)

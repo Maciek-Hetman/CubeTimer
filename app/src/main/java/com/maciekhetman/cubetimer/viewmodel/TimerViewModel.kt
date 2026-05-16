@@ -1,77 +1,33 @@
-package com.maciekhetman.cubetimer
+package com.maciekhetman.cubetimer.viewmodel
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.maciekhetman.cubetimer.data.SettingsRepository
+import com.maciekhetman.cubetimer.data.SolvesRepository
+import com.maciekhetman.cubetimer.domain.AverageCalculator
+import com.maciekhetman.cubetimer.domain.ScrambleGenerator
+import com.maciekhetman.cubetimer.model.Mode
+import com.maciekhetman.cubetimer.model.Penalty
+import com.maciekhetman.cubetimer.model.RecordCelebration
+import com.maciekhetman.cubetimer.model.RecordType
+import com.maciekhetman.cubetimer.model.RunningTimerDisplay
+import com.maciekhetman.cubetimer.model.SolveTime
+import com.maciekhetman.cubetimer.model.TimerAverageOptions
+import com.maciekhetman.cubetimer.model.TimerState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
 
-enum class Penalty {
-    NONE,
-    PLUS_TWO,
-    DNF
-}
-
-enum class Mode {
-    CUBE_2x2,
-    CUBE_3x3,
-    CUBE_4x4,
-    CUBE_5x5,
-    MEGAMINX,
-    PYRAMINX;
-    
-    val displayName: String
-        get() = when (this) {
-            CUBE_2x2 -> "2x2"
-            CUBE_3x3 -> "3x3"
-            CUBE_4x4 -> "4x4"
-            CUBE_5x5 -> "5x5"
-            MEGAMINX -> "Megaminx"
-            PYRAMINX -> "Pyraminx"
-        }
-}
-
-data class SolveTime(
-    val timeInMillis: Long,
-    val penalty: Penalty = Penalty.NONE,
-    val timestamp: Long = System.currentTimeMillis(),
-    val scramble: String = "",
-    val mode: Mode = Mode.CUBE_3x3
-) {
-    val displayTime: Long
-        get() = when (penalty) {
-            Penalty.NONE -> timeInMillis
-            Penalty.PLUS_TWO -> timeInMillis + 2000
-            Penalty.DNF -> timeInMillis
-        }
-}
-
-sealed class TimerState {
-    object Idle : TimerState()
-    data class Holding(val progress: Float) : TimerState()
-    object Ready : TimerState()
-    data class Running(val elapsedTime: Long) : TimerState()
-    data class Finished(val time: Long) : TimerState()
-}
-
-enum class RecordType {
-    BEST_SINGLE,
-    BEST_AO5,
-    BEST_AO12
-}
-
-data class RecordCelebration(
-    val type: RecordType,
-    val time: Long
-)
-
+@OptIn(ExperimentalCoroutinesApi::class)
 class TimerViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = SolvesRepository(application)
     private val settingsRepository = SettingsRepository(application)
@@ -231,13 +187,14 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
                 _hapticsEnabled.value = enabled
             }
         }
-        // Load saved app time for current mode
+        // Load saved app time for the selected mode, switching collectors when the mode changes.
         viewModelScope.launch {
-            _currentMode.collect { mode ->
-                repository.getAppTimeFlow(mode).collect { savedTime ->
+            _currentMode
+                .flatMapLatest { mode -> repository.getAppTimeFlow(mode) }
+                .collect { savedTime ->
+                    val mode = _currentMode.value
                     modeAppTimes[mode] = savedTime
                     _appTimeMillis.value = savedTime
-                }
             }
         }
     }
@@ -384,9 +341,11 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     fun exportSolvesAsCsTimerJson(): String {
         val sessionsByMode = _allSolves.value.groupBy { it.mode }
         val root = JSONObject()
+        val sessionModes = JSONObject()
         var sessionIndex = 1
-        sessionsByMode.forEach { (_, modeSolves) ->
+        sessionsByMode.forEach { (mode, modeSolves) ->
             if (modeSolves.isEmpty()) return@forEach
+            val sessionKey = "session$sessionIndex"
             val sessionArray = JSONArray()
             modeSolves.sortedBy { it.timestamp }.forEach { solve ->
                 val penaltyCode = when (solve.penalty) {
@@ -404,9 +363,11 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
                     .put(solve.timestamp / 1000)
                 sessionArray.put(entry)
             }
-            root.put("session$sessionIndex", sessionArray)
+            root.put(sessionKey, sessionArray)
+            sessionModes.put(sessionKey, mode.name)
             sessionIndex += 1
         }
+        root.put("cubetimer_session_modes", sessionModes)
         return root.toString()
     }
 
@@ -431,11 +392,17 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
             val imported = mutableListOf<SolveTime>()
+            val sessionModes = root.optJSONObject("cubetimer_session_modes")
             val keys = root.keys()
             while (keys.hasNext()) {
                 val key = keys.next()
                 if (!key.startsWith("session")) continue
                 val sessionArray = root.optJSONArray(key) ?: continue
+                val sessionMode = sessionModes
+                    ?.optString(key)
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { raw -> runCatching { Mode.valueOf(raw) }.getOrNull() }
+                    ?: fallbackMode
                 for (i in 0 until sessionArray.length()) {
                     val entry = sessionArray.optJSONArray(i) ?: continue
                     val meta = entry.optJSONArray(0) ?: continue
@@ -455,7 +422,7 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
                             penalty = penalty,
                             timestamp = timestampSeconds * 1000,
                             scramble = scramble,
-                            mode = fallbackMode
+                            mode = sessionMode
                         )
                     )
                 }
@@ -523,7 +490,7 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun parseScrambleType(raw: String): Mode? {
-        val value = raw.lowercase(Locale.getDefault())
+        val value = raw.lowercase(Locale.ROOT)
         return when {
             value.contains("333") || value.contains("3x3") -> Mode.CUBE_3x3
             value.contains("222") || value.contains("2x2") -> Mode.CUBE_2x2
@@ -692,8 +659,8 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         
         // Check for best Ao5
         if (newSolves.size >= 5) {
-            val currentAo5 = calculateAverageOfN(newSolves, 5)
-            val previousBestAo5 = findBestAverageOfN(previousSolves, 5)
+            val currentAo5 = AverageCalculator.averageOfN(newSolves, 5)
+            val previousBestAo5 = AverageCalculator.bestAverageOfN(previousSolves, 5)
             
             if (currentAo5 != null && (previousBestAo5 == null || currentAo5 < previousBestAo5)) {
                 _recordCelebration.value = RecordCelebration(
@@ -706,8 +673,8 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         
         // Check for best Ao12
         if (newSolves.size >= 12) {
-            val currentAo12 = calculateAverageOfN(newSolves, 12)
-            val previousBestAo12 = findBestAverageOfN(previousSolves, 12)
+            val currentAo12 = AverageCalculator.averageOfN(newSolves, 12)
+            val previousBestAo12 = AverageCalculator.bestAverageOfN(previousSolves, 12)
             
             if (currentAo12 != null && (previousBestAo12 == null || currentAo12 < previousBestAo12)) {
                 _recordCelebration.value = RecordCelebration(
@@ -717,37 +684,6 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
-    
-    private fun calculateAverageOfN(solves: List<SolveTime>, n: Int): Long? {
-        if (solves.size < n) return null
-        val lastN = solves.takeLast(n)
-        val validSolves = lastN.filter { it.penalty != Penalty.DNF }
-        
-        if (validSolves.size < (n * 0.6).toInt()) return null
-        
-        return validSolves.map { it.displayTime }.average().toLong()
-    }
-    
-    private fun findBestAverageOfN(solves: List<SolveTime>, n: Int): Long? {
-        if (solves.size < n) return null
-        
-        var bestAverage: Long? = null
-        
-        for (i in 0..(solves.size - n)) {
-            val subList = solves.subList(i, i + n)
-            val validSolves = subList.filter { it.penalty != Penalty.DNF }
-            
-            if (validSolves.size >= (n * 0.6).toInt()) {
-                val average = validSolves.map { it.displayTime }.average().toLong()
-                if (bestAverage == null || average < bestAverage) {
-                    bestAverage = average
-                }
-            }
-        }
-        
-        return bestAverage
-    }
-    
     fun resetAppStartTime() {
         appStartTime = System.currentTimeMillis()
     }

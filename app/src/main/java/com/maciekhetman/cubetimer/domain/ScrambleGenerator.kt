@@ -1,5 +1,6 @@
-package com.maciekhetman.cubetimer
+package com.maciekhetman.cubetimer.domain
 
+import com.maciekhetman.cubetimer.model.Mode
 import org.worldcubeassociation.tnoodle.scrambles.PuzzleRegistry
 
 object ScrambleGenerator {

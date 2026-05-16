@@ -40,6 +40,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -52,11 +54,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.maciekhetman.cubetimer.Mode
-import com.maciekhetman.cubetimer.RunningTimerDisplay
-import com.maciekhetman.cubetimer.TimerViewModel
-import com.maciekhetman.cubetimer.TimerAverageOptions
+import com.maciekhetman.cubetimer.model.Mode
+import com.maciekhetman.cubetimer.model.RunningTimerDisplay
+import com.maciekhetman.cubetimer.model.TimerAverageOptions
 import com.maciekhetman.cubetimer.ui.components.CollapsingTopBar
+import com.maciekhetman.cubetimer.viewmodel.TimerViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -578,8 +580,8 @@ private fun SettingSliderRow(
     steps: Int,
     onValueChangeFinished: (Int) -> Unit
 ) {
-    var sliderValue by remember(value) { mutableStateOf(value.toFloat()) }
-    var lastHapticValue by remember(value) { mutableStateOf(value) }
+    var sliderValue by remember(value) { mutableFloatStateOf(value.toFloat()) }
+    var lastHapticValue by remember(value) { mutableIntStateOf(value) }
     val haptic = LocalHapticFeedback.current
     val roundedValue = ((sliderValue / 100f).roundToInt() * 100)
         .coerceIn(valueRange.start.toInt(), valueRange.endInclusive.toInt())

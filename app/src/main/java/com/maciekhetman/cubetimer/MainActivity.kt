@@ -53,10 +53,12 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
+import com.maciekhetman.cubetimer.model.TimerState
 import com.maciekhetman.cubetimer.ui.screens.StatsScreen
 import com.maciekhetman.cubetimer.ui.screens.SettingsScreen
 import com.maciekhetman.cubetimer.ui.screens.TimerScreen
 import com.maciekhetman.cubetimer.ui.theme.CubeTimerTheme
+import com.maciekhetman.cubetimer.viewmodel.TimerViewModel
 
 class MainActivity : ComponentActivity() {
     private lateinit var timerViewModel: TimerViewModel
