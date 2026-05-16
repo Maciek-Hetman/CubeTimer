@@ -10,6 +10,8 @@ A simple Android cubing timer focused on a fast, clean solving flow.
 - Customizable timer, scramble, display, and haptic settings
 
 ## Screenshots
-![Timer screen](/screenshots/timer.png) 
-![Stats screen](/screenshots/stats.png)
-![Settings screen](/screenshots/settings.png)
+<p>
+  <img src="screenshots/timer.png" alt="Timer screen" width="220">
+  <img src="screenshots/stats.png" alt="Stats screen" width="220">
+  <img src="screenshots/settings.png" alt="Settings screen" width="220">
+</p>
