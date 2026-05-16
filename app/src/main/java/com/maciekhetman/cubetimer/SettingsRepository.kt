@@ -16,6 +16,7 @@ class SettingsRepository(private val context: Context) {
     private val SCRAMBLE_SCALE_PERCENT_KEY = intPreferencesKey("scramble_scale_percent")
     private val TIMER_START_DELAY_MILLIS_KEY = intPreferencesKey("timer_start_delay_millis")
     private val TIMER_AVERAGES_KEY = stringPreferencesKey("timer_averages")
+    private val RUNNING_TIMER_DISPLAY_KEY = stringPreferencesKey("running_timer_display")
 
     val dynamicColorEnabledFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[DYNAMIC_COLOR_KEY] ?: false
@@ -43,12 +44,16 @@ class SettingsRepository(private val context: Context) {
     }
 
     val timerAveragesFlow: Flow<Set<Int>> = context.dataStore.data.map { preferences ->
-        val raw = preferences[TIMER_AVERAGES_KEY] ?: "5,12"
+        val raw = preferences[TIMER_AVERAGES_KEY] ?: return@map setOf(5, 12)
         raw.split(",")
             .mapNotNull { it.toIntOrNull() }
             .filter { it in TimerAverageOptions }
             .toSet()
-            .ifEmpty { setOf(5, 12) }
+    }
+
+    val runningTimerDisplayFlow: Flow<RunningTimerDisplay> = context.dataStore.data.map { preferences ->
+        val raw = preferences[RUNNING_TIMER_DISPLAY_KEY] ?: RunningTimerDisplay.FULL.name
+        runCatching { RunningTimerDisplay.valueOf(raw) }.getOrDefault(RunningTimerDisplay.FULL)
     }
 
     suspend fun setDynamicColorEnabled(enabled: Boolean) {
@@ -95,6 +100,18 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
+    suspend fun setRunningTimerDisplay(display: RunningTimerDisplay) {
+        context.dataStore.edit { preferences ->
+            preferences[RUNNING_TIMER_DISPLAY_KEY] = display.name
+        }
+    }
+
 }
 
 val TimerAverageOptions = listOf(5, 12, 25, 50, 100)
+
+enum class RunningTimerDisplay(val displayName: String) {
+    FULL("Show decimals"),
+    SECONDS_ONLY("Hide decimals"),
+    HIDDEN("Hide timer")
+}
