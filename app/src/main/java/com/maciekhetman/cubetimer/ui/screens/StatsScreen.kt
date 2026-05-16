@@ -123,15 +123,7 @@ fun StatsScreen(
                 }
                 
                 item {
-                    PersonalBestsChart(solves = solves)
-                }
-                
-                item {
-                    SectionDivider()
-                }
-                
-                item {
-                    SolveTimesChart(solves = solves)
+                    ChartsSection(solves = solves)
                 }
                 
                 item {
@@ -169,13 +161,8 @@ fun StatsScreen(
                 item {
                     SectionDivider()
                 }
-                
+
                 item {
-                    AveragesChart(solves = solves)
-                }
-                
-                item {
-                    SectionDivider()
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -283,6 +270,24 @@ fun StatsScreen(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun ChartsSection(solves: List<SolveTime>) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SectionHeader(title = "Charts")
+        }
+
+        PersonalBestsChart(solves = solves)
+        SolveTimesChart(solves = solves)
+        AveragesChart(solves = solves)
     }
 }
 
