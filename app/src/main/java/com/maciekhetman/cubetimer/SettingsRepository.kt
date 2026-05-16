@@ -17,6 +17,11 @@ class SettingsRepository(private val context: Context) {
     private val TIMER_START_DELAY_MILLIS_KEY = intPreferencesKey("timer_start_delay_millis")
     private val TIMER_AVERAGES_KEY = stringPreferencesKey("timer_averages")
     private val RUNNING_TIMER_DISPLAY_KEY = stringPreferencesKey("running_timer_display")
+    private val HIDE_SCRAMBLE_DURING_SOLVE_KEY = booleanPreferencesKey("hide_scramble_during_solve")
+    private val HIDE_AVERAGES_DURING_SOLVE_KEY = booleanPreferencesKey("hide_averages_during_solve")
+    private val HIDE_LAST_RESULTS_DURING_SOLVE_KEY = booleanPreferencesKey("hide_last_results_during_solve")
+    private val HIDE_LAST_RESULTS_ON_TIMER_KEY = booleanPreferencesKey("hide_last_results_on_timer")
+    private val FOCUS_MODE_KEY = booleanPreferencesKey("focus_mode")
 
     val dynamicColorEnabledFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[DYNAMIC_COLOR_KEY] ?: false
@@ -54,6 +59,26 @@ class SettingsRepository(private val context: Context) {
     val runningTimerDisplayFlow: Flow<RunningTimerDisplay> = context.dataStore.data.map { preferences ->
         val raw = preferences[RUNNING_TIMER_DISPLAY_KEY] ?: RunningTimerDisplay.FULL.name
         runCatching { RunningTimerDisplay.valueOf(raw) }.getOrDefault(RunningTimerDisplay.FULL)
+    }
+
+    val hideScrambleDuringSolveFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[HIDE_SCRAMBLE_DURING_SOLVE_KEY] ?: false
+    }
+
+    val hideAveragesDuringSolveFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[HIDE_AVERAGES_DURING_SOLVE_KEY] ?: false
+    }
+
+    val hideLastResultsDuringSolveFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[HIDE_LAST_RESULTS_DURING_SOLVE_KEY] ?: false
+    }
+
+    val hideLastResultsOnTimerFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[HIDE_LAST_RESULTS_ON_TIMER_KEY] ?: false
+    }
+
+    val focusModeFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[FOCUS_MODE_KEY] ?: false
     }
 
     suspend fun setDynamicColorEnabled(enabled: Boolean) {
@@ -103,6 +128,36 @@ class SettingsRepository(private val context: Context) {
     suspend fun setRunningTimerDisplay(display: RunningTimerDisplay) {
         context.dataStore.edit { preferences ->
             preferences[RUNNING_TIMER_DISPLAY_KEY] = display.name
+        }
+    }
+
+    suspend fun setHideScrambleDuringSolve(hide: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[HIDE_SCRAMBLE_DURING_SOLVE_KEY] = hide
+        }
+    }
+
+    suspend fun setHideAveragesDuringSolve(hide: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[HIDE_AVERAGES_DURING_SOLVE_KEY] = hide
+        }
+    }
+
+    suspend fun setHideLastResultsDuringSolve(hide: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[HIDE_LAST_RESULTS_DURING_SOLVE_KEY] = hide
+        }
+    }
+
+    suspend fun setHideLastResultsOnTimer(hide: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[HIDE_LAST_RESULTS_ON_TIMER_KEY] = hide
+        }
+    }
+
+    suspend fun setFocusMode(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[FOCUS_MODE_KEY] = enabled
         }
     }
 

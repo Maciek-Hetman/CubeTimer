@@ -78,6 +78,11 @@ fun SettingsScreen(
     val timerStartDelayMillis by viewModel.timerStartDelayMillis.collectAsState()
     val timerAverages by viewModel.timerAverages.collectAsState()
     val runningTimerDisplay by viewModel.runningTimerDisplay.collectAsState()
+    val hideScrambleDuringSolve by viewModel.hideScrambleDuringSolve.collectAsState()
+    val hideAveragesDuringSolve by viewModel.hideAveragesDuringSolve.collectAsState()
+    val hideLastResultsDuringSolve by viewModel.hideLastResultsDuringSolve.collectAsState()
+    val hideLastResultsOnTimer by viewModel.hideLastResultsOnTimer.collectAsState()
+    val focusMode by viewModel.focusMode.collectAsState()
     val allSolves by viewModel.allSolves.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -284,6 +289,46 @@ fun SettingsScreen(
                             )
                         }
                     }
+                    SettingsDivider()
+                    SettingToggleRow(
+                        title = "Focus mode",
+                        checked = focusMode,
+                        onCheckedChange = { enabled ->
+                            viewModel.setFocusMode(enabled)
+                        }
+                    )
+                    SettingsDivider()
+                    SettingToggleRow(
+                        title = "Hide scramble during solve",
+                        checked = hideScrambleDuringSolve,
+                        onCheckedChange = { hide ->
+                            viewModel.setHideScrambleDuringSolve(hide)
+                        }
+                    )
+                    SettingsDivider()
+                    SettingToggleRow(
+                        title = "Hide averages during solve",
+                        checked = hideAveragesDuringSolve,
+                        onCheckedChange = { hide ->
+                            viewModel.setHideAveragesDuringSolve(hide)
+                        }
+                    )
+                    SettingsDivider()
+                    SettingToggleRow(
+                        title = "Hide last results during solve",
+                        checked = hideLastResultsDuringSolve,
+                        onCheckedChange = { hide ->
+                            viewModel.setHideLastResultsDuringSolve(hide)
+                        }
+                    )
+                    SettingsDivider()
+                    SettingToggleRow(
+                        title = "Hide last results on timer",
+                        checked = hideLastResultsOnTimer,
+                        onCheckedChange = { hide ->
+                            viewModel.setHideLastResultsOnTimer(hide)
+                        }
+                    )
                     SettingsDivider()
                     SettingExpandableRow(
                         title = "Bottom averages",

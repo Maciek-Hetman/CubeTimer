@@ -55,7 +55,21 @@ fun TimerScreen(
     val scrambleScalePercent by viewModel.scrambleScalePercent.collectAsState()
     val timerAverages by viewModel.timerAverages.collectAsState()
     val runningTimerDisplay by viewModel.runningTimerDisplay.collectAsState()
+    val hideScrambleDuringSolve by viewModel.hideScrambleDuringSolve.collectAsState()
+    val hideAveragesDuringSolve by viewModel.hideAveragesDuringSolve.collectAsState()
+    val hideLastResultsDuringSolve by viewModel.hideLastResultsDuringSolve.collectAsState()
+    val hideLastResultsOnTimer by viewModel.hideLastResultsOnTimer.collectAsState()
+    val focusMode by viewModel.focusMode.collectAsState()
     val haptic = LocalHapticFeedback.current
+    val isSolving = timerState is TimerState.Running
+    val focusModeActive = focusMode && isSolving
+    val showTopBar = !focusModeActive
+    val showScramble = !isSolving || (!hideScrambleDuringSolve && !focusModeActive)
+    val showAverages = solves.isNotEmpty() && (!isSolving || (!hideAveragesDuringSolve && !focusModeActive))
+    val showLastResults = solves.isNotEmpty() &&
+        !hideLastResultsOnTimer &&
+        (!isSolving || (!hideLastResultsDuringSolve && !focusModeActive))
+    val showBottomContent = showAverages || showLastResults
     
     // Trigger haptic feedback only once when timer starts
     LaunchedEffect(timerState is TimerState.Running) {
@@ -79,37 +93,41 @@ fun TimerScreen(
     }
 
     Column(modifier = modifier.fillMaxSize()) {
-        TopBar(
-            title = "Timer",
-            currentMode = currentMode,
-            onModeSelected = onModeSelected
-        )
+        if (showTopBar) {
+            TopBar(
+                title = "Timer",
+                currentMode = currentMode,
+                onModeSelected = onModeSelected
+            )
+        }
         
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            Column(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                ScrambleDisplay(
-                    scramble = scramble,
-                    onRefresh = { viewModel.generateNewScramble() },
-                    showRefreshButton = showScrambleRefreshButton,
-                    scale = scrambleScalePercent / 100f
-                )
+            if (showScramble) {
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    ScrambleDisplay(
+                        scramble = scramble,
+                        onRefresh = { viewModel.generateNewScramble() },
+                        showRefreshButton = showScrambleRefreshButton,
+                        scale = scrambleScalePercent / 100f
+                    )
+                }
             }
         
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(
-                    top = 100.dp,
-                    bottom = if (solves.isNotEmpty()) 100.dp else 12.dp
+                    top = if (showScramble) 100.dp else 12.dp,
+                    bottom = if (showBottomContent) 100.dp else 12.dp
                 )
                 .then(
                     if (timerState !is TimerState.Finished && recordCelebration == null) {
@@ -136,11 +154,12 @@ fun TimerScreen(
             TimerContent(
                 timerState = timerState,
                 viewModel = viewModel,
-                runningTimerDisplay = runningTimerDisplay
+                runningTimerDisplay = runningTimerDisplay,
+                focusModeActive = focusModeActive
             )
         }
         
-        if (solves.isNotEmpty()) {
+        if (showBottomContent) {
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -148,11 +167,15 @@ fun TimerScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                AveragesDisplay(
-                    solves = solves,
-                    enabledAverages = timerAverages
-                )
-                RecentSolvesDisplay(solves = solves)
+                if (showAverages) {
+                    AveragesDisplay(
+                        solves = solves,
+                        enabledAverages = timerAverages
+                    )
+                }
+                if (showLastResults) {
+                    RecentSolvesDisplay(solves = solves)
+                }
             }
         }        
             // Record celebration overlay
@@ -169,6 +192,7 @@ private fun TimerContent(
     timerState: TimerState,
     viewModel: TimerViewModel,
     runningTimerDisplay: RunningTimerDisplay,
+    focusModeActive: Boolean,
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
@@ -177,7 +201,9 @@ private fun TimerContent(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        if (timerState !is TimerState.Running || runningTimerDisplay != RunningTimerDisplay.HIDDEN) {
+        val showTimerDisplay = timerState !is TimerState.Running ||
+            (!focusModeActive && runningTimerDisplay != RunningTimerDisplay.HIDDEN)
+        if (showTimerDisplay) {
             TimerDisplay(
                 time = when (timerState) {
                     is TimerState.Running -> timerState.elapsedTime
@@ -194,8 +220,8 @@ private fun TimerContent(
                 showDecimals = timerState !is TimerState.Running ||
                     runningTimerDisplay == RunningTimerDisplay.FULL
             )
+            Spacer(modifier = Modifier.height(24.dp))
         }
-        Spacer(modifier = Modifier.height(24.dp))
         when (timerState) {
             is TimerState.Idle -> {
                 Text(

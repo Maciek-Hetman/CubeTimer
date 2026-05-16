@@ -106,6 +106,21 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     private val _runningTimerDisplay = MutableStateFlow(RunningTimerDisplay.FULL)
     val runningTimerDisplay: StateFlow<RunningTimerDisplay> = _runningTimerDisplay.asStateFlow()
 
+    private val _hideScrambleDuringSolve = MutableStateFlow(false)
+    val hideScrambleDuringSolve: StateFlow<Boolean> = _hideScrambleDuringSolve.asStateFlow()
+
+    private val _hideAveragesDuringSolve = MutableStateFlow(false)
+    val hideAveragesDuringSolve: StateFlow<Boolean> = _hideAveragesDuringSolve.asStateFlow()
+
+    private val _hideLastResultsDuringSolve = MutableStateFlow(false)
+    val hideLastResultsDuringSolve: StateFlow<Boolean> = _hideLastResultsDuringSolve.asStateFlow()
+
+    private val _hideLastResultsOnTimer = MutableStateFlow(false)
+    val hideLastResultsOnTimer: StateFlow<Boolean> = _hideLastResultsOnTimer.asStateFlow()
+
+    private val _focusMode = MutableStateFlow(false)
+    val focusMode: StateFlow<Boolean> = _focusMode.asStateFlow()
+
     private val _allSolves = MutableStateFlow<List<SolveTime>>(emptyList())
     val allSolves: StateFlow<List<SolveTime>> = _allSolves.asStateFlow()
     
@@ -181,6 +196,31 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             settingsRepository.runningTimerDisplayFlow.collect { display ->
                 _runningTimerDisplay.value = display
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.hideScrambleDuringSolveFlow.collect { hide ->
+                _hideScrambleDuringSolve.value = hide
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.hideAveragesDuringSolveFlow.collect { hide ->
+                _hideAveragesDuringSolve.value = hide
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.hideLastResultsDuringSolveFlow.collect { hide ->
+                _hideLastResultsDuringSolve.value = hide
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.hideLastResultsOnTimerFlow.collect { hide ->
+                _hideLastResultsOnTimer.value = hide
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.focusModeFlow.collect { enabled ->
+                _focusMode.value = enabled
             }
         }
         // Load saved app time for current mode
@@ -555,6 +595,36 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     fun setRunningTimerDisplay(display: RunningTimerDisplay) {
         viewModelScope.launch {
             settingsRepository.setRunningTimerDisplay(display)
+        }
+    }
+
+    fun setHideScrambleDuringSolve(hide: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setHideScrambleDuringSolve(hide)
+        }
+    }
+
+    fun setHideAveragesDuringSolve(hide: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setHideAveragesDuringSolve(hide)
+        }
+    }
+
+    fun setHideLastResultsDuringSolve(hide: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setHideLastResultsDuringSolve(hide)
+        }
+    }
+
+    fun setHideLastResultsOnTimer(hide: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setHideLastResultsOnTimer(hide)
+        }
+    }
+
+    fun setFocusMode(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setFocusMode(enabled)
         }
     }
 
