@@ -34,6 +34,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
@@ -45,6 +46,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -71,11 +73,14 @@ class MainActivity : ComponentActivity() {
         setContent {
             val dynamicColorEnabled by timerViewModel.dynamicColorEnabled.collectAsState()
             val amoledEnabled by timerViewModel.amoledEnabled.collectAsState()
+            val hapticsEnabled by timerViewModel.hapticsEnabled.collectAsState()
             CubeTimerTheme(
                 dynamicColor = dynamicColorEnabled,
                 amoled = amoledEnabled && !dynamicColorEnabled
             ) {
-                CubeTimerApp(timerViewModel)
+                OptionalHapticsProvider(enabled = hapticsEnabled) {
+                    CubeTimerApp(timerViewModel)
+                }
             }
         }
     }
@@ -89,6 +94,24 @@ class MainActivity : ComponentActivity() {
         super.onPause()
         timerViewModel.updateAppTime()
     }
+}
+
+@Composable
+private fun OptionalHapticsProvider(
+    enabled: Boolean,
+    content: @Composable () -> Unit
+) {
+    if (enabled) {
+        content()
+    } else {
+        CompositionLocalProvider(LocalHapticFeedback provides NoHapticFeedback) {
+            content()
+        }
+    }
+}
+
+private object NoHapticFeedback : HapticFeedback {
+    override fun performHapticFeedback(hapticFeedbackType: HapticFeedbackType) = Unit
 }
 
 @Composable

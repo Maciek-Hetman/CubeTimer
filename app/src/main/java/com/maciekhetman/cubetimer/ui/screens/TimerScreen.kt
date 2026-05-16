@@ -1,5 +1,10 @@
 package com.maciekhetman.cubetimer.ui.screens
 
+import android.content.Context
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -21,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -53,14 +59,17 @@ fun TimerScreen(
     val recordCelebration by viewModel.recordCelebration.collectAsState()
     val showScrambleRefreshButton by viewModel.showScrambleRefreshButton.collectAsState()
     val scrambleScalePercent by viewModel.scrambleScalePercent.collectAsState()
+    val timerStartDelayMillis by viewModel.timerStartDelayMillis.collectAsState()
     val timerAverages by viewModel.timerAverages.collectAsState()
     val runningTimerDisplay by viewModel.runningTimerDisplay.collectAsState()
     val hideScrambleDuringSolve by viewModel.hideScrambleDuringSolve.collectAsState()
     val hideAveragesDuringSolve by viewModel.hideAveragesDuringSolve.collectAsState()
     val hideLastResultsDuringSolve by viewModel.hideLastResultsDuringSolve.collectAsState()
     val hideLastResultsOnTimer by viewModel.hideLastResultsOnTimer.collectAsState()
+    val hapticsEnabled by viewModel.hapticsEnabled.collectAsState()
     val focusMode by viewModel.focusMode.collectAsState()
     val haptic = LocalHapticFeedback.current
+    val context = LocalContext.current
     val isSolving = timerState is TimerState.Running
     val focusModeActive = focusMode && isSolving
     val showTopBar = !focusModeActive
@@ -71,10 +80,38 @@ fun TimerScreen(
         (!isSolving || (!hideLastResultsDuringSolve && !focusModeActive))
     val showBottomContent = showAverages || showLastResults
     
+    val latestTimerState by rememberUpdatedState(timerState)
+
+    LaunchedEffect(timerState is TimerState.Holding, timerStartDelayMillis, hapticsEnabled) {
+        if (timerState is TimerState.Holding && hapticsEnabled) {
+            val holdDuration = timerStartDelayMillis.coerceAtLeast(200)
+            val pulses = listOf(
+                0.14f to 22,
+                0.34f to 44,
+                0.52f to 72,
+                0.68f to 108,
+                0.82f to 148,
+                0.93f to 190
+            )
+            var previousDelay = 0L
+
+            pulses.forEach { (fraction, amplitude) ->
+                val targetDelay = (holdDuration * fraction).toLong()
+                delay(targetDelay - previousDelay)
+                if (latestTimerState !is TimerState.Holding) return@LaunchedEffect
+                vibrateOneShot(context, durationMillis = 8L, amplitude = amplitude)
+                previousDelay = targetDelay
+            }
+        }
+    }
+
     // Trigger haptic feedback only once when timer starts
-    LaunchedEffect(timerState is TimerState.Running) {
-        if (timerState is TimerState.Running) {
-            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+    LaunchedEffect(timerState is TimerState.Running, hapticsEnabled) {
+        if (timerState is TimerState.Running && hapticsEnabled) {
+            val usedVibrator = vibrateOneShot(context, durationMillis = 14L, amplitude = 255)
+            if (!usedVibrator) {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            }
         }
     }
     
@@ -184,6 +221,37 @@ fun TimerScreen(
                 onDismiss = { viewModel.dismissRecordCelebration() }
             )
         }
+    }
+}
+
+private fun vibrateOneShot(
+    context: Context,
+    durationMillis: Long,
+    amplitude: Int
+): Boolean {
+    val vibrator = context.defaultVibrator() ?: return false
+    if (!vibrator.hasVibrator()) return false
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        vibrator.vibrate(
+            VibrationEffect.createOneShot(
+                durationMillis,
+                amplitude.coerceIn(1, 255)
+            )
+        )
+    } else {
+        @Suppress("DEPRECATION")
+        vibrator.vibrate(durationMillis)
+    }
+    return true
+}
+
+private fun Context.defaultVibrator(): Vibrator? {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        getSystemService(VibratorManager::class.java)?.defaultVibrator
+    } else {
+        @Suppress("DEPRECATION")
+        getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
     }
 }
 

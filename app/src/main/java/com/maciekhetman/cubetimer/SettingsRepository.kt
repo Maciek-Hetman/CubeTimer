@@ -22,6 +22,7 @@ class SettingsRepository(private val context: Context) {
     private val HIDE_LAST_RESULTS_DURING_SOLVE_KEY = booleanPreferencesKey("hide_last_results_during_solve")
     private val HIDE_LAST_RESULTS_ON_TIMER_KEY = booleanPreferencesKey("hide_last_results_on_timer")
     private val FOCUS_MODE_KEY = booleanPreferencesKey("focus_mode")
+    private val HAPTICS_ENABLED_KEY = booleanPreferencesKey("haptics_enabled")
 
     val dynamicColorEnabledFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[DYNAMIC_COLOR_KEY] ?: false
@@ -79,6 +80,10 @@ class SettingsRepository(private val context: Context) {
 
     val focusModeFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[FOCUS_MODE_KEY] ?: false
+    }
+
+    val hapticsEnabledFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[HAPTICS_ENABLED_KEY] ?: true
     }
 
     suspend fun setDynamicColorEnabled(enabled: Boolean) {
@@ -158,6 +163,12 @@ class SettingsRepository(private val context: Context) {
     suspend fun setFocusMode(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[FOCUS_MODE_KEY] = enabled
+        }
+    }
+
+    suspend fun setHapticsEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[HAPTICS_ENABLED_KEY] = enabled
         }
     }
 

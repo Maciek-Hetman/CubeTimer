@@ -83,6 +83,7 @@ fun SettingsScreen(
     val hideLastResultsDuringSolve by viewModel.hideLastResultsDuringSolve.collectAsState()
     val hideLastResultsOnTimer by viewModel.hideLastResultsOnTimer.collectAsState()
     val focusMode by viewModel.focusMode.collectAsState()
+    val hapticsEnabled by viewModel.hapticsEnabled.collectAsState()
     val allSolves by viewModel.allSolves.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -330,6 +331,14 @@ fun SettingsScreen(
                         }
                     )
                     SettingsDivider()
+                    SettingToggleRow(
+                        title = "Haptics",
+                        checked = hapticsEnabled,
+                        onCheckedChange = { enabled ->
+                            viewModel.setHapticsEnabled(enabled)
+                        }
+                    )
+                    SettingsDivider()
                     SettingExpandableRow(
                         title = "Bottom averages",
                         valueLabel = timerAveragesLabel(timerAverages),
@@ -570,6 +579,8 @@ private fun SettingSliderRow(
     onValueChangeFinished: (Int) -> Unit
 ) {
     var sliderValue by remember(value) { mutableStateOf(value.toFloat()) }
+    var lastHapticValue by remember(value) { mutableStateOf(value) }
+    val haptic = LocalHapticFeedback.current
     val roundedValue = ((sliderValue / 100f).roundToInt() * 100)
         .coerceIn(valueRange.start.toInt(), valueRange.endInclusive.toInt())
 
@@ -598,9 +609,16 @@ private fun SettingSliderRow(
             value = sliderValue,
             onValueChange = { rawValue ->
                 sliderValue = rawValue
+                val steppedValue = ((rawValue / 100f).roundToInt() * 100)
+                    .coerceIn(valueRange.start.toInt(), valueRange.endInclusive.toInt())
+                if (steppedValue != lastHapticValue) {
+                    lastHapticValue = steppedValue
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                }
             },
             onValueChangeFinished = {
                 sliderValue = roundedValue.toFloat()
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 onValueChangeFinished(roundedValue)
             },
             valueRange = valueRange,

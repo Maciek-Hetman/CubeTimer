@@ -121,6 +121,9 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     private val _focusMode = MutableStateFlow(false)
     val focusMode: StateFlow<Boolean> = _focusMode.asStateFlow()
 
+    private val _hapticsEnabled = MutableStateFlow(true)
+    val hapticsEnabled: StateFlow<Boolean> = _hapticsEnabled.asStateFlow()
+
     private val _allSolves = MutableStateFlow<List<SolveTime>>(emptyList())
     val allSolves: StateFlow<List<SolveTime>> = _allSolves.asStateFlow()
     
@@ -221,6 +224,11 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             settingsRepository.focusModeFlow.collect { enabled ->
                 _focusMode.value = enabled
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.hapticsEnabledFlow.collect { enabled ->
+                _hapticsEnabled.value = enabled
             }
         }
         // Load saved app time for current mode
@@ -625,6 +633,12 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     fun setFocusMode(enabled: Boolean) {
         viewModelScope.launch {
             settingsRepository.setFocusMode(enabled)
+        }
+    }
+
+    fun setHapticsEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setHapticsEnabled(enabled)
         }
     }
 
