@@ -19,6 +19,7 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
@@ -94,104 +95,119 @@ class MainActivity : ComponentActivity() {
 fun CubeTimerApp(viewModel: TimerViewModel) {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.TIMER) }
     val currentMode by viewModel.currentMode.collectAsState()
+    val timerState by viewModel.timerState.collectAsState()
+    val focusMode by viewModel.focusMode.collectAsState()
     val haptic = LocalHapticFeedback.current
+    val isTimerRunning = timerState is TimerState.Running
+    val focusModeActive = focusMode && isTimerRunning
     ApplyStatusBarColor()
 
     // Predictive back navigation support
-    BackHandler(enabled = currentDestination != AppDestinations.TIMER) {
+    BackHandler(enabled = currentDestination != AppDestinations.TIMER && !isTimerRunning) {
         currentDestination = AppDestinations.TIMER
     }
 
-    NavigationSuiteScaffold(
-        navigationSuiteItems = {
-            AppDestinations.entries.forEach {
-                item(
-                    icon = {
-                        Icon(
-                            it.icon,
-                            contentDescription = it.label
-                        )
-                    },
-                    label = { Text(it.label) },
-                    selected = it == currentDestination,
-                    onClick = { 
-                        if (currentDestination != it) {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            currentDestination = it
-                        }
-                    }
+    @Composable
+    fun AppContent(innerPadding: PaddingValues) {
+        val layoutDirection = LocalLayoutDirection.current
+        val contentModifier = Modifier.padding(
+            start = innerPadding.calculateStartPadding(layoutDirection),
+            end = innerPadding.calculateEndPadding(layoutDirection),
+            bottom = innerPadding.calculateBottomPadding(),
+            top = 0.dp
+        )
+
+        AnimatedContent(
+            targetState = currentDestination,
+            transitionSpec = {
+                val springSpec = spring<IntOffset>(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessMediumLow
                 )
+                val fadeSpec = tween<Float>(durationMillis = 180)
+                if (targetState.ordinal > initialState.ordinal) {
+                    (slideInHorizontally(springSpec) { width -> width / 4 } +
+                        fadeIn(fadeSpec) +
+                        scaleIn(initialScale = 0.96f, animationSpec = tween(220)))
+                        .togetherWith(
+                            slideOutHorizontally(springSpec) { width -> -width / 5 } +
+                                fadeOut(fadeSpec) +
+                                scaleOut(targetScale = 0.98f, animationSpec = tween(180))
+                        )
+                } else {
+                    (slideInHorizontally(springSpec) { width -> -width / 4 } +
+                        fadeIn(fadeSpec) +
+                        scaleIn(initialScale = 0.96f, animationSpec = tween(220)))
+                        .togetherWith(
+                            slideOutHorizontally(springSpec) { width -> width / 5 } +
+                                fadeOut(fadeSpec) +
+                                scaleOut(targetScale = 0.98f, animationSpec = tween(180))
+                        )
+                }.using(SizeTransform(clip = false))
+            },
+            label = "screen_transition"
+        ) { destination ->
+            when (destination) {
+                AppDestinations.TIMER -> {
+                    TimerScreen(
+                        viewModel = viewModel,
+                        currentMode = currentMode,
+                        onModeSelected = { mode -> viewModel.setMode(mode) },
+                        modifier = contentModifier
+                    )
+                }
+                AppDestinations.STATS -> {
+                    LaunchedEffect(Unit) {
+                        viewModel.updateAppTime()
+                    }
+                    StatsScreen(
+                        viewModel = viewModel,
+                        currentMode = currentMode,
+                        onModeSelected = { mode -> viewModel.setMode(mode) },
+                        modifier = contentModifier
+                    )
+                }
+                AppDestinations.SETTINGS -> {
+                    SettingsScreen(
+                        viewModel = viewModel,
+                        currentMode = currentMode,
+                        onModeSelected = { mode -> viewModel.setMode(mode) },
+                        modifier = contentModifier
+                    )
+                }
             }
         }
-    ) {
-        Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-            val layoutDirection = LocalLayoutDirection.current
-            val contentModifier = Modifier.padding(
-                start = innerPadding.calculateStartPadding(layoutDirection),
-                end = innerPadding.calculateEndPadding(layoutDirection),
-                bottom = innerPadding.calculateBottomPadding(),
-                top = 0.dp
-            )
+    }
 
-            AnimatedContent(
-                targetState = currentDestination,
-                transitionSpec = {
-                    val springSpec = spring<IntOffset>(
-                        dampingRatio = Spring.DampingRatioNoBouncy,
-                        stiffness = Spring.StiffnessMediumLow
-                    )
-                    val fadeSpec = tween<Float>(durationMillis = 180)
-                    if (targetState.ordinal > initialState.ordinal) {
-                        (slideInHorizontally(springSpec) { width -> width / 4 } +
-                            fadeIn(fadeSpec) +
-                            scaleIn(initialScale = 0.96f, animationSpec = tween(220)))
-                            .togetherWith(
-                                slideOutHorizontally(springSpec) { width -> -width / 5 } +
-                                    fadeOut(fadeSpec) +
-                                    scaleOut(targetScale = 0.98f, animationSpec = tween(180))
+    if (focusModeActive) {
+        Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+            AppContent(innerPadding)
+        }
+    } else {
+        NavigationSuiteScaffold(
+            navigationSuiteItems = {
+                AppDestinations.entries.forEach {
+                    item(
+                        icon = {
+                            Icon(
+                                it.icon,
+                                contentDescription = it.label
                             )
-                    } else {
-                        (slideInHorizontally(springSpec) { width -> -width / 4 } +
-                            fadeIn(fadeSpec) +
-                            scaleIn(initialScale = 0.96f, animationSpec = tween(220)))
-                            .togetherWith(
-                                slideOutHorizontally(springSpec) { width -> width / 5 } +
-                                    fadeOut(fadeSpec) +
-                                    scaleOut(targetScale = 0.98f, animationSpec = tween(180))
-                            )
-                    }.using(SizeTransform(clip = false))
-                },
-                label = "screen_transition"
-            ) { destination ->
-                when (destination) {
-                    AppDestinations.TIMER -> {
-                        TimerScreen(
-                            viewModel = viewModel,
-                            currentMode = currentMode,
-                            onModeSelected = { mode -> viewModel.setMode(mode) },
-                            modifier = contentModifier
-                        )
-                    }
-                    AppDestinations.STATS -> {
-                        LaunchedEffect(Unit) {
-                            viewModel.updateAppTime()
+                        },
+                        label = { Text(it.label) },
+                        selected = it == currentDestination,
+                        onClick = {
+                            if (!isTimerRunning && currentDestination != it) {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                currentDestination = it
+                            }
                         }
-                        StatsScreen(
-                            viewModel = viewModel,
-                            currentMode = currentMode,
-                            onModeSelected = { mode -> viewModel.setMode(mode) },
-                            modifier = contentModifier
-                        )
-                    }
-                    AppDestinations.SETTINGS -> {
-                        SettingsScreen(
-                            viewModel = viewModel,
-                            currentMode = currentMode,
-                            onModeSelected = { mode -> viewModel.setMode(mode) },
-                            modifier = contentModifier
-                        )
-                    }
+                    )
                 }
+            }
+        ) {
+            Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                AppContent(innerPadding)
             }
         }
     }

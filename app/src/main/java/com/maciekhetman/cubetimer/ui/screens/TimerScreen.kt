@@ -196,6 +196,7 @@ private fun TimerContent(
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
+    var showDiscardDialog by remember { mutableStateOf(false) }
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -332,7 +333,7 @@ private fun TimerContent(
                         FilledTonalButton(
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                viewModel.discardSolve()
+                                showDiscardDialog = true
                             },
                             modifier = Modifier
                                 .weight(1f)
@@ -349,6 +350,39 @@ private fun TimerContent(
                 }
             }
         }
+    }
+
+    if (showDiscardDialog) {
+        AlertDialog(
+            onDismissRequest = { showDiscardDialog = false },
+            title = { Text("Discard solve?") },
+            text = { Text("This solve will be removed without saving.") },
+            confirmButton = {
+                FilledTonalButton(
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        showDiscardDialog = false
+                        viewModel.discardSolve()
+                    },
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                ) {
+                    Text("Discard")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        showDiscardDialog = false
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 
