@@ -293,30 +293,22 @@ private fun ChartsSection(solves: List<SolveTime>) {
 
 @Composable
 private fun StatsHeader(solves: List<SolveTime>, appTimeMillis: Long) {
-    val validSolves = solves.filter { it.penalty != Penalty.DNF }
-    val avgTime = if (validSolves.isNotEmpty()) {
-        validSolves.map { it.displayTime }.average()
-    } else 0.0
-    val bestTime = validSolves.minOfOrNull { it.displayTime } ?: 0
-    val worstTime = validSolves.maxOfOrNull { it.displayTime } ?: 0
+    val last100Solves = solves.takeLast(100)
+    val last100ValidSolves = last100Solves.filter { it.penalty != Penalty.DNF }
+    val allValidSolves = solves.filter { it.penalty != Penalty.DNF }
+
+    val last100BestTime = last100ValidSolves.minOfOrNull { it.displayTime }
+    val last100WorstTime = last100ValidSolves.maxOfOrNull { it.displayTime }
+    val last100Ao100 = calculateAverageOfN(last100Solves, 100)
+    val last100MeanTime = calculateMean(last100ValidSolves)
+    val last100StandardDeviation = calculateStandardDeviation(last100ValidSolves)
+
+    val allTimeBestTime = allValidSolves.minOfOrNull { it.displayTime }
+    val allTimeWorstTime = allValidSolves.maxOfOrNull { it.displayTime }
+    val allTimeAverage = calculateAverage(allValidSolves)
+    val allTimeMeanTime = calculateMean(allValidSolves)
+    val allTimeStandardDeviation = calculateStandardDeviation(allValidSolves)
     val totalSolvingTime = solves.sumOf { it.timeInMillis }
-    val meanTime = calculateMean(validSolves)
-    val standardDeviation = calculateStandardDeviation(validSolves)
-    
-    // Calculate sessions and average solves per day
-    val sessions = calculateSessions(solves)
-    val totalSessions = sessions.size
-    
-    val avgSolvesPerDay = if (solves.isNotEmpty()) {
-        val firstSolveDate = solves.first().timestamp
-        val lastSolveDate = solves.last().timestamp
-        val daysDifference = ((lastSolveDate - firstSolveDate) / (1000 * 60 * 60 * 24)).toInt() + 1
-        if (daysDifference > 0) {
-            (solves.size / daysDifference).toString()
-        } else {
-            solves.size.toString()
-        }
-    } else "0"
 
     Column(
         modifier = Modifier
@@ -324,80 +316,108 @@ private fun StatsHeader(solves: List<SolveTime>, appTimeMillis: Long) {
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        SectionHeader(title = "Overview")
-        
+        SectionHeader(title = "Last 100 Solves")
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(StatCardSpacing)
         ) {
             StatCard(
-                label = "Total",
-                value = solves.size.toString(),
-                modifier = Modifier.weight(1f),
-                containerColor = MaterialTheme.colorScheme.primaryContainer
-            )
-            StatCard(
-                label = "Best",
-                value = formatTime(bestTime),
+                label = "Best Time",
+                value = formatOptionalTime(last100BestTime),
                 modifier = Modifier.weight(1f),
                 containerColor = MaterialTheme.colorScheme.secondaryContainer
             )
-        }
-        
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(StatCardSpacing)
-        ) {
             StatCard(
-                label = "Worst",
-                value = formatTime(worstTime),
+                label = "Worst Time",
+                value = formatOptionalTime(last100WorstTime),
                 modifier = Modifier.weight(1f),
                 containerColor = MaterialTheme.colorScheme.tertiaryContainer
             )
-            StatCard(
-                label = "Average",
-                value = formatTime(avgTime.toLong()),
-                modifier = Modifier.weight(1f),
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-            )
         }
-        
+
+        FeaturedStatCard(
+            label = "Ao100",
+            value = formatOptionalTime(last100Ao100),
+            modifier = Modifier.fillMaxWidth(),
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+        )
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(StatCardSpacing)
         ) {
             StatCard(
-                label = "Mean Time",
-                value = formatTime(meanTime),
+                label = "Mean",
+                value = formatTime(last100MeanTime),
                 modifier = Modifier.weight(1f),
                 containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
             )
             StatCard(
                 label = "Std. Deviation",
-                value = formatTime(standardDeviation.toLong()),
+                value = formatTime(last100StandardDeviation.toLong()),
                 modifier = Modifier.weight(1f),
                 containerColor = MaterialTheme.colorScheme.surfaceContainer
             )
         }
-        
+
+        Spacer(modifier = Modifier.height(4.dp))
+        SectionHeader(title = "All Time")
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(StatCardSpacing)
         ) {
             StatCard(
-                label = "Sessions",
-                value = totalSessions.toString(),
+                label = "Best Time",
+                value = formatOptionalTime(allTimeBestTime),
                 modifier = Modifier.weight(1f),
-                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                containerColor = MaterialTheme.colorScheme.secondaryContainer
             )
             StatCard(
-                label = "Avg/Day",
-                value = avgSolvesPerDay,
+                label = "Worst Time",
+                value = formatOptionalTime(allTimeWorstTime),
                 modifier = Modifier.weight(1f),
-                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
+                containerColor = MaterialTheme.colorScheme.tertiaryContainer
             )
         }
-        
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(StatCardSpacing)
+        ) {
+            StatCard(
+                label = "Average",
+                value = formatTime(allTimeAverage),
+                modifier = Modifier.weight(1f),
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+            )
+            StatCard(
+                label = "Mean",
+                value = formatTime(allTimeMeanTime),
+                modifier = Modifier.weight(1f),
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(StatCardSpacing)
+        ) {
+            StatCard(
+                label = "Std. Deviation",
+                value = formatTime(allTimeStandardDeviation.toLong()),
+                modifier = Modifier.weight(1f),
+                containerColor = MaterialTheme.colorScheme.surfaceContainer
+            )
+            StatCard(
+                label = "Total Solves",
+                value = solves.size.toString(),
+                modifier = Modifier.weight(1f),
+                containerColor = MaterialTheme.colorScheme.primaryContainer
+            )
+        }
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(StatCardSpacing)
@@ -1298,6 +1318,49 @@ private fun rangeStartIndex(solveCount: Int, selectedRange: String): Int {
 }
 
 @Composable
+private fun FeaturedStatCard(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    containerColor: Color = MaterialTheme.colorScheme.primaryContainer,
+    contentColor: Color = MaterialTheme.colorScheme.onSurface
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        color = containerColor,
+        contentColor = contentColor,
+        tonalElevation = 0.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.titleMedium,
+                color = contentColor.copy(alpha = 0.85f),
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.displaySmall,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+                color = contentColor,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+
+@Composable
 private fun StatCard(
     label: String,
     value: String,
@@ -1610,6 +1673,10 @@ private fun formatTime(millis: Long): String {
     }
 }
 
+private fun formatOptionalTime(millis: Long?): String {
+    return if (millis != null) formatTime(millis) else "N/A"
+}
+
 private fun formatTimestamp(timestamp: Long): String {
     val sdf = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
     return sdf.format(Date(timestamp))
@@ -1636,6 +1703,12 @@ private fun calculateAverageOfN(solves: List<SolveTime>, n: Int): Long? {
     // Need at least 60% valid solves for official average
     if (validSolves.size < (n * 0.6).toInt()) return null
     
+    return validSolves.map { it.displayTime }.average().toLong()
+}
+
+private fun calculateAverage(solves: List<SolveTime>): Long {
+    val validSolves = solves.filter { it.penalty != Penalty.DNF }
+    if (validSolves.isEmpty()) return 0L
     return validSolves.map { it.displayTime }.average().toLong()
 }
 
