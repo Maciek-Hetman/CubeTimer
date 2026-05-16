@@ -100,6 +100,9 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     private val _timerStartDelayMillis = MutableStateFlow(500)
     val timerStartDelayMillis: StateFlow<Int> = _timerStartDelayMillis.asStateFlow()
 
+    private val _timerAverages = MutableStateFlow(setOf(5, 12))
+    val timerAverages: StateFlow<Set<Int>> = _timerAverages.asStateFlow()
+
     private val _allSolves = MutableStateFlow<List<SolveTime>>(emptyList())
     val allSolves: StateFlow<List<SolveTime>> = _allSolves.asStateFlow()
     
@@ -165,6 +168,11 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             settingsRepository.timerStartDelayMillisFlow.collect { delayMillis ->
                 _timerStartDelayMillis.value = delayMillis
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.timerAveragesFlow.collect { averages ->
+                _timerAverages.value = averages
             }
         }
         // Load saved app time for current mode
@@ -522,6 +530,17 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     fun setTimerStartDelayMillis(delayMillis: Int) {
         viewModelScope.launch {
             settingsRepository.setTimerStartDelayMillis(delayMillis)
+        }
+    }
+
+    fun setTimerAverageEnabled(average: Int, enabled: Boolean) {
+        viewModelScope.launch {
+            val updated = if (enabled) {
+                _timerAverages.value + average
+            } else {
+                _timerAverages.value - average
+            }
+            settingsRepository.setTimerAverages(updated)
         }
     }
 

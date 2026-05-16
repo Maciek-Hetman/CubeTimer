@@ -54,6 +54,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.maciekhetman.cubetimer.Mode
 import com.maciekhetman.cubetimer.TimerViewModel
+import com.maciekhetman.cubetimer.TimerAverageOptions
 import com.maciekhetman.cubetimer.ui.components.CollapsingTopBar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -74,6 +75,7 @@ fun SettingsScreen(
     val showScrambleRefreshButton by viewModel.showScrambleRefreshButton.collectAsState()
     val scrambleScalePercent by viewModel.scrambleScalePercent.collectAsState()
     val timerStartDelayMillis by viewModel.timerStartDelayMillis.collectAsState()
+    val timerAverages by viewModel.timerAverages.collectAsState()
     val allSolves by viewModel.allSolves.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -84,6 +86,7 @@ fun SettingsScreen(
     var defaultModeMenuExpanded by remember { mutableStateOf(false) }
     var importModeMenuExpanded by remember { mutableStateOf(false) }
     var scrambleScaleMenuExpanded by remember { mutableStateOf(false) }
+    var timerAveragesExpanded by remember { mutableStateOf(false) }
     var importMode by remember { mutableStateOf(defaultMode) }
     var hasTouchedImportMode by remember { mutableStateOf(false) }
     var pendingImportJson by remember { mutableStateOf<String?>(null) }
@@ -259,6 +262,27 @@ fun SettingsScreen(
                             viewModel.setTimerStartDelayMillis(delayMillis)
                         }
                     )
+                    SettingsDivider()
+                    SettingExpandableRow(
+                        title = "Bottom averages",
+                        valueLabel = timerAveragesLabel(timerAverages),
+                        expanded = timerAveragesExpanded,
+                        onClick = {
+                            timerAveragesExpanded = !timerAveragesExpanded
+                        }
+                    )
+                    if (timerAveragesExpanded) {
+                        TimerAverageOptions.forEach { average ->
+                            SettingsDivider()
+                            SettingToggleRow(
+                                title = "Show Ao$average",
+                                checked = average in timerAverages,
+                                onCheckedChange = { checked ->
+                                    viewModel.setTimerAverageEnabled(average, checked)
+                                }
+                            )
+                        }
+                    }
                 }
             }
 
@@ -561,6 +585,43 @@ private fun SettingActionRow(
 }
 
 @Composable
+private fun SettingExpandableRow(
+    title: String,
+    valueLabel: String,
+    expanded: Boolean,
+    onClick: () -> Unit
+) {
+    val haptic = LocalHapticFeedback.current
+    SettingsRow(
+        title = title,
+        trailingContent = {
+            FilledTonalButton(
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onClick()
+                },
+                contentPadding = PaddingValues(
+                    start = 12.dp,
+                    top = 8.dp,
+                    end = 8.dp,
+                    bottom = 8.dp
+                )
+            ) {
+                Text(
+                    text = valueLabel,
+                    textAlign = TextAlign.End
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Icon(
+                    imageVector = Icons.Default.ArrowDropDown,
+                    contentDescription = if (expanded) "Collapse" else "Expand"
+                )
+            }
+        }
+    )
+}
+
+@Composable
 private fun SettingMenuRow(
     title: String,
     valueLabel: String,
@@ -611,5 +672,16 @@ private fun SettingMenuRow(
 }
 
 private val ScrambleScaleOptions = listOf(80, 90, 100, 110, 120, 130, 140)
+
+private fun timerAveragesLabel(averages: Set<Int>): String {
+    val selected = TimerAverageOptions
+        .filter { it in averages }
+
+    return when {
+        selected.isEmpty() -> "None"
+        selected.size <= 2 -> selected.joinToString(", ") { "Ao$it" }
+        else -> "${selected.size} selected"
+    }
+}
 
 

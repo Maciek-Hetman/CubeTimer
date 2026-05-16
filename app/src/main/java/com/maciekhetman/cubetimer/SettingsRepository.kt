@@ -15,6 +15,7 @@ class SettingsRepository(private val context: Context) {
     private val SHOW_SCRAMBLE_REFRESH_KEY = booleanPreferencesKey("show_scramble_refresh_button")
     private val SCRAMBLE_SCALE_PERCENT_KEY = intPreferencesKey("scramble_scale_percent")
     private val TIMER_START_DELAY_MILLIS_KEY = intPreferencesKey("timer_start_delay_millis")
+    private val TIMER_AVERAGES_KEY = stringPreferencesKey("timer_averages")
 
     val dynamicColorEnabledFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[DYNAMIC_COLOR_KEY] ?: false
@@ -39,6 +40,15 @@ class SettingsRepository(private val context: Context) {
 
     val timerStartDelayMillisFlow: Flow<Int> = context.dataStore.data.map { preferences ->
         preferences[TIMER_START_DELAY_MILLIS_KEY] ?: 500
+    }
+
+    val timerAveragesFlow: Flow<Set<Int>> = context.dataStore.data.map { preferences ->
+        val raw = preferences[TIMER_AVERAGES_KEY] ?: "5,12"
+        raw.split(",")
+            .mapNotNull { it.toIntOrNull() }
+            .filter { it in TimerAverageOptions }
+            .toSet()
+            .ifEmpty { setOf(5, 12) }
     }
 
     suspend fun setDynamicColorEnabled(enabled: Boolean) {
@@ -77,4 +87,14 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
+    suspend fun setTimerAverages(averages: Set<Int>) {
+        context.dataStore.edit { preferences ->
+            preferences[TIMER_AVERAGES_KEY] = TimerAverageOptions
+                .filter { it in averages }
+                .joinToString(",")
+        }
+    }
+
 }
+
+val TimerAverageOptions = listOf(5, 12, 25, 50, 100)

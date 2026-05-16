@@ -39,6 +39,7 @@ import com.maciekhetman.cubetimer.RecordType
 import com.maciekhetman.cubetimer.SolveTime
 import com.maciekhetman.cubetimer.TimerState
 import com.maciekhetman.cubetimer.TimerViewModel
+import com.maciekhetman.cubetimer.TimerAverageOptions
 import com.maciekhetman.cubetimer.ui.components.TopBar
 import kotlinx.coroutines.delay
 import kotlin.random.Random
@@ -56,6 +57,7 @@ fun TimerScreen(
     val recordCelebration by viewModel.recordCelebration.collectAsState()
     val showScrambleRefreshButton by viewModel.showScrambleRefreshButton.collectAsState()
     val scrambleScalePercent by viewModel.scrambleScalePercent.collectAsState()
+    val timerAverages by viewModel.timerAverages.collectAsState()
     val haptic = LocalHapticFeedback.current
     
     // Trigger haptic feedback only once when timer starts
@@ -148,7 +150,10 @@ fun TimerScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                AveragesDisplay(solves = solves)
+                AveragesDisplay(
+                    solves = solves,
+                    enabledAverages = timerAverages
+                )
                 RecentSolvesDisplay(solves = solves)
             }
         }        
@@ -344,25 +349,18 @@ private fun TimerDisplay(
 @Composable
 private fun AveragesDisplay(
     solves: List<SolveTime>,
+    enabledAverages: Set<Int>,
     modifier: Modifier = Modifier
 ) {
-    val ao5 = if (solves.size >= 5) {
-        val last5 = solves.takeLast(5)
-        val validLast5 = last5.filter { it.penalty != Penalty.DNF }
-        if (validLast5.size >= 3) {
-            validLast5.map { it.displayTime }.average().toLong()
-        } else null
-    } else null
-    
-    val ao12 = if (solves.size >= 12) {
-        val last12 = solves.takeLast(12)
-        val validLast12 = last12.filter { it.penalty != Penalty.DNF }
-        if (validLast12.size >= 10) {
-            validLast12.map { it.displayTime }.average().toLong()
-        } else null
-    } else null
+    val averages = TimerAverageOptions
+        .filter { it in enabledAverages }
+        .mapNotNull { count ->
+            calculateTimerAverage(solves, count)?.let { average ->
+                count to average
+            }
+        }
 
-    if (ao5 == null && ao12 == null) {
+    if (averages.isEmpty()) {
         return
     }
 
@@ -371,18 +369,39 @@ private fun AveragesDisplay(
         color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.7f),
         shape = MaterialTheme.shapes.large
     ) {
-        Row(
+        Column(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(24.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            if (ao5 != null) {
-                AverageStat(label = "Ao5", time = ao5)
-            }
-            if (ao12 != null) {
-                AverageStat(label = "Ao12", time = ao12)
+            averages.chunked(3).forEach { row ->
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(24.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    row.forEach { (count, average) ->
+                        AverageStat(label = "Ao$count", time = average)
+                    }
+                }
             }
         }
     }
+}
+
+private fun calculateTimerAverage(solves: List<SolveTime>, count: Int): Long? {
+    if (solves.size < count) return null
+
+    val lastSolves = solves.takeLast(count)
+    val validSolves = lastSolves.filter { it.penalty != Penalty.DNF }
+    val minimumValidSolves = when (count) {
+        5 -> 3
+        12 -> 10
+        else -> (count * 0.6f).toInt()
+    }
+
+    if (validSolves.size < minimumValidSolves) return null
+
+    return validSolves.map { it.displayTime }.average().toLong()
 }
 
 @Composable
