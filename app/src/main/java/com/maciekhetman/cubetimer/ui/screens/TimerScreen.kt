@@ -36,6 +36,7 @@ import com.maciekhetman.cubetimer.Mode
 import com.maciekhetman.cubetimer.Penalty
 import com.maciekhetman.cubetimer.RecordCelebration
 import com.maciekhetman.cubetimer.RecordType
+import com.maciekhetman.cubetimer.RunningTimerDisplay
 import com.maciekhetman.cubetimer.SolveTime
 import com.maciekhetman.cubetimer.TimerState
 import com.maciekhetman.cubetimer.TimerViewModel
@@ -58,6 +59,7 @@ fun TimerScreen(
     val showScrambleRefreshButton by viewModel.showScrambleRefreshButton.collectAsState()
     val scrambleScalePercent by viewModel.scrambleScalePercent.collectAsState()
     val timerAverages by viewModel.timerAverages.collectAsState()
+    val runningTimerDisplay by viewModel.runningTimerDisplay.collectAsState()
     val haptic = LocalHapticFeedback.current
     
     // Trigger haptic feedback only once when timer starts
@@ -138,7 +140,8 @@ fun TimerScreen(
         ) {
             TimerContent(
                 timerState = timerState,
-                viewModel = viewModel
+                viewModel = viewModel,
+                runningTimerDisplay = runningTimerDisplay
             )
         }
         
@@ -170,6 +173,7 @@ fun TimerScreen(
 private fun TimerContent(
     timerState: TimerState,
     viewModel: TimerViewModel,
+    runningTimerDisplay: RunningTimerDisplay,
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
@@ -178,20 +182,24 @@ private fun TimerContent(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        TimerDisplay(
-            time = when (timerState) {
-                is TimerState.Running -> timerState.elapsedTime
-                is TimerState.Finished -> timerState.time
-                else -> 0
-            },
-            color = when (timerState) {
-                is TimerState.Holding -> MaterialTheme.colorScheme.error
-                is TimerState.Ready -> MaterialTheme.colorScheme.primary
-                is TimerState.Running -> MaterialTheme.colorScheme.primary
-                is TimerState.Finished -> MaterialTheme.colorScheme.primary
-                else -> MaterialTheme.colorScheme.onBackground
-            }
-        )
+        if (timerState !is TimerState.Running || runningTimerDisplay != RunningTimerDisplay.HIDDEN) {
+            TimerDisplay(
+                time = when (timerState) {
+                    is TimerState.Running -> timerState.elapsedTime
+                    is TimerState.Finished -> timerState.time
+                    else -> 0
+                },
+                color = when (timerState) {
+                    is TimerState.Holding -> MaterialTheme.colorScheme.error
+                    is TimerState.Ready -> MaterialTheme.colorScheme.primary
+                    is TimerState.Running -> MaterialTheme.colorScheme.primary
+                    is TimerState.Finished -> MaterialTheme.colorScheme.primary
+                    else -> MaterialTheme.colorScheme.onBackground
+                },
+                showDecimals = timerState !is TimerState.Running ||
+                    runningTimerDisplay == RunningTimerDisplay.FULL
+            )
+        }
         Spacer(modifier = Modifier.height(24.dp))
         when (timerState) {
             is TimerState.Idle -> {
@@ -311,6 +319,7 @@ private fun TimerContent(
 private fun TimerDisplay(
     time: Long,
     color: Color,
+    showDecimals: Boolean,
     modifier: Modifier = Modifier
 ) {
     val totalSeconds = time / 1000
@@ -336,13 +345,15 @@ private fun TimerDisplay(
             fontWeight = FontWeight.Bold,
             color = color
         )
-        Text(
-            text = millisecondsText,
-            fontSize = 64.sp,
-            fontWeight = FontWeight.Bold,
-            color = color,
-            modifier = Modifier.padding(bottom = 4.dp)
-        )
+        if (showDecimals) {
+            Text(
+                text = millisecondsText,
+                fontSize = 64.sp,
+                fontWeight = FontWeight.Bold,
+                color = color,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+        }
     }
 }
 

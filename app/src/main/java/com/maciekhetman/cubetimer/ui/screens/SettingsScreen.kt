@@ -53,6 +53,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.maciekhetman.cubetimer.Mode
+import com.maciekhetman.cubetimer.RunningTimerDisplay
 import com.maciekhetman.cubetimer.TimerViewModel
 import com.maciekhetman.cubetimer.TimerAverageOptions
 import com.maciekhetman.cubetimer.ui.components.CollapsingTopBar
@@ -76,6 +77,7 @@ fun SettingsScreen(
     val scrambleScalePercent by viewModel.scrambleScalePercent.collectAsState()
     val timerStartDelayMillis by viewModel.timerStartDelayMillis.collectAsState()
     val timerAverages by viewModel.timerAverages.collectAsState()
+    val runningTimerDisplay by viewModel.runningTimerDisplay.collectAsState()
     val allSolves by viewModel.allSolves.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -86,6 +88,7 @@ fun SettingsScreen(
     var defaultModeMenuExpanded by remember { mutableStateOf(false) }
     var importModeMenuExpanded by remember { mutableStateOf(false) }
     var scrambleScaleMenuExpanded by remember { mutableStateOf(false) }
+    var runningTimerDisplayMenuExpanded by remember { mutableStateOf(false) }
     var timerAveragesExpanded by remember { mutableStateOf(false) }
     var importMode by remember { mutableStateOf(defaultMode) }
     var hasTouchedImportMode by remember { mutableStateOf(false) }
@@ -262,6 +265,25 @@ fun SettingsScreen(
                             viewModel.setTimerStartDelayMillis(delayMillis)
                         }
                     )
+                    SettingsDivider()
+                    SettingMenuRow(
+                        title = "During solve",
+                        valueLabel = runningTimerDisplay.displayName,
+                        onClick = { runningTimerDisplayMenuExpanded = true },
+                        menuExpanded = runningTimerDisplayMenuExpanded,
+                        onDismissMenu = { runningTimerDisplayMenuExpanded = false }
+                    ) {
+                        RunningTimerDisplay.entries.forEach { display ->
+                            DropdownMenuItem(
+                                text = { Text(display.displayName) },
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    runningTimerDisplayMenuExpanded = false
+                                    viewModel.setRunningTimerDisplay(display)
+                                }
+                            )
+                        }
+                    }
                     SettingsDivider()
                     SettingExpandableRow(
                         title = "Bottom averages",

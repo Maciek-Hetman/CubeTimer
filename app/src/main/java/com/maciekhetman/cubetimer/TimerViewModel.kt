@@ -103,6 +103,9 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     private val _timerAverages = MutableStateFlow(setOf(5, 12))
     val timerAverages: StateFlow<Set<Int>> = _timerAverages.asStateFlow()
 
+    private val _runningTimerDisplay = MutableStateFlow(RunningTimerDisplay.FULL)
+    val runningTimerDisplay: StateFlow<RunningTimerDisplay> = _runningTimerDisplay.asStateFlow()
+
     private val _allSolves = MutableStateFlow<List<SolveTime>>(emptyList())
     val allSolves: StateFlow<List<SolveTime>> = _allSolves.asStateFlow()
     
@@ -173,6 +176,11 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             settingsRepository.timerAveragesFlow.collect { averages ->
                 _timerAverages.value = averages
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.runningTimerDisplayFlow.collect { display ->
+                _runningTimerDisplay.value = display
             }
         }
         // Load saved app time for current mode
@@ -541,6 +549,12 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
                 _timerAverages.value - average
             }
             settingsRepository.setTimerAverages(updated)
+        }
+    }
+
+    fun setRunningTimerDisplay(display: RunningTimerDisplay) {
+        viewModelScope.launch {
+            settingsRepository.setRunningTimerDisplay(display)
         }
     }
 
