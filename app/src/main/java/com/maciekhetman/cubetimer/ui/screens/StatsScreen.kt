@@ -85,24 +85,18 @@ fun StatsScreen(
                 )
             }
         } else {
-            val collapsedFraction = scrollBehavior.state.collapsedFraction
-            val topPadding = paddingValues.calculateTopPadding() * (1f - collapsedFraction)
             val startPadding = paddingValues.calculateStartPadding(layoutDirection)
             val endPadding = paddingValues.calculateEndPadding(layoutDirection)
             val bottomPadding = paddingValues.calculateBottomPadding()
 
             LazyColumn(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(
-                        start = startPadding,
-                        top = topPadding,
-                        end = endPadding,
-                        bottom = bottomPadding
-                    ),
+                    .fillMaxSize(),
                 contentPadding = PaddingValues(
-                    top = 8.dp,
-                    bottom = 24.dp
+                    start = startPadding,
+                    top = paddingValues.calculateTopPadding() + 8.dp,
+                    end = endPadding,
+                    bottom = bottomPadding + 24.dp
                 ),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
