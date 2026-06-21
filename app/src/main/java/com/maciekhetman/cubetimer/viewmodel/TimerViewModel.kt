@@ -13,7 +13,6 @@ import com.maciekhetman.cubetimer.model.RecordCelebration
 import com.maciekhetman.cubetimer.model.RecordType
 import com.maciekhetman.cubetimer.model.RunningTimerDisplay
 import com.maciekhetman.cubetimer.model.SolveTime
-import com.maciekhetman.cubetimer.model.TimerAverageOptions
 import com.maciekhetman.cubetimer.model.TimerState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -23,9 +22,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.launch
-import org.json.JSONArray
-import org.json.JSONObject
-import java.util.Locale
+import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class TimerViewModel(application: Application) : AndroidViewModel(application) {
@@ -200,7 +197,7 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onPressStart() {
-        when (val currentState = _timerState.value) {
+        when (_timerState.value) {
             is TimerState.Idle -> {
                 startHoldTimer()
             }
@@ -220,7 +217,7 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onPressRelease() {
-        when (val state = _timerState.value) {
+        when (_timerState.value) {
             is TimerState.Holding -> {
                 holdJob?.cancel()
                 _timerState.value = TimerState.Idle
@@ -241,7 +238,7 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
             var elapsed = 0L
 
             while (elapsed < holdDuration) {
-                delay(updateInterval)
+                delay(updateInterval.milliseconds)
                 elapsed += updateInterval
                 val progress = (elapsed.toFloat() / holdDuration).coerceIn(0f, 1f)
                 _timerState.value = TimerState.Holding(progress)
@@ -258,7 +255,7 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         timerJob?.cancel()
         timerJob = viewModelScope.launch {
             while (true) {
-                delay(10)
+                delay(10.milliseconds)
                 val elapsed = System.currentTimeMillis() - startTime
                 _timerState.value = TimerState.Running(elapsed)
             }
@@ -335,170 +332,6 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         _solves.value = newAllSolves.filter { it.mode == _currentMode.value }
         viewModelScope.launch {
             repository.saveSolves(newAllSolves)
-        }
-    }
-
-    fun exportSolvesAsCsTimerJson(): String {
-        val sessionsByMode = _allSolves.value.groupBy { it.mode }
-        val root = JSONObject()
-        val sessionModes = JSONObject()
-        var sessionIndex = 1
-        sessionsByMode.forEach { (mode, modeSolves) ->
-            if (modeSolves.isEmpty()) return@forEach
-            val sessionKey = "session$sessionIndex"
-            val sessionArray = JSONArray()
-            modeSolves.sortedBy { it.timestamp }.forEach { solve ->
-                val penaltyCode = when (solve.penalty) {
-                    Penalty.NONE -> 0
-                    Penalty.PLUS_TWO -> 1
-                    Penalty.DNF -> 2
-                }
-                val meta = JSONArray()
-                    .put(penaltyCode)
-                    .put(solve.timeInMillis)
-                val entry = JSONArray()
-                    .put(meta)
-                    .put(solve.scramble)
-                    .put("")
-                    .put(solve.timestamp / 1000)
-                sessionArray.put(entry)
-            }
-            root.put(sessionKey, sessionArray)
-            sessionModes.put(sessionKey, mode.name)
-            sessionIndex += 1
-        }
-        root.put("cubetimer_session_modes", sessionModes)
-        return root.toString()
-    }
-
-    fun detectCsTimerMode(json: String): Mode? {
-        return runCatching {
-            val root = JSONObject(json)
-            detectModeFromCsTimerJson(root)
-        }.getOrNull()
-    }
-
-    fun importSolvesFromCsTimerJson(
-        json: String,
-        fallbackMode: Mode,
-        replaceExisting: Boolean
-    ): Result<Int> {
-        return runCatching {
-            val root = JSONObject(json)
-            val detectedMode = detectModeFromCsTimerJson(root)
-            if (detectedMode != null && detectedMode != fallbackMode) {
-                throw IllegalArgumentException(
-                    "Detected ${detectedMode.displayName} data, but ${fallbackMode.displayName} was selected."
-                )
-            }
-            val imported = mutableListOf<SolveTime>()
-            val sessionModes = root.optJSONObject("cubetimer_session_modes")
-            val keys = root.keys()
-            while (keys.hasNext()) {
-                val key = keys.next()
-                if (!key.startsWith("session")) continue
-                val sessionArray = root.optJSONArray(key) ?: continue
-                val sessionMode = sessionModes
-                    ?.optString(key)
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let { raw -> runCatching { Mode.valueOf(raw) }.getOrNull() }
-                    ?: fallbackMode
-                for (i in 0 until sessionArray.length()) {
-                    val entry = sessionArray.optJSONArray(i) ?: continue
-                    val meta = entry.optJSONArray(0) ?: continue
-                    val penaltyCode = meta.optInt(0, 0)
-                    val timeMs = meta.optLong(1, 0L)
-                    if (timeMs <= 0L) continue
-                    val scramble = entry.optString(1, "")
-                    val timestampSeconds = entry.optLong(3, System.currentTimeMillis() / 1000)
-                    val penalty = when (penaltyCode) {
-                        1 -> Penalty.PLUS_TWO
-                        2 -> Penalty.DNF
-                        else -> Penalty.NONE
-                    }
-                    imported.add(
-                        SolveTime(
-                            timeInMillis = timeMs,
-                            penalty = penalty,
-                            timestamp = timestampSeconds * 1000,
-                            scramble = scramble,
-                            mode = sessionMode
-                        )
-                    )
-                }
-            }
-
-            if (imported.isEmpty()) return@runCatching 0
-
-            val merged = if (replaceExisting) {
-                val preserved = _allSolves.value.filter { it.mode != fallbackMode }
-                preserved + imported
-            } else {
-                _allSolves.value + imported
-            }
-            val deduped = merged
-                .sortedBy { it.timestamp }
-                .distinctBy {
-                "${it.timestamp}_${it.timeInMillis}_${it.penalty}_${it.mode}_${it.scramble}"
-                }
-            _allSolves.value = deduped
-            _solves.value = deduped.filter { it.mode == _currentMode.value }
-            viewModelScope.launch {
-                repository.saveSolves(deduped)
-            }
-            imported.size
-        }
-    }
-
-    private fun detectModeFromCsTimerJson(root: JSONObject): Mode? {
-        val explicitMode = root.optString("cubetimer_mode", "")
-        runCatching { Mode.valueOf(explicitMode) }.getOrNull()?.let { return it }
-
-        val directScrType = root.optString("scrType", "")
-        parseScrambleType(directScrType)?.let { return it }
-        val directPuzzle = root.optString("puzzle", "")
-        parseScrambleType(directPuzzle)?.let { return it }
-
-        val candidates = mutableListOf<String>()
-        collectScrTypeValues(root, candidates)
-        return candidates.asSequence()
-            .mapNotNull { parseScrambleType(it) }
-            .firstOrNull()
-    }
-
-    private fun collectScrTypeValues(value: Any?, results: MutableList<String>) {
-        when (value) {
-            is JSONObject -> {
-                val keys = value.keys()
-                while (keys.hasNext()) {
-                    val key = keys.next()
-                    if (key.equals("scrType", ignoreCase = true) ||
-                        key.equals("scrambleType", ignoreCase = true) ||
-                        key.equals("puzzle", ignoreCase = true)
-                    ) {
-                        results.add(value.optString(key))
-                    }
-                    collectScrTypeValues(value.opt(key), results)
-                }
-            }
-            is JSONArray -> {
-                for (i in 0 until value.length()) {
-                    collectScrTypeValues(value.opt(i), results)
-                }
-            }
-        }
-    }
-
-    private fun parseScrambleType(raw: String): Mode? {
-        val value = raw.lowercase(Locale.ROOT)
-        return when {
-            value.contains("333") || value.contains("3x3") -> Mode.CUBE_3x3
-            value.contains("222") || value.contains("2x2") -> Mode.CUBE_2x2
-            value.contains("444") || value.contains("4x4") -> Mode.CUBE_4x4
-            value.contains("555") || value.contains("5x5") -> Mode.CUBE_5x5
-            value.contains("pyr") -> Mode.PYRAMINX
-            value.contains("minx") || value.contains("mega") -> Mode.MEGAMINX
-            else -> null
         }
     }
 
