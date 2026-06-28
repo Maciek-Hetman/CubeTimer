@@ -1013,7 +1013,7 @@ private fun SolveTimesChart(solves: List<SolveTime>) {
                     )
                 }
             } else {
-                val smoothed = visibleSolves.mapIndexed { visibleIndex, (solveIndex, solve) ->
+                val smoothed = visibleSolves.mapIndexed { visibleIndex, (solveIndex, _) ->
                     val windowStart = (visibleIndex - 2).coerceAtLeast(0)
                     val windowEnd = (visibleIndex + 2).coerceAtMost(visibleSolves.lastIndex)
                     val average = visibleSolves
@@ -1430,8 +1430,8 @@ private fun AverageCard(
                 contentAlignment = Alignment.Center
             ) {
                 val fontSize = when {
-                    maxWidth < 120.dp -> 18.sp
-                    maxWidth < 150.dp -> 22.sp
+                    this.maxWidth < 120.dp -> 18.sp
+                    this.maxWidth < 150.dp -> 22.sp
                     else -> 28.sp
                 }
                 Text(

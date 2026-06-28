@@ -46,6 +46,7 @@ import com.maciekhetman.cubetimer.model.TimerAverageOptions
 import com.maciekhetman.cubetimer.model.TimerState
 import com.maciekhetman.cubetimer.ui.components.TopBar
 import com.maciekhetman.cubetimer.viewmodel.TimerViewModel
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.delay
 
 @Composable
@@ -84,8 +85,8 @@ fun TimerScreen(
     
     val latestTimerState by rememberUpdatedState(timerState)
 
-    LaunchedEffect(timerState is TimerState.Holding, timerStartDelayMillis, hapticsEnabled) {
-        if (timerState is TimerState.Holding && hapticsEnabled) {
+    LaunchedEffect((timerState is TimerState.Holding), timerStartDelayMillis, hapticsEnabled) {
+        if ((timerState is TimerState.Holding) && hapticsEnabled) {
             val holdDuration = timerStartDelayMillis.coerceAtLeast(200)
             val pulses = listOf(
                 0.14f to 22,
@@ -99,7 +100,7 @@ fun TimerScreen(
 
             pulses.forEach { (fraction, amplitude) ->
                 val targetDelay = (holdDuration * fraction).toLong()
-                delay(targetDelay - previousDelay)
+                delay((targetDelay - previousDelay).milliseconds)
                 if (latestTimerState !is TimerState.Holding) return@LaunchedEffect
                 vibrateOneShot(context, durationMillis = 8L, amplitude = amplitude)
                 previousDelay = targetDelay
@@ -122,10 +123,10 @@ fun TimerScreen(
         if (recordCelebration != null) {
             // First strong pulse
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-            delay(100)
+            delay(100.milliseconds)
             // Second pulse
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-            delay(100)
+            delay(100.milliseconds)
             // Third pulse
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
         }
@@ -219,9 +220,8 @@ fun TimerScreen(
         }        
             // Record celebration overlay
             RecordCelebrationOverlay(
-                celebration = recordCelebration,
-                onDismiss = { viewModel.dismissRecordCelebration() }
-            )
+                celebration = recordCelebration
+            ) { viewModel.dismissRecordCelebration() }
         }
     }
 }
@@ -272,7 +272,7 @@ private fun TimerContent(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        val showTimerDisplay = timerState !is TimerState.Running ||
+        val showTimerDisplay = (timerState !is TimerState.Running) ||
             (!focusModeActive && runningTimerDisplay != RunningTimerDisplay.HIDDEN)
         if (showTimerDisplay) {
             TimerDisplay(
@@ -494,12 +494,14 @@ private fun AveragesDisplay(
     modifier: Modifier = Modifier
 ) {
     val averages = TimerAverageOptions
+        .asSequence()
         .filter { it in enabledAverages }
         .mapNotNull { count ->
             AverageCalculator.averageOfN(solves, count)?.let { average ->
                 count to average
             }
         }
+        .toList()
 
     if (averages.isEmpty()) {
         return
@@ -556,37 +558,43 @@ private fun RecentSolvesDisplay(
     solves: List<SolveTime>,
     modifier: Modifier = Modifier
 ) {
-    val recentSolves = solves.takeLast(5).reversed()
-    
-    BoxWithConstraints(modifier = modifier) {
-        val availableWidth = maxWidth
+    val recentSolves = remember(solves) {
+        solves.takeLast(5).reversed()
+    }
+
+    if (recentSolves.isEmpty()) return
+
+    BoxWithConstraints(
+        modifier = modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center
+    ) {
         val itemCount = recentSolves.size
-        val spacing = 12.dp * (itemCount - 1)
-        val horizontalPadding = 16.dp // Total padding (8dp per item)
-        val availableForItems = availableWidth - spacing - horizontalPadding
-        val itemWidth = availableForItems / itemCount
+        val availableWidth = this.maxWidth
         
-        // Calculate dynamic font size based on available width
+        val itemSpacing = 12.dp
+        val totalSpacing = itemSpacing * (itemCount - 1)
+        val estimatedItemWidth = (availableWidth - totalSpacing) / itemCount
+
         val dynamicFontSize = when {
-            itemWidth < 50.dp -> 9.sp
-            itemWidth < 60.dp -> 10.sp
+            estimatedItemWidth < 50.dp -> 9.sp
+            estimatedItemWidth < 60.dp -> 10.sp
             else -> 11.sp
         }
-        
+
         val dynamicHorizontalPadding = when {
-            itemWidth < 50.dp -> 4.dp
-            itemWidth < 60.dp -> 5.dp
+            estimatedItemWidth < 50.dp -> 4.dp
+            estimatedItemWidth < 60.dp -> 5.dp
             else -> 6.dp
         }
-        
+
         Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(itemSpacing, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             recentSolves.forEach { solve ->
                 Surface(
                     shape = MaterialTheme.shapes.small,
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                    modifier = Modifier.padding(horizontal = 2.dp)
                 ) {
                     Text(
                         text = formatDisplayTime(solve.displayTime),
@@ -598,7 +606,10 @@ private fun RecentSolvesDisplay(
                             Penalty.PLUS_TWO -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.8f)
                             Penalty.NONE -> MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
                         },
-                        modifier = Modifier.padding(horizontal = dynamicHorizontalPadding, vertical = 2.dp)
+                        modifier = Modifier.padding(
+                            horizontal = dynamicHorizontalPadding,
+                            vertical = 2.dp
+                        )
                     )
                 }
             }
