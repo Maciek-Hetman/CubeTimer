@@ -1747,7 +1747,6 @@ private data class SessionStats(
     val sessionAverage: Long,
     val meanSolveTime: Long,
     val standardDeviation: Double,
-    val totalSessions: Int,
     val avgTimeCubingInSession: Long
 )
 
@@ -1779,7 +1778,6 @@ private fun calculateSessionStats(solves: List<SolveTime>): SessionStats? {
         sessionAverage = sessionAverages.average().toLong(),
         meanSolveTime = calculateMean(allValidSolves),
         standardDeviation = calculateStandardDeviation(allValidSolves),
-        totalSessions = sessions.size,
         avgTimeCubingInSession = avgTimeCubingInSession
     )
 }

@@ -78,7 +78,6 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     val hapticsEnabled: StateFlow<Boolean> = _hapticsEnabled.asStateFlow()
 
     private val _allSolves = MutableStateFlow<List<SolveTime>>(emptyList())
-    val allSolves: StateFlow<List<SolveTime>> = _allSolves.asStateFlow()
     
     private val _solves = MutableStateFlow<List<SolveTime>>(emptyList())
     val solves: StateFlow<List<SolveTime>> = _solves.asStateFlow()

@@ -610,7 +610,6 @@ private fun formatDisplayTime(millis: Long): String {
     return TimeFormatter.formatTime(millis)
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ScrambleDisplay(
     scramble: String,
