@@ -244,7 +244,7 @@ fun FloatingNavigationBar(
 ) {
     val haptic = LocalHapticFeedback.current
     Surface(
-        color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.92f),
+        color = MaterialTheme.colorScheme.surfaceContainer,
         shape = RoundedCornerShape(28.dp),
         border = BorderStroke(
             width = 1.dp,
@@ -256,12 +256,12 @@ fun FloatingNavigationBar(
             .widthIn(max = 340.dp)
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(bottom = 16.dp, start = 16.dp, end = 16.dp)
+            .padding(bottom = 16.dp, start = 12.dp, end = 12.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp, horizontal = 12.dp),
+                .padding(vertical = 8.dp, horizontal = 8.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
