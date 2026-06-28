@@ -1150,9 +1150,7 @@ private fun AveragesChart(solves: List<SolveTime>) {
                 
                 val minValue = allValues.minOrNull() ?: 0L
                 val maxValue = allValues.maxOrNull() ?: 1L
-                val range = maxValue - minValue
-                
-                if (range == 0L) return@Canvas
+                val range = (maxValue - minValue).coerceAtLeast(1L)
             
             // Draw Ao12 line
             if (validAo12.isNotEmpty()) {

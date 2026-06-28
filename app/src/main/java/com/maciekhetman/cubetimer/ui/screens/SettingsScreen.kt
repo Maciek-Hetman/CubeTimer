@@ -455,7 +455,7 @@ fun SettingMenuRow(
     }
 }
 
-val ScrambleScaleOptions = listOf(50, 75, 100, 125, 150)
+val ScrambleScaleOptions = listOf(80, 90, 100, 110, 120, 130, 140)
 
 fun timerAveragesLabel(averages: Set<Int>): String {
     return if (averages.isEmpty()) "None"

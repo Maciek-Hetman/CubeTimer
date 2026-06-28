@@ -443,9 +443,12 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setMode(mode: Mode) {
-        _currentMode.value = mode
-        _solves.value = _allSolves.value.filter { it.mode == mode }
-        generateNewScramble()
+        if (_currentMode.value != mode) {
+            updateAppTime()
+            _currentMode.value = mode
+            _solves.value = _allSolves.value.filter { it.mode == mode }
+            generateNewScramble()
+        }
         // Load time for the new mode - it will be updated by the flow collector
     }
     
@@ -462,7 +465,8 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         val potentialSolve = SolveTime(
             timeInMillis = timeInMillis,
             penalty = Penalty.NONE,
-            scramble = _currentScramble.value
+            scramble = _currentScramble.value,
+            mode = _currentMode.value
         )
         val currentSolves = _solves.value
         val potentialSolves = currentSolves + potentialSolve

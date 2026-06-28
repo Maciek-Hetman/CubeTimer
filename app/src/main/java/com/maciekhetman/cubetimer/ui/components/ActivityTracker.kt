@@ -8,7 +8,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -17,26 +17,77 @@ import androidx.compose.ui.unit.sp
 import com.maciekhetman.cubetimer.model.SolveTime
 import java.util.*
 
+private data class ActivityTile(
+    val isFuture: Boolean,
+    val level: Int,
+    val solvesCount: Int
+)
+
+private data class ActivityData(
+    val weeksList: List<List<ActivityTile>>,
+    val maxSolvesPerDay: Int
+)
+
 @Composable
 fun ActivityTracker(
     solves: List<SolveTime>,
     modifier: Modifier = Modifier
 ) {
-    val today = Calendar.getInstance()
     val weeks = 12 // Show last 12 weeks
     
-    // Group solves by date (ignoring time)
-    val solvesByDate = solves.groupBy { solve ->
+    val activityData = remember(solves) {
         val calendar = Calendar.getInstance()
-        calendar.timeInMillis = solve.timestamp
-        calendar.set(Calendar.HOUR_OF_DAY, 0)
-        calendar.set(Calendar.MINUTE, 0)
-        calendar.set(Calendar.SECOND, 0)
-        calendar.set(Calendar.MILLISECOND, 0)
-        calendar.timeInMillis
+        
+        // Group solves by date (ignoring time)
+        val solvesByDate = solves.groupBy { solve ->
+            calendar.timeInMillis = solve.timestamp
+            calendar.set(Calendar.HOUR_OF_DAY, 0)
+            calendar.set(Calendar.MINUTE, 0)
+            calendar.set(Calendar.SECOND, 0)
+            calendar.set(Calendar.MILLISECOND, 0)
+            calendar.timeInMillis
+        }
+        
+        val maxSolves = solvesByDate.values.maxOfOrNull { it.size } ?: 1
+        
+        // Pre-generate grid cells
+        val startCalendar = Calendar.getInstance()
+        startCalendar.add(Calendar.WEEK_OF_YEAR, -weeks + 1)
+        startCalendar.set(Calendar.DAY_OF_WEEK, Calendar.SUNDAY)
+        startCalendar.set(Calendar.HOUR_OF_DAY, 0)
+        startCalendar.set(Calendar.MINUTE, 0)
+        startCalendar.set(Calendar.SECOND, 0)
+        startCalendar.set(Calendar.MILLISECOND, 0)
+        
+        val today = Calendar.getInstance()
+        
+        val weeksList = List(weeks) { weekIndex ->
+            List(7) { dayIndex ->
+                // Calculate date for this cell
+                val cellCalendar = startCalendar.clone() as Calendar
+                cellCalendar.add(Calendar.WEEK_OF_YEAR, weekIndex)
+                cellCalendar.add(Calendar.DAY_OF_WEEK, dayIndex)
+                
+                val dateMillis = cellCalendar.timeInMillis
+                val isFuture = cellCalendar.after(today)
+                val solvesCount = solvesByDate[dateMillis]?.size ?: 0
+                val level = when {
+                    solvesCount == 0 -> 0
+                    solvesCount <= maxSolves / 4 -> 1
+                    solvesCount <= maxSolves / 2 -> 2
+                    solvesCount <= maxSolves * 3 / 4 -> 3
+                    else -> 4
+                }
+                
+                ActivityTile(
+                    isFuture = isFuture,
+                    level = level,
+                    solvesCount = solvesCount
+                )
+            }
+        }
+        ActivityData(weeksList = weeksList, maxSolvesPerDay = maxSolves)
     }
-    
-    val maxSolvesPerDay = solvesByDate.values.maxOfOrNull { it.size } ?: 1
     
     Column(
         modifier = modifier
@@ -120,46 +171,20 @@ fun ActivityTracker(
             }
             
             // Week columns
-            repeat(weeks) { weekIndex ->
+            activityData.weeksList.forEach { week ->
                 Column(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    repeat(7) { dayIndex ->
-                        val calendar = Calendar.getInstance()
-                        // Start from Sunday of the week 12 weeks ago
-                        val startCalendar = Calendar.getInstance()
-                        startCalendar.add(Calendar.WEEK_OF_YEAR, -weeks + 1)
-                        startCalendar.set(Calendar.DAY_OF_WEEK, Calendar.SUNDAY)
-                        startCalendar.set(Calendar.HOUR_OF_DAY, 0)
-                        startCalendar.set(Calendar.MINUTE, 0)
-                        startCalendar.set(Calendar.SECOND, 0)
-                        startCalendar.set(Calendar.MILLISECOND, 0)
-                        
-                        // Add the appropriate number of days
-                        startCalendar.add(Calendar.WEEK_OF_YEAR, weekIndex)
-                        startCalendar.add(Calendar.DAY_OF_WEEK, dayIndex)
-                        
-                        val dateMillis = startCalendar.timeInMillis
-                        
+                    week.forEach { tile ->
                         // Don't show future tiles
-                        if (startCalendar.after(today)) {
+                        if (tile.isFuture) {
                             Spacer(modifier = Modifier.size(20.dp))
                         } else {
-                            val solvesCount = solvesByDate[dateMillis]?.size ?: 0
-                            
-                            val level = when {
-                                solvesCount == 0 -> 0
-                                solvesCount <= maxSolvesPerDay / 4 -> 1
-                                solvesCount <= maxSolvesPerDay / 2 -> 2
-                                solvesCount <= maxSolvesPerDay * 3 / 4 -> 3
-                                else -> 4
-                            }
-                            
                             Box(
                                 modifier = Modifier
                                     .size(20.dp)
                                     .background(
-                                        color = getActivityColor(level, maxSolvesPerDay, MaterialTheme.colorScheme.primary),
+                                        color = getActivityColor(tile.level, activityData.maxSolvesPerDay, MaterialTheme.colorScheme.primary),
                                         shape = RoundedCornerShape(3.dp)
                                     )
                                     .border(
