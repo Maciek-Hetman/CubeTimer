@@ -33,18 +33,21 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -245,7 +248,7 @@ fun FloatingNavigationBar(
     val haptic = LocalHapticFeedback.current
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainer,
-        shape = RoundedCornerShape(28.dp),
+        shape = CircleShape,
         border = BorderStroke(
             width = 1.dp,
             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
@@ -253,15 +256,15 @@ fun FloatingNavigationBar(
         tonalElevation = 6.dp,
         shadowElevation = 8.dp,
         modifier = modifier
-            .widthIn(max = 340.dp)
+            .widthIn(max = 280.dp)
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(bottom = 16.dp, start = 12.dp, end = 12.dp)
+            .padding(bottom = 16.dp, start = 8.dp, end = 8.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp, horizontal = 8.dp),
+                .padding(vertical = 4.dp, horizontal = 2.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -282,20 +285,26 @@ fun FloatingNavigationBar(
                     label = "nav_icon_scale"
                 )
 
-                IconButton(
-                    onClick = {
-                        if (!isTimerRunning && currentDestination != destination) {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onNavigate(destination)
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp)
+                        .clip(CircleShape)
+                        .clickable {
+                            if (!isTimerRunning && currentDestination != destination) {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onNavigate(destination)
+                            }
                         }
-                    },
-                    modifier = Modifier.scale(scale)
                 ) {
                     Icon(
                         imageVector = destination.icon,
                         contentDescription = destination.label,
                         tint = color,
-                        modifier = Modifier.size(26.dp)
+                        modifier = Modifier
+                            .size(26.dp)
+                            .scale(scale)
                     )
                 }
             }
