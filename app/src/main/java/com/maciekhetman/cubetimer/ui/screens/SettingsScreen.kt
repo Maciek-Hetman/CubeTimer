@@ -432,12 +432,12 @@ fun SettingMenuRow(
     onDismissMenu: () -> Unit,
     menuContent: @Composable ColumnScope.() -> Unit
 ) {
-    Box {
-        Surface(
-            onClick = onClick,
-            color = androidx.compose.ui.graphics.Color.Transparent
-        ) {
-            SettingsRow(title = title) {
+    Surface(
+        onClick = onClick,
+        color = androidx.compose.ui.graphics.Color.Transparent
+    ) {
+        SettingsRow(title = title) {
+            Box {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = valueLabel,
@@ -451,15 +451,15 @@ fun SettingMenuRow(
                         tint = MaterialTheme.colorScheme.primary
                     )
                 }
-            }
-        }
 
-        DropdownMenu(
-            expanded = menuExpanded,
-            onDismissRequest = onDismissMenu,
-            modifier = Modifier.heightIn(max = 300.dp)
-        ) {
-            menuContent()
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = onDismissMenu,
+                    modifier = Modifier.heightIn(max = 300.dp)
+                ) {
+                    menuContent()
+                }
+            }
         }
     }
 }
