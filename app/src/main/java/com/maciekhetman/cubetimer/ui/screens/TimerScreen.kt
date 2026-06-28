@@ -167,7 +167,7 @@ fun TimerScreen(
                 .fillMaxSize()
                 .padding(
                     top = if (showScramble) 100.dp else 12.dp,
-                    bottom = if (showBottomContent) 100.dp else 12.dp
+                    bottom = if (showBottomContent) 180.dp else 96.dp
                 )
                 .then(
                     if (timerState !is TimerState.Finished && recordCelebration == null) {
@@ -203,7 +203,8 @@ fun TimerScreen(
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                    .padding(horizontal = 12.dp)
+                    .padding(bottom = 88.dp, top = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {

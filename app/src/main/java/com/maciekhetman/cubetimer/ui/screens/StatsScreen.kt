@@ -96,7 +96,7 @@ fun StatsScreen(
                     start = startPadding,
                     top = paddingValues.calculateTopPadding() + 8.dp,
                     end = endPadding,
-                    bottom = bottomPadding + 24.dp
+                    bottom = bottomPadding + 104.dp
                 ),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {

@@ -17,22 +17,35 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.scale
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -204,35 +217,87 @@ fun CubeTimerApp(viewModel: TimerViewModel) {
         }
     }
 
-    if (focusModeActive) {
-        Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+    Scaffold(
+        modifier = Modifier.fillMaxSize()
+    ) { innerPadding ->
+        Box(modifier = Modifier.fillMaxSize()) {
             AppContent(innerPadding)
+            
+            if (!focusModeActive) {
+                FloatingNavigationBar(
+                    currentDestination = currentDestination,
+                    onNavigate = { currentDestination = it },
+                    isTimerRunning = isTimerRunning,
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                )
+            }
         }
-    } else {
-        NavigationSuiteScaffold(
-            navigationSuiteItems = {
-                AppDestinations.entries.forEach {
-                    item(
-                        icon = {
-                            Icon(
-                                it.icon,
-                                contentDescription = it.label
-                            )
-                        },
-                        label = { Text(it.label) },
-                        selected = it == currentDestination,
-                        onClick = {
-                            if (!isTimerRunning && currentDestination != it) {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                currentDestination = it
-                            }
+    }
+}
+
+@Composable
+fun FloatingNavigationBar(
+    currentDestination: AppDestinations,
+    onNavigate: (AppDestinations) -> Unit,
+    isTimerRunning: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val haptic = LocalHapticFeedback.current
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.92f),
+        shape = RoundedCornerShape(28.dp),
+        border = BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+        ),
+        tonalElevation = 6.dp,
+        shadowElevation = 8.dp,
+        modifier = modifier
+            .widthIn(max = 340.dp)
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(bottom = 16.dp, start = 16.dp, end = 16.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp, horizontal = 12.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AppDestinations.entries.forEach { destination ->
+                val selected = destination == currentDestination
+                val color = if (selected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                }
+                
+                val scale by animateFloatAsState(
+                    targetValue = if (selected) 1.22f else 1.0f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessMediumLow
+                    ),
+                    label = "nav_icon_scale"
+                )
+
+                IconButton(
+                    onClick = {
+                        if (!isTimerRunning && currentDestination != destination) {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onNavigate(destination)
                         }
+                    },
+                    modifier = Modifier.scale(scale)
+                ) {
+                    Icon(
+                        imageVector = destination.icon,
+                        contentDescription = destination.label,
+                        tint = color,
+                        modifier = Modifier.size(26.dp)
                     )
                 }
-            }
-        ) {
-            Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                AppContent(innerPadding)
             }
         }
     }
