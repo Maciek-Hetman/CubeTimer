@@ -151,7 +151,7 @@ fun CubeTimerApp(viewModel: TimerViewModel) {
         val contentModifier = Modifier.padding(
             start = innerPadding.calculateStartPadding(layoutDirection),
             end = innerPadding.calculateEndPadding(layoutDirection),
-            bottom = innerPadding.calculateBottomPadding(),
+            bottom = 0.dp,
             top = 0.dp
         )
 

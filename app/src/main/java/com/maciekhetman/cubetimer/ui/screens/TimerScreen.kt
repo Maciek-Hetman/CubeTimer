@@ -165,6 +165,7 @@ fun TimerScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .navigationBarsPadding()
                 .padding(
                     top = if (showScramble) 100.dp else 12.dp,
                     bottom = if (showBottomContent) 180.dp else 96.dp
@@ -203,6 +204,7 @@ fun TimerScreen(
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
                     .padding(horizontal = 12.dp)
                     .padding(bottom = 88.dp, top = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
