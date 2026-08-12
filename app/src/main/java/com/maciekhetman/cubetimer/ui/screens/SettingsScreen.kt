@@ -31,7 +31,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -49,6 +48,7 @@ import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.RunningTimerDisplay
 import com.maciekhetman.cubetimer.model.TimerAverageOptions
 import com.maciekhetman.cubetimer.ui.components.CollapsingTopBar
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.maciekhetman.cubetimer.viewmodel.TimerViewModel
 import kotlin.math.roundToInt
 
@@ -60,20 +60,20 @@ fun SettingsScreen(
     onModeSelected: (Mode) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val dynamicColorEnabled by viewModel.dynamicColorEnabled.collectAsState()
-    val defaultMode by viewModel.defaultMode.collectAsState()
-    val amoledEnabled by viewModel.amoledEnabled.collectAsState()
-    val showScrambleRefreshButton by viewModel.showScrambleRefreshButton.collectAsState()
-    val scrambleScalePercent by viewModel.scrambleScalePercent.collectAsState()
-    val timerStartDelayMillis by viewModel.timerStartDelayMillis.collectAsState()
-    val timerAverages by viewModel.timerAverages.collectAsState()
-    val runningTimerDisplay by viewModel.runningTimerDisplay.collectAsState()
-    val hideScrambleDuringSolve by viewModel.hideScrambleDuringSolve.collectAsState()
-    val hideAveragesDuringSolve by viewModel.hideAveragesDuringSolve.collectAsState()
-    val hideLastResultsDuringSolve by viewModel.hideLastResultsDuringSolve.collectAsState()
-    val hideLastResultsOnTimer by viewModel.hideLastResultsOnTimer.collectAsState()
-    val focusMode by viewModel.focusMode.collectAsState()
-    val hapticsEnabled by viewModel.hapticsEnabled.collectAsState()
+    val dynamicColorEnabled by viewModel.dynamicColorEnabled.collectAsStateWithLifecycle()
+    val defaultMode by viewModel.defaultMode.collectAsStateWithLifecycle()
+    val amoledEnabled by viewModel.amoledEnabled.collectAsStateWithLifecycle()
+    val showScrambleRefreshButton by viewModel.showScrambleRefreshButton.collectAsStateWithLifecycle()
+    val scrambleScalePercent by viewModel.scrambleScalePercent.collectAsStateWithLifecycle()
+    val timerStartDelayMillis by viewModel.timerStartDelayMillis.collectAsStateWithLifecycle()
+    val timerAverages by viewModel.timerAverages.collectAsStateWithLifecycle()
+    val runningTimerDisplay by viewModel.runningTimerDisplay.collectAsStateWithLifecycle()
+    val hideScrambleDuringSolve by viewModel.hideScrambleDuringSolve.collectAsStateWithLifecycle()
+    val hideAveragesDuringSolve by viewModel.hideAveragesDuringSolve.collectAsStateWithLifecycle()
+    val hideLastResultsDuringSolve by viewModel.hideLastResultsDuringSolve.collectAsStateWithLifecycle()
+    val hideLastResultsOnTimer by viewModel.hideLastResultsOnTimer.collectAsStateWithLifecycle()
+    val focusMode by viewModel.focusMode.collectAsStateWithLifecycle()
+    val hapticsEnabled by viewModel.hapticsEnabled.collectAsStateWithLifecycle()
     val haptic = LocalHapticFeedback.current
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
 

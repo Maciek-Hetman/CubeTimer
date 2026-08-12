@@ -52,8 +52,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -69,7 +68,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
-import com.maciekhetman.cubetimer.model.TimerState
+
 import com.maciekhetman.cubetimer.ui.screens.StatsScreen
 import com.maciekhetman.cubetimer.ui.screens.SettingsScreen
 import com.maciekhetman.cubetimer.ui.screens.TimerScreen
@@ -89,9 +88,9 @@ class MainActivity : ComponentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         
         setContent {
-            val dynamicColorEnabled by timerViewModel.dynamicColorEnabled.collectAsState()
-            val amoledEnabled by timerViewModel.amoledEnabled.collectAsState()
-            val hapticsEnabled by timerViewModel.hapticsEnabled.collectAsState()
+            val dynamicColorEnabled by timerViewModel.dynamicColorEnabled.collectAsStateWithLifecycle()
+            val amoledEnabled by timerViewModel.amoledEnabled.collectAsStateWithLifecycle()
+            val hapticsEnabled by timerViewModel.hapticsEnabled.collectAsStateWithLifecycle()
             CubeTimerTheme(
                 dynamicColor = dynamicColorEnabled,
                 amoled = amoledEnabled && !dynamicColorEnabled
@@ -135,11 +134,10 @@ private object NoHapticFeedback : HapticFeedback {
 @Composable
 fun CubeTimerApp(viewModel: TimerViewModel) {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.TIMER) }
-    val currentMode by viewModel.currentMode.collectAsState()
-    val timerState by viewModel.timerState.collectAsState()
-    val focusMode by viewModel.focusMode.collectAsState()
+    val currentMode by viewModel.currentMode.collectAsStateWithLifecycle()
+    val isTimerRunning by viewModel.isTimerRunning.collectAsStateWithLifecycle()
+    val focusMode by viewModel.focusMode.collectAsStateWithLifecycle()
     val haptic = LocalHapticFeedback.current
-    val isTimerRunning = timerState is TimerState.Running
     val focusModeActive = focusMode && isTimerRunning
     ApplyStatusBarColor()
 
@@ -318,8 +316,8 @@ private fun ApplyStatusBarColor() {
     val surfaceColor = MaterialTheme.colorScheme.surface
     val surfaceArgb = surfaceColor.toArgb()
 
-    SideEffect {
-        val activity = view.context as? ComponentActivity ?: return@SideEffect
+    LaunchedEffect(surfaceArgb) {
+        val activity = view.context as? ComponentActivity ?: return@LaunchedEffect
         activity.enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.auto(
                 lightScrim = surfaceArgb,

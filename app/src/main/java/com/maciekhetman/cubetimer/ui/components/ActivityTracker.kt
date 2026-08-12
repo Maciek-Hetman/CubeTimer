@@ -24,8 +24,7 @@ private data class ActivityTile(
 )
 
 private data class ActivityData(
-    val weeksList: List<List<ActivityTile>>,
-    val maxSolvesPerDay: Int
+    val weeksList: List<List<ActivityTile>>
 )
 
 @Composable
@@ -86,7 +85,7 @@ fun ActivityTracker(
                 )
             }
         }
-        ActivityData(weeksList = weeksList, maxSolvesPerDay = maxSolves)
+        ActivityData(weeksList = weeksList)
     }
     
     Column(
@@ -122,7 +121,7 @@ fun ActivityTracker(
                         modifier = Modifier
                             .size(16.dp)
                             .background(
-                                color = getActivityColor(level, 4, MaterialTheme.colorScheme.primary),
+                                color = getActivityColor(level, MaterialTheme.colorScheme.primary),
                                 shape = RoundedCornerShape(3.dp)
                             )
                             .border(
@@ -184,7 +183,7 @@ fun ActivityTracker(
                                 modifier = Modifier
                                     .size(20.dp)
                                     .background(
-                                        color = getActivityColor(tile.level, activityData.maxSolvesPerDay, MaterialTheme.colorScheme.primary),
+                                        color = getActivityColor(tile.level, MaterialTheme.colorScheme.primary),
                                         shape = RoundedCornerShape(3.dp)
                                     )
                                     .border(
@@ -202,7 +201,7 @@ fun ActivityTracker(
 }
 
 @Composable
-private fun getActivityColor(level: Int, maxSolves: Int, baseColor: Color): Color {
+private fun getActivityColor(level: Int, baseColor: Color): Color {
     return when (level) {
         0 -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
         1 -> baseColor.copy(alpha = 0.2f)
