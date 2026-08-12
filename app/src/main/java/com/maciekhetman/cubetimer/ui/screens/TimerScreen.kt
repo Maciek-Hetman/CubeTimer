@@ -20,7 +20,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -44,6 +50,7 @@ import com.maciekhetman.cubetimer.model.RunningTimerDisplay
 import com.maciekhetman.cubetimer.model.SolveTime
 import com.maciekhetman.cubetimer.model.TimerAverageOptions
 import com.maciekhetman.cubetimer.model.TimerState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.maciekhetman.cubetimer.ui.components.TopBar
 import com.maciekhetman.cubetimer.viewmodel.TimerViewModel
 import kotlin.time.Duration.Companion.milliseconds
@@ -56,23 +63,26 @@ fun TimerScreen(
     onModeSelected: (Mode) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val timerState by viewModel.timerState.collectAsState()
-    val solves by viewModel.solves.collectAsState()
-    val scramble by viewModel.currentScramble.collectAsState()
-    val recordCelebration by viewModel.recordCelebration.collectAsState()
-    val showScrambleRefreshButton by viewModel.showScrambleRefreshButton.collectAsState()
-    val scrambleScalePercent by viewModel.scrambleScalePercent.collectAsState()
-    val timerStartDelayMillis by viewModel.timerStartDelayMillis.collectAsState()
-    val timerAverages by viewModel.timerAverages.collectAsState()
-    val runningTimerDisplay by viewModel.runningTimerDisplay.collectAsState()
-    val hideScrambleDuringSolve by viewModel.hideScrambleDuringSolve.collectAsState()
-    val hideAveragesDuringSolve by viewModel.hideAveragesDuringSolve.collectAsState()
-    val hideLastResultsDuringSolve by viewModel.hideLastResultsDuringSolve.collectAsState()
-    val hideLastResultsOnTimer by viewModel.hideLastResultsOnTimer.collectAsState()
-    val hapticsEnabled by viewModel.hapticsEnabled.collectAsState()
-    val focusMode by viewModel.focusMode.collectAsState()
+    val timerState by viewModel.timerState.collectAsStateWithLifecycle()
+    val solves by viewModel.solves.collectAsStateWithLifecycle()
+    val scramble by viewModel.currentScramble.collectAsStateWithLifecycle()
+    val recordCelebration by viewModel.recordCelebration.collectAsStateWithLifecycle()
+    val showScrambleRefreshButton by viewModel.showScrambleRefreshButton.collectAsStateWithLifecycle()
+    val scrambleScalePercent by viewModel.scrambleScalePercent.collectAsStateWithLifecycle()
+    val timerStartDelayMillis by viewModel.timerStartDelayMillis.collectAsStateWithLifecycle()
+    val timerAverages by viewModel.timerAverages.collectAsStateWithLifecycle()
+    val runningTimerDisplay by viewModel.runningTimerDisplay.collectAsStateWithLifecycle()
+    val hideScrambleDuringSolve by viewModel.hideScrambleDuringSolve.collectAsStateWithLifecycle()
+    val hideAveragesDuringSolve by viewModel.hideAveragesDuringSolve.collectAsStateWithLifecycle()
+    val hideLastResultsDuringSolve by viewModel.hideLastResultsDuringSolve.collectAsStateWithLifecycle()
+    val hideLastResultsOnTimer by viewModel.hideLastResultsOnTimer.collectAsStateWithLifecycle()
+    val hapticsEnabled by viewModel.hapticsEnabled.collectAsStateWithLifecycle()
+    val focusMode by viewModel.focusMode.collectAsStateWithLifecycle()
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
+    val density = LocalDensity.current
+    var topContentHeight by remember { mutableStateOf(0.dp) }
+    var bottomContentHeight by remember { mutableStateOf(0.dp) }
     val isSolving = timerState is TimerState.Running
     val focusModeActive = focusMode && isSolving
     val showTopBar = !focusModeActive
@@ -150,7 +160,10 @@ fun TimerScreen(
                 Column(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
-                        .padding(top = 8.dp),
+                        .padding(top = 8.dp)
+                        .onGloballyPositioned {
+                            topContentHeight = with(density) { it.size.height.toDp() }
+                        },
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     ScrambleDisplay(
@@ -167,23 +180,26 @@ fun TimerScreen(
                 .fillMaxSize()
                 .navigationBarsPadding()
                 .padding(
-                    top = if (showScramble) 100.dp else 12.dp,
-                    bottom = if (showBottomContent) 180.dp else 96.dp
+                    top = if (showScramble) topContentHeight + 12.dp else 12.dp,
+                    bottom = if (showBottomContent) bottomContentHeight + 12.dp else 96.dp
                 )
+                .semantics {
+                    contentDescription = if (isSolving) "Tap to stop timer" else "Tap and hold to start timer"
+                }
                 .then(
                     if (timerState !is TimerState.Finished && recordCelebration == null) {
                         Modifier.pointerInput(Unit) {
                             detectTapGestures(
-                                onPress = {
-                                    viewModel.onPressStart()
-                                    tryAwaitRelease()
-                                    val isRunning = viewModel.timerState.value is TimerState.Running
-                                    viewModel.onPressRelease()
-                                    if (isRunning) {
-                                        // Timer stopped
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    }
+                            onPress = {
+                                val wasRunning = viewModel.timerState.value is TimerState.Running
+                                viewModel.onPressStart()
+                                tryAwaitRelease()
+                                viewModel.onPressRelease()
+                                if (wasRunning) {
+                                    // Timer stopped
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 }
+                            }
                             )
                         }
                     } else {
@@ -206,7 +222,10 @@ fun TimerScreen(
                     .align(Alignment.BottomCenter)
                     .navigationBarsPadding()
                     .padding(horizontal = 12.dp)
-                    .padding(bottom = 88.dp, top = 8.dp),
+                    .padding(bottom = 88.dp, top = 8.dp)
+                    .onGloballyPositioned {
+                        bottomContentHeight = with(density) { it.size.height.toDp() }
+                    },
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
@@ -496,15 +515,17 @@ private fun AveragesDisplay(
     enabledAverages: Set<Int>,
     modifier: Modifier = Modifier
 ) {
-    val averages = TimerAverageOptions
-        .asSequence()
-        .filter { it in enabledAverages }
-        .mapNotNull { count ->
-            AverageCalculator.averageOfN(solves, count)?.let { average ->
-                count to average
+    val averages = remember(solves, enabledAverages) {
+        TimerAverageOptions
+            .asSequence()
+            .filter { it in enabledAverages }
+            .mapNotNull { count ->
+                AverageCalculator.averageOfN(solves, count)?.let { average ->
+                    count to average
+                }
             }
-        }
-        .toList()
+            .toList()
+    }
 
     if (averages.isEmpty()) {
         return
@@ -718,12 +739,16 @@ private fun ScrambleDisplay(
                 )
             },
             text = {
-                Text(
-                    text = scramble,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState())
+                ) {
+                    Text(
+                        text = scramble,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
             },
             confirmButton = {
                 TextButton(onClick = {
@@ -743,9 +768,14 @@ private fun RecordCelebrationOverlay(
     onDismiss: () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
+    var displayCelebration by remember { mutableStateOf<RecordCelebration?>(null) }
+    if (celebration != null) {
+        displayCelebration = celebration
+    }
+
     AnimatedVisibility(
         visible = celebration != null,
-        enter = fadeIn(animationSpec = tween(400, easing = androidx.compose.animation.core.FastOutSlowInEasing)) + 
+        enter = fadeIn(animationSpec = tween(400, easing = androidx.compose.animation.core.FastOutSlowInEasing)) +
                 scaleIn(
                     initialScale = 0.7f,
                     animationSpec = spring(
@@ -753,7 +783,7 @@ private fun RecordCelebrationOverlay(
                         stiffness = Spring.StiffnessMediumLow
                     )
                 ),
-        exit = fadeOut(animationSpec = tween(300)) + 
+        exit = fadeOut(animationSpec = tween(300)) +
                scaleOut(
                    targetScale = 0.95f,
                    animationSpec = tween(300)
@@ -771,7 +801,7 @@ private fun RecordCelebrationOverlay(
                 },
             contentAlignment = Alignment.Center
         ) {
-            celebration?.let {
+            displayCelebration?.let {
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth(0.84f)

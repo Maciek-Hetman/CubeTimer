@@ -14,23 +14,34 @@ import com.maciekhetman.cubetimer.model.RecordType
 import com.maciekhetman.cubetimer.model.RunningTimerDisplay
 import com.maciekhetman.cubetimer.model.SolveTime
 import com.maciekhetman.cubetimer.model.TimerState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class TimerViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = SolvesRepository(application)
     private val settingsRepository = SettingsRepository(application)
-    
+
     private val _timerState = MutableStateFlow<TimerState>(TimerState.Idle)
     val timerState: StateFlow<TimerState> = _timerState.asStateFlow()
+
+    val isTimerRunning: StateFlow<Boolean> = _timerState
+        .map { it is TimerState.Running }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     private val _currentMode = MutableStateFlow(Mode.CUBE_3x3)
     val currentMode: StateFlow<Mode> = _currentMode.asStateFlow()
@@ -78,28 +89,40 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     val hapticsEnabled: StateFlow<Boolean> = _hapticsEnabled.asStateFlow()
 
     private val _allSolves = MutableStateFlow<List<SolveTime>>(emptyList())
-    
+
     private val _solves = MutableStateFlow<List<SolveTime>>(emptyList())
     val solves: StateFlow<List<SolveTime>> = _solves.asStateFlow()
-    
-    private val _currentScramble = MutableStateFlow(ScrambleGenerator.generateScramble(Mode.CUBE_3x3))
+
+    private val _currentScramble = MutableStateFlow("")
     val currentScramble: StateFlow<String> = _currentScramble.asStateFlow()
-    
+
     private val _recordCelebration = MutableStateFlow<RecordCelebration?>(null)
     val recordCelebration: StateFlow<RecordCelebration?> = _recordCelebration.asStateFlow()
-    
+
     private val modeAppTimes = mutableMapOf<Mode, Long>()
     private val _appTimeMillis = MutableStateFlow(0L)
     val appTimeMillis: StateFlow<Long> = _appTimeMillis.asStateFlow()
-    
+
     private var appStartTime: Long = 0L
 
     private var timerJob: Job? = null
     private var holdJob: Job? = null
     private var startTime: Long = 0
     private var hasAppliedDefaultMode = false
+    private var inputBlockedUntil: Long = 0L
 
     init {
+        // Generate the first scramble off the main thread (table initialization can be expensive).
+        viewModelScope.launch(Dispatchers.Default) {
+            val mode = _currentMode.value
+            _currentScramble.value = ScrambleGenerator.generateScramble(mode)
+        }
+
+        // Migrate settings from the legacy combined datastore if needed.
+        viewModelScope.launch {
+            settingsRepository.migrateFromLegacyIfNeeded()
+        }
+
         // Load saved solves on initialization
         viewModelScope.launch {
             repository.solvesFlow.collect { savedSolves ->
@@ -191,26 +214,23 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
                     val mode = _currentMode.value
                     modeAppTimes[mode] = savedTime
                     _appTimeMillis.value = savedTime
-            }
+                }
         }
     }
 
     fun onPressStart() {
+        if (System.currentTimeMillis() < inputBlockedUntil) return
+
         when (_timerState.value) {
             is TimerState.Idle -> {
                 startHoldTimer()
-            }
-            is TimerState.Finished -> {
-                // Only start hold timer if not already transitioning
-                if (holdJob?.isActive != true) {
-                    startHoldTimer()
-                }
             }
             is TimerState.Running -> {
                 stopTimer()
             }
             else -> {
-                // Already holding or ready, ignore additional press
+                // Already holding or ready, ignore additional press.
+                // Finished state has no touch handling on the timer screen.
             }
         }
     }
@@ -253,8 +273,14 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
 
         timerJob?.cancel()
         timerJob = viewModelScope.launch {
+            val updateInterval = when (_runningTimerDisplay.value) {
+                RunningTimerDisplay.FULL -> 10L
+                RunningTimerDisplay.SECONDS_ONLY -> 200L
+                RunningTimerDisplay.HIDDEN -> return@launch // no UI updates needed
+            }
+
             while (true) {
-                delay(10.milliseconds)
+                delay(updateInterval.milliseconds)
                 val elapsed = System.currentTimeMillis() - startTime
                 _timerState.value = TimerState.Running(elapsed)
             }
@@ -265,9 +291,6 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         timerJob?.cancel()
         val elapsed = System.currentTimeMillis() - startTime
         _timerState.value = TimerState.Finished(elapsed)
-        
-        // Check for potential record with NONE penalty
-        checkForPotentialRecord(elapsed)
     }
 
     fun saveSolveWithPenalty(penalty: Penalty) {
@@ -280,23 +303,36 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
                 mode = _currentMode.value
             )
             val newAllSolves = _allSolves.value + newSolve
-            
+
             _allSolves.value = newAllSolves
             _solves.value = newAllSolves.filter { it.mode == _currentMode.value }
             viewModelScope.launch {
                 repository.saveSolves(newAllSolves)
             }
+
+            // Check for records using the actual saved penalty.
+            val previousSolves = _solves.value - newSolve
+            checkForRecords(newSolve, previousSolves, _solves.value)
+
             resetTimer()
             generateNewScramble()
         }
     }
 
     fun discardSolve() {
+        _recordCelebration.value = null
         resetTimer()
     }
-    
+
     fun generateNewScramble() {
-        _currentScramble.value = ScrambleGenerator.generateScramble(_currentMode.value)
+        val mode = _currentMode.value
+        viewModelScope.launch(Dispatchers.Default) {
+            val scramble = ScrambleGenerator.generateScramble(mode)
+            // Guard against out-of-order results from rapid mode switches.
+            if (_currentMode.value == mode) {
+                _currentScramble.value = scramble
+            }
+        }
     }
 
     private fun resetTimer() {
@@ -316,11 +352,7 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateSolvePenalty(solve: SolveTime, penalty: Penalty) {
         val newAllSolves = _allSolves.value.map { existing ->
-            if (
-                existing.timestamp == solve.timestamp &&
-                existing.timeInMillis == solve.timeInMillis &&
-                existing.mode == solve.mode
-            ) {
+            if (existing.id == solve.id) {
                 existing.copy(penalty = penalty)
             } else {
                 existing
@@ -348,6 +380,18 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         _solves.value = emptyList()
         viewModelScope.launch {
             repository.saveSolves(emptyList())
+        }
+    }
+
+    fun restoreSolves(previous: List<SolveTime>) {
+        val current = _allSolves.value
+        val merged = (previous + current)
+            .distinctBy { it.id }
+            .sortedBy { it.timestamp }
+        _allSolves.value = merged
+        _solves.value = merged.filter { it.mode == _currentMode.value }
+        viewModelScope.launch {
+            repository.saveSolves(merged)
         }
     }
 
@@ -450,41 +494,25 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         }
         // Load time for the new mode - it will be updated by the flow collector
     }
-    
+
     fun dismissRecordCelebration() {
-        viewModelScope.launch {
-            _recordCelebration.value = null
-            // Small delay to prevent touch from immediately triggering timer
-            delay(200)
-        }
+        _recordCelebration.value = null
+        // Briefly ignore timer presses so the same tap doesn't immediately start a new solve.
+        inputBlockedUntil = System.currentTimeMillis() + 200
     }
-    
-    private fun checkForPotentialRecord(timeInMillis: Long) {
-        // Simulate a solve with no penalty to check if it would be a record
-        val potentialSolve = SolveTime(
-            timeInMillis = timeInMillis,
-            penalty = Penalty.NONE,
-            scramble = _currentScramble.value,
-            mode = _currentMode.value
-        )
-        val currentSolves = _solves.value
-        val potentialSolves = currentSolves + potentialSolve
-        
-        checkForRecords(potentialSolve, currentSolves, potentialSolves)
-    }
-    
+
     private fun checkForRecords(
         newSolve: SolveTime,
         previousSolves: List<SolveTime>,
         newSolves: List<SolveTime>
     ) {
         if (newSolve.penalty == Penalty.DNF) return
-        
+
         // Check for best single
         val previousBest = previousSolves
             .filter { it.penalty != Penalty.DNF }
             .minOfOrNull { it.displayTime }
-        
+
         if (previousBest == null || newSolve.displayTime < previousBest) {
             _recordCelebration.value = RecordCelebration(
                 type = RecordType.BEST_SINGLE,
@@ -492,12 +520,12 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
             )
             return
         }
-        
+
         // Check for best Ao5
         if (newSolves.size >= 5) {
             val currentAo5 = AverageCalculator.averageOfN(newSolves, 5)
             val previousBestAo5 = AverageCalculator.bestAverageOfN(previousSolves, 5)
-            
+
             if (currentAo5 != null && (previousBestAo5 == null || currentAo5 < previousBestAo5)) {
                 _recordCelebration.value = RecordCelebration(
                     type = RecordType.BEST_AO5,
@@ -506,12 +534,12 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
                 return
             }
         }
-        
+
         // Check for best Ao12
         if (newSolves.size >= 12) {
             val currentAo12 = AverageCalculator.averageOfN(newSolves, 12)
             val previousBestAo12 = AverageCalculator.bestAverageOfN(previousSolves, 12)
-            
+
             if (currentAo12 != null && (previousBestAo12 == null || currentAo12 < previousBestAo12)) {
                 _recordCelebration.value = RecordCelebration(
                     type = RecordType.BEST_AO12,
@@ -520,13 +548,14 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
+
     fun resetAppStartTime() {
         appStartTime = System.currentTimeMillis()
     }
-    
+
     fun updateAppTime() {
         if (appStartTime == 0L) return // Don't update if we haven't started tracking yet
-        
+
         val currentTime = System.currentTimeMillis()
         val sessionTime = currentTime - appStartTime
         val currentMode = _currentMode.value
@@ -535,7 +564,7 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         modeAppTimes[currentMode] = newTotalTime
         _appTimeMillis.value = newTotalTime
         appStartTime = currentTime
-        
+
         viewModelScope.launch {
             repository.saveAppTime(currentMode, newTotalTime)
         }
@@ -543,7 +572,6 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         super.onCleared()
-        updateAppTime()
         timerJob?.cancel()
         holdJob?.cancel()
     }
