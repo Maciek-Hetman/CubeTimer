@@ -1,6 +1,9 @@
 package com.maciekhetman.cubetimer.model
 
+import java.util.UUID
+
 data class SolveTime(
+    val id: String = UUID.randomUUID().toString(),
     val timeInMillis: Long,
     val penalty: Penalty = Penalty.NONE,
     val timestamp: Long = System.currentTimeMillis(),

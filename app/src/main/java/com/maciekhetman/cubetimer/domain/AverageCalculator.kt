@@ -39,7 +39,7 @@ object AverageCalculator {
         return sqrt(variance)
     }
 
-    private fun averageWindow(window: List<SolveTime>): Long? {
+    fun averageWindow(window: List<SolveTime>): Long? {
         if (window.size < 3) {
             val validTimes = window
                 .filter { it.penalty != Penalty.DNF }
