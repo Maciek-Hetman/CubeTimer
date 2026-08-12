@@ -36,6 +36,7 @@ import com.maciekhetman.cubetimer.ui.components.ActivityTracker
 import com.maciekhetman.cubetimer.ui.components.SectionDivider
 import com.maciekhetman.cubetimer.ui.components.SectionHeader
 import com.maciekhetman.cubetimer.ui.components.CollapsingTopBar
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.maciekhetman.cubetimer.viewmodel.TimerViewModel
 import java.text.SimpleDateFormat
 import java.util.*
@@ -48,8 +49,8 @@ fun StatsScreen(
     onModeSelected: (Mode) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val solves by viewModel.solves.collectAsState()
-    val appTimeMillis by viewModel.appTimeMillis.collectAsState()
+    val solves by viewModel.solves.collectAsStateWithLifecycle()
+    val appTimeMillis by viewModel.appTimeMillis.collectAsStateWithLifecycle()
     var showClearDialog by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -181,10 +182,23 @@ fun StatsScreen(
                     }
                 }
                 
-                val recentSolves = if (solves.size > 200) solves.takeLast(200) else solves
+                val isHistoryCapped = solves.size > 200
+                val recentSolves = if (isHistoryCapped) solves.takeLast(200) else solves
+                if (isHistoryCapped) {
+                    item {
+                        Text(
+                            text = "Showing last 200 of ${solves.size} solves",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 4.dp)
+                        )
+                    }
+                }
                 itemsIndexed(
                     items = recentSolves.reversed(),
-                    key = { _, solve -> solve.timestamp }
+                    key = { _, solve -> solve.id }
                 ) { index, solve ->
                     val deleteSolve: () -> Unit = {
                         viewModel.deleteSolve(solve)
@@ -248,8 +262,19 @@ fun StatsScreen(
                 TextButton(
                     onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        val previousSolves = solves
                         viewModel.clearAllSolves()
                         showClearDialog = false
+                        scope.launch {
+                            val result = snackbarHostState.showSnackbar(
+                                message = "All solves cleared",
+                                actionLabel = "Undo",
+                                duration = SnackbarDuration.Short
+                            )
+                            if (result == SnackbarResult.ActionPerformed) {
+                                viewModel.restoreSolves(previousSolves)
+                            }
+                        }
                     }
                 ) {
                     Text("Clear")
@@ -287,22 +312,37 @@ private fun ChartsSection(solves: List<SolveTime>) {
 
 @Composable
 private fun StatsHeader(solves: List<SolveTime>, appTimeMillis: Long) {
-    val last100Solves = solves.takeLast(100)
-    val last100ValidSolves = last100Solves.filter { it.penalty != Penalty.DNF }
-    val allValidSolves = solves.filter { it.penalty != Penalty.DNF }
+    val stats = remember(solves) {
+        val last100Solves = solves.takeLast(100)
+        val last100ValidSolves = last100Solves.filter { it.penalty != Penalty.DNF }
+        val allValidSolves = solves.filter { it.penalty != Penalty.DNF }
 
-    val last100BestTime = last100ValidSolves.minOfOrNull { it.displayTime }
-    val last100WorstTime = last100ValidSolves.maxOfOrNull { it.displayTime }
-    val last100Ao100 = calculateAverageOfN(last100Solves, 100)
-    val last100MeanTime = calculateMean(last100ValidSolves)
-    val last100StandardDeviation = calculateStandardDeviation(last100ValidSolves)
+        StatsSummary(
+            last100BestTime = last100ValidSolves.minOfOrNull { it.displayTime },
+            last100WorstTime = last100ValidSolves.maxOfOrNull { it.displayTime },
+            last100Ao100 = calculateAverageOfN(last100Solves, 100),
+            last100MeanTime = calculateMean(last100ValidSolves),
+            last100StandardDeviation = calculateStandardDeviation(last100ValidSolves),
+            allTimeBestTime = allValidSolves.minOfOrNull { it.displayTime },
+            allTimeWorstTime = allValidSolves.maxOfOrNull { it.displayTime },
+            allTimeAverage = calculateAverage(allValidSolves),
+            allTimeMeanTime = calculateMean(allValidSolves),
+            allTimeStandardDeviation = calculateStandardDeviation(allValidSolves),
+            totalSolvingTime = solves.sumOf { it.timeInMillis }
+        )
+    }
 
-    val allTimeBestTime = allValidSolves.minOfOrNull { it.displayTime }
-    val allTimeWorstTime = allValidSolves.maxOfOrNull { it.displayTime }
-    val allTimeAverage = calculateAverage(allValidSolves)
-    val allTimeMeanTime = calculateMean(allValidSolves)
-    val allTimeStandardDeviation = calculateStandardDeviation(allValidSolves)
-    val totalSolvingTime = solves.sumOf { it.timeInMillis }
+    val last100BestTime = stats.last100BestTime
+    val last100WorstTime = stats.last100WorstTime
+    val last100Ao100 = stats.last100Ao100
+    val last100MeanTime = stats.last100MeanTime
+    val last100StandardDeviation = stats.last100StandardDeviation
+    val allTimeBestTime = stats.allTimeBestTime
+    val allTimeWorstTime = stats.allTimeWorstTime
+    val allTimeAverage = stats.allTimeAverage
+    val allTimeMeanTime = stats.allTimeMeanTime
+    val allTimeStandardDeviation = stats.allTimeStandardDeviation
+    val totalSolvingTime = stats.totalSolvingTime
 
     Column(
         modifier = Modifier
@@ -434,6 +474,15 @@ private fun StatsHeader(solves: List<SolveTime>, appTimeMillis: Long) {
 
 @Composable
 private fun AveragesSection(solves: List<SolveTime>) {
+    val (ao5Current, ao12Current, bestAo5, bestAo12) = remember(solves) {
+        AveragesSummary(
+            ao5Current = calculateAverageOfN(solves, 5),
+            ao12Current = calculateAverageOfN(solves, 12),
+            bestAo5 = findBestAverageOfN(solves, 5),
+            bestAo12 = findBestAverageOfN(solves, 12)
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -441,11 +490,6 @@ private fun AveragesSection(solves: List<SolveTime>) {
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         SectionHeader(title = "Averages")
-        
-        val ao5Current = calculateAverageOfN(solves, 5)
-        val ao12Current = calculateAverageOfN(solves, 12)
-        val bestAo5 = findBestAverageOfN(solves, 5)
-        val bestAo12 = findBestAverageOfN(solves, 12)
         
         // Ao5 Section
         Surface(
@@ -523,8 +567,23 @@ private fun AveragesSection(solves: List<SolveTime>) {
     }
 }
 
+private val LargeAverages = listOf(
+    50 to "Ao50",
+    100 to "Ao100",
+    200 to "Ao200",
+    500 to "Ao500",
+    1000 to "Ao1000",
+    2000 to "Ao2000"
+)
+
 @Composable
 private fun LargeAveragesSection(solves: List<SolveTime>) {
+    val averagesData = remember(solves) {
+        LargeAverages.associate { (count, _) ->
+            count to (calculateAverageOfN(solves, count) to findBestAverageOfN(solves, count))
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -532,29 +591,19 @@ private fun LargeAveragesSection(solves: List<SolveTime>) {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         SectionHeader(title = "Session Averages")
-        
-        val averages = listOf(
-            50 to "Ao50",
-            100 to "Ao100",
-            200 to "Ao200",
-            500 to "Ao500",
-            1000 to "Ao1000",
-            2000 to "Ao2000"
-        )
-        
+
         Column(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            averages.chunked(2).forEach { row ->
+            LargeAverages.chunked(2).forEach { row ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     row.forEach { (count, label) ->
-                        val current = calculateAverageOfN(solves, count)
-                        val best = findBestAverageOfN(solves, count)
-                        
+                        val (current, best) = averagesData.getValue(count)
+
                         Surface(
                             modifier = Modifier
                                 .weight(1f)
@@ -606,8 +655,8 @@ private fun LargeAveragesSection(solves: List<SolveTime>) {
 
 @Composable
 private fun SessionStatsSection(solves: List<SolveTime>) {
-    val sessionStats = calculateSessionStats(solves)
-    
+    val sessionStats = remember(solves) { calculateSessionStats(solves) }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -690,13 +739,15 @@ private fun SessionStatsSection(solves: List<SolveTime>) {
 
 @Composable
 private fun PenaltyStatsSection(solves: List<SolveTime>) {
-    val dnfCount = solves.count { it.penalty == Penalty.DNF }
-    val plusTwoCount = solves.count { it.penalty == Penalty.PLUS_TWO }
-    val totalCount = solves.size.toFloat()
-    
-    val dnfPercent = if (totalCount > 0) (dnfCount / totalCount * 100).toInt() else 0
-    val plusTwoPercent = if (totalCount > 0) (plusTwoCount / totalCount * 100).toInt() else 0
-    
+    val (dnfCount, plusTwoCount, dnfPercent, plusTwoPercent) = remember(solves) {
+        val dnfCount = solves.count { it.penalty == Penalty.DNF }
+        val plusTwoCount = solves.count { it.penalty == Penalty.PLUS_TWO }
+        val totalCount = solves.size.toFloat()
+        val dnfPercent = if (totalCount > 0) (dnfCount / totalCount * 100).toInt() else 0
+        val plusTwoPercent = if (totalCount > 0) (plusTwoCount / totalCount * 100).toInt() else 0
+        PenaltySummary(dnfCount, plusTwoCount, dnfPercent, plusTwoPercent)
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -737,42 +788,10 @@ private fun PersonalBestsChart(solves: List<SolveTime>) {
         return
     }
     
-    // Track PB progression
-    val singlePBs = mutableListOf<Pair<Int, Long>>() // solve number to PB time
-    val ao5PBs = mutableListOf<Pair<Int, Long>>()
-    val ao12PBs = mutableListOf<Pair<Int, Long>>()
-    
-    var currentBestSingle = Long.MAX_VALUE
-    var currentBestAo5 = Long.MAX_VALUE
-    var currentBestAo12 = Long.MAX_VALUE
-    
-    for (i in solves.indices) {
-        val subList = solves.take(i + 1)
-        val validSubList = subList.filter { it.penalty != Penalty.DNF }
-        
-        // Check single PB
-        if (validSubList.isNotEmpty()) {
-            val bestInSubList = validSubList.minOf { it.displayTime }
-            if (bestInSubList < currentBestSingle) {
-                currentBestSingle = bestInSubList
-                singlePBs.add(Pair(i, currentBestSingle))
-            }
-        }
-        
-        // Check Ao5 PB
-        val ao5 = calculateAverageOfN(subList, 5)
-        if (ao5 != null && ao5 < currentBestAo5) {
-            currentBestAo5 = ao5
-            ao5PBs.add(Pair(i, currentBestAo5))
-        }
-        
-        // Check Ao12 PB
-        val ao12 = calculateAverageOfN(subList, 12)
-        if (ao12 != null && ao12 < currentBestAo12) {
-            currentBestAo12 = ao12
-            ao12PBs.add(Pair(i, currentBestAo12))
-        }
-    }
+    val pbData = remember(solves) { calculatePersonalBests(solves) }
+    val singlePBs = pbData.singlePBs
+    val ao5PBs = pbData.ao5PBs
+    val ao12PBs = pbData.ao12PBs
     
     Surface(
         modifier = Modifier
@@ -981,9 +1000,11 @@ private fun SolveTimesChart(solves: List<SolveTime>) {
     var selectedRange by remember { mutableStateOf("All") }
     val haptic = LocalHapticFeedback.current
     val rangeStartIndex = rangeStartIndex(solves.size, selectedRange)
-    val visibleSolves = solves
-        .mapIndexed { index, solve -> index to solve }
-        .filter { (index, solve) -> index >= rangeStartIndex && solve.penalty != Penalty.DNF }
+    val visibleSolves = remember(solves, selectedRange) {
+        solves
+            .mapIndexed { index, solve -> index to solve }
+            .filter { (index, solve) -> index >= rangeStartIndex && solve.penalty != Penalty.DNF }
+    }
 
     Surface(
         modifier = Modifier
@@ -1013,17 +1034,19 @@ private fun SolveTimesChart(solves: List<SolveTime>) {
                     )
                 }
             } else {
-                val smoothed = visibleSolves.mapIndexed { visibleIndex, (solveIndex, _) ->
-                    val windowStart = (visibleIndex - 2).coerceAtLeast(0)
-                    val windowEnd = (visibleIndex + 2).coerceAtMost(visibleSolves.lastIndex)
-                    val average = visibleSolves
-                        .subList(windowStart, windowEnd + 1)
-                        .map { it.second.displayTime }
-                        .average()
-                        .toLong()
-                    solveIndex to average
+                val smoothed = remember(visibleSolves) {
+                    visibleSolves.mapIndexed { visibleIndex, (solveIndex, _) ->
+                        val windowStart = (visibleIndex - 2).coerceAtLeast(0)
+                        val windowEnd = (visibleIndex + 2).coerceAtMost(visibleSolves.lastIndex)
+                        val average = visibleSolves
+                            .subList(windowStart, windowEnd + 1)
+                            .map { it.second.displayTime }
+                            .average()
+                            .toLong()
+                        solveIndex to average
+                    }
                 }
-                val values = smoothed.map { it.second }
+                val values = remember(smoothed) { smoothed.map { it.second } }
                 val lineColor = MaterialTheme.colorScheme.primary
                 val axisColor = MaterialTheme.colorScheme.onSurfaceVariant
 
@@ -1082,14 +1105,7 @@ private fun AveragesChart(solves: List<SolveTime>) {
     var selectedRange by remember { mutableStateOf("All") }
     val haptic = LocalHapticFeedback.current
     
-    val ao5List = mutableListOf<Long?>()
-    val ao12List = mutableListOf<Long?>()
-    
-    for (i in solves.indices) {
-        val subList = solves.take(i + 1)
-        ao5List.add(calculateAverageOfN(subList, 5))
-        ao12List.add(calculateAverageOfN(subList, 12))
-    }
+    val (ao5List, ao12List) = remember(solves) { calculateRollingAverages(solves) }
     
     // Filter data based on selected range
     val displayAo5List = when (selectedRange) {
@@ -1660,9 +1676,12 @@ private fun formatOptionalTime(millis: Long?): String {
     return if (millis != null) formatTime(millis) else "N/A"
 }
 
+private val timestampFormat by lazy {
+    SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
+}
+
 private fun formatTimestamp(timestamp: Long): String {
-    val sdf = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
-    return sdf.format(Date(timestamp))
+    return timestampFormat.format(Date(timestamp))
 }
 
 private fun formatDuration(millis: Long): String {
@@ -1782,5 +1801,90 @@ private fun calculateSessionStats(solves: List<SolveTime>): SessionStats? {
     )
 }
 
+private data class StatsSummary(
+    val last100BestTime: Long?,
+    val last100WorstTime: Long?,
+    val last100Ao100: Long?,
+    val last100MeanTime: Long,
+    val last100StandardDeviation: Double,
+    val allTimeBestTime: Long?,
+    val allTimeWorstTime: Long?,
+    val allTimeAverage: Long,
+    val allTimeMeanTime: Long,
+    val allTimeStandardDeviation: Double,
+    val totalSolvingTime: Long
+)
 
+private data class AveragesSummary(
+    val ao5Current: Long?,
+    val ao12Current: Long?,
+    val bestAo5: Long?,
+    val bestAo12: Long?
+)
+
+private data class PenaltySummary(
+    val dnfCount: Int,
+    val plusTwoCount: Int,
+    val dnfPercent: Int,
+    val plusTwoPercent: Int
+)
+
+private data class PersonalBestsData(
+    val singlePBs: List<Pair<Int, Long>>,
+    val ao5PBs: List<Pair<Int, Long>>,
+    val ao12PBs: List<Pair<Int, Long>>
+)
+
+private fun calculatePersonalBests(solves: List<SolveTime>): PersonalBestsData {
+    val singlePBs = mutableListOf<Pair<Int, Long>>()
+    val ao5PBs = mutableListOf<Pair<Int, Long>>()
+    val ao12PBs = mutableListOf<Pair<Int, Long>>()
+    var bestSingle = Long.MAX_VALUE
+    var bestAo5 = Long.MAX_VALUE
+    var bestAo12 = Long.MAX_VALUE
+
+    for (i in solves.indices) {
+        val solve = solves[i]
+        if (solve.penalty != Penalty.DNF && solve.displayTime < bestSingle) {
+            bestSingle = solve.displayTime
+            singlePBs.add(i to bestSingle)
+        }
+        if (i >= 4) {
+            AverageCalculator.averageWindow(solves.subList(i - 4, i + 1))?.let { avg ->
+                if (avg < bestAo5) {
+                    bestAo5 = avg
+                    ao5PBs.add(i to bestAo5)
+                }
+            }
+        }
+        if (i >= 11) {
+            AverageCalculator.averageWindow(solves.subList(i - 11, i + 1))?.let { avg ->
+                if (avg < bestAo12) {
+                    bestAo12 = avg
+                    ao12PBs.add(i to bestAo12)
+                }
+            }
+        }
+    }
+    return PersonalBestsData(singlePBs, ao5PBs, ao12PBs)
+}
+
+private data class RollingAveragesData(
+    val ao5List: List<Long?>,
+    val ao12List: List<Long?>
+)
+
+private fun calculateRollingAverages(solves: List<SolveTime>): RollingAveragesData {
+    val ao5List = MutableList<Long?>(solves.size) { null }
+    val ao12List = MutableList<Long?>(solves.size) { null }
+    for (i in solves.indices) {
+        if (i >= 4) {
+            ao5List[i] = AverageCalculator.averageWindow(solves.subList(i - 4, i + 1))
+        }
+        if (i >= 11) {
+            ao12List[i] = AverageCalculator.averageWindow(solves.subList(i - 11, i + 1))
+        }
+    }
+    return RollingAveragesData(ao5List, ao12List)
+}
 
