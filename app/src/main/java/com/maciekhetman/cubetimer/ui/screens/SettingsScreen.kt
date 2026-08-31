@@ -52,12 +52,32 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.maciekhetman.cubetimer.viewmodel.TimerViewModel
 import kotlin.math.roundToInt
 
+import com.maciekhetman.cubetimer.model.AuthState
+import com.maciekhetman.cubetimer.model.Session
+import com.maciekhetman.cubetimer.model.SyncUiState
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     viewModel: TimerViewModel,
     currentMode: Mode,
     onModeSelected: (Mode) -> Unit,
+    activeSession: Session? = null,
+    isAutomaticMode: Boolean = true,
+    onSwitchToAutomatic: () -> Unit = {},
+    sessions: List<Session> = emptyList(),
+    onSessionSelected: (Session) -> Unit = {},
+    onCreateSessionClick: () -> Unit = {},
+    onManageSessionsClick: () -> Unit = {},
+    syncUiState: SyncUiState = SyncUiState(),
+    onSyncClick: () -> Unit = {},
+    authState: AuthState = AuthState.Guest,
+    onAuthClick: () -> Unit = {},
+    onNavigateToAdmin: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val dynamicColorEnabled by viewModel.dynamicColorEnabled.collectAsStateWithLifecycle()
@@ -91,7 +111,18 @@ fun SettingsScreen(
                 title = "Settings",
                 currentMode = currentMode,
                 onModeSelected = onModeSelected,
-                scrollBehavior = scrollBehavior
+                scrollBehavior = scrollBehavior,
+                activeSession = activeSession,
+                isAutomaticMode = isAutomaticMode,
+                onSwitchToAutomatic = onSwitchToAutomatic,
+                sessions = sessions,
+                onSessionSelected = onSessionSelected,
+                onCreateSessionClick = onCreateSessionClick,
+                onManageSessionsClick = onManageSessionsClick,
+                syncUiState = syncUiState,
+                onSyncClick = onSyncClick,
+                authState = authState,
+                onAuthClick = onAuthClick
             )
         }
     ) { paddingValues ->
@@ -264,6 +295,44 @@ fun SettingsScreen(
                             viewModel.setDefaultMode(mode)
                         },
                     )
+                        }
+                    }
+                }
+            }
+
+            if (authState is AuthState.Admin) {
+                item {
+                    SettingsSection(title = "Administration") {
+                        Surface(
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onNavigateToAdmin()
+                            },
+                            color = androidx.compose.ui.graphics.Color.Transparent
+                        ) {
+                            SettingsRow(
+                                title = "Admin Metrics Dashboard"
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    AssistChip(
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            onNavigateToAdmin()
+                                        },
+                                        label = { Text("ADMIN", style = MaterialTheme.typography.labelSmall) },
+                                        colors = AssistChipDefaults.assistChipColors(
+                                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                                            labelColor = MaterialTheme.colorScheme.onErrorContainer
+                                        )
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                        contentDescription = "Open Admin Dashboard",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
                         }
                     }
                 }

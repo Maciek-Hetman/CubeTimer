@@ -51,6 +51,9 @@ import com.maciekhetman.cubetimer.model.SolveTime
 import com.maciekhetman.cubetimer.model.TimerAverageOptions
 import com.maciekhetman.cubetimer.model.TimerState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.maciekhetman.cubetimer.model.AuthState
+import com.maciekhetman.cubetimer.model.Session
+import com.maciekhetman.cubetimer.model.SyncUiState
 import com.maciekhetman.cubetimer.ui.components.TopBar
 import com.maciekhetman.cubetimer.viewmodel.TimerViewModel
 import kotlin.time.Duration.Companion.milliseconds
@@ -61,6 +64,17 @@ fun TimerScreen(
     viewModel: TimerViewModel,
     currentMode: Mode,
     onModeSelected: (Mode) -> Unit,
+    activeSession: Session? = null,
+    isAutomaticMode: Boolean = true,
+    onSwitchToAutomatic: () -> Unit = {},
+    sessions: List<Session> = emptyList(),
+    onSessionSelected: (Session) -> Unit = {},
+    onCreateSessionClick: () -> Unit = {},
+    onManageSessionsClick: () -> Unit = {},
+    syncUiState: SyncUiState = SyncUiState(),
+    onSyncClick: () -> Unit = {},
+    authState: AuthState = AuthState.Guest,
+    onAuthClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val timerState by viewModel.timerState.collectAsStateWithLifecycle()
@@ -147,7 +161,18 @@ fun TimerScreen(
             TopBar(
                 title = "Timer",
                 currentMode = currentMode,
-                onModeSelected = onModeSelected
+                onModeSelected = onModeSelected,
+                activeSession = activeSession,
+                isAutomaticMode = isAutomaticMode,
+                onSwitchToAutomatic = onSwitchToAutomatic,
+                sessions = sessions,
+                onSessionSelected = onSessionSelected,
+                onCreateSessionClick = onCreateSessionClick,
+                onManageSessionsClick = onManageSessionsClick,
+                syncUiState = syncUiState,
+                onSyncClick = onSyncClick,
+                authState = authState,
+                onAuthClick = onAuthClick
             )
         }
         

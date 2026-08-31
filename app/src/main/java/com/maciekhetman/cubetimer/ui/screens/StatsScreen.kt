@@ -41,15 +41,36 @@ import com.maciekhetman.cubetimer.viewmodel.TimerViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 
+import com.maciekhetman.cubetimer.model.AuthState
+import com.maciekhetman.cubetimer.model.Session
+import com.maciekhetman.cubetimer.model.StatsFilter
+import com.maciekhetman.cubetimer.model.SyncUiState
+import androidx.compose.material.icons.filled.Check
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StatsScreen(
     viewModel: TimerViewModel,
     currentMode: Mode,
     onModeSelected: (Mode) -> Unit,
+    activeSession: Session? = null,
+    isAutomaticMode: Boolean = true,
+    onSwitchToAutomatic: () -> Unit = {},
+    sessions: List<Session> = emptyList(),
+    onSessionSelected: (Session) -> Unit = {},
+    onCreateSessionClick: () -> Unit = {},
+    onManageSessionsClick: () -> Unit = {},
+    syncUiState: SyncUiState = SyncUiState(),
+    onSyncClick: () -> Unit = {},
+    authState: AuthState = AuthState.Guest,
+    onAuthClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val solves by viewModel.solves.collectAsStateWithLifecycle()
+    val filteredSolves by viewModel.statsFilteredSolves.collectAsStateWithLifecycle()
+    val statsFilter by viewModel.statsFilter.collectAsStateWithLifecycle()
+    val currentActiveSession by viewModel.activeSession.collectAsStateWithLifecycle()
+    val effectiveActiveSession = activeSession ?: currentActiveSession
     val appTimeMillis by viewModel.appTimeMillis.collectAsStateWithLifecycle()
     var showClearDialog by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -57,6 +78,11 @@ fun StatsScreen(
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
     val layoutDirection = LocalLayoutDirection.current
     val haptic = LocalHapticFeedback.current
+
+    val activeSessionSolvesCount = remember(solves, effectiveActiveSession) {
+        val activeId = effectiveActiveSession?.id
+        if (activeId != null) solves.count { it.sessionId == activeId } else solves.size
+    }
 
     Scaffold(
         modifier = modifier
@@ -68,91 +94,115 @@ fun StatsScreen(
                 title = "Statistics",
                 currentMode = currentMode,
                 onModeSelected = onModeSelected,
-                scrollBehavior = scrollBehavior
+                scrollBehavior = scrollBehavior,
+                activeSession = effectiveActiveSession,
+                isAutomaticMode = isAutomaticMode,
+                onSwitchToAutomatic = onSwitchToAutomatic,
+                sessions = sessions,
+                onSessionSelected = onSessionSelected,
+                onCreateSessionClick = onCreateSessionClick,
+                onManageSessionsClick = onManageSessionsClick,
+                syncUiState = syncUiState,
+                onSyncClick = onSyncClick,
+                authState = authState,
+                onAuthClick = onAuthClick
             )
         }
     ) { paddingValues ->
-        if (solves.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "No solves yet",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+        val startPadding = paddingValues.calculateStartPadding(layoutDirection)
+        val endPadding = paddingValues.calculateEndPadding(layoutDirection)
+        val bottomPadding = paddingValues.calculateBottomPadding()
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = startPadding,
+                top = paddingValues.calculateTopPadding() + 8.dp,
+                end = endPadding,
+                bottom = bottomPadding + 104.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            // Session Filter Chips Bar
+            item {
+                SessionFilterBar(
+                    currentFilter = statsFilter,
+                    onFilterSelected = { viewModel.setStatsFilter(it) },
+                    activeSession = effectiveActiveSession,
+                    activeSessionSolvesCount = activeSessionSolvesCount,
+                    allSolvesCount = solves.size,
+                    sessions = sessions
                 )
             }
-        } else {
-            val startPadding = paddingValues.calculateStartPadding(layoutDirection)
-            val endPadding = paddingValues.calculateEndPadding(layoutDirection)
-            val bottomPadding = paddingValues.calculateBottomPadding()
 
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize(),
-                contentPadding = PaddingValues(
-                    start = startPadding,
-                    top = paddingValues.calculateTopPadding() + 8.dp,
-                    end = endPadding,
-                    bottom = bottomPadding + 104.dp
-                ),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
+            if (filteredSolves.isEmpty()) {
                 item {
-                    StatsHeader(solves = solves, appTimeMillis = appTimeMillis)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 48.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (solves.isEmpty()) "No solves yet" else "No solves in selected filter",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                        )
+                    }
                 }
-                
+            } else {
                 item {
-                    SectionDivider()
+                    StatsHeader(solves = filteredSolves, appTimeMillis = appTimeMillis)
                 }
-                
-                item {
-                    SessionStatsSection(solves = solves)
-                }
-                
+
                 item {
                     SectionDivider()
                 }
-                
+
                 item {
-                    ChartsSection(solves = solves)
+                    SessionStatsSection(solves = filteredSolves)
                 }
-                
-                item {
-                    SectionDivider()
-                }
-                
-                item {
-                    AveragesSection(solves = solves)
-                }
-                
+
                 item {
                     SectionDivider()
                 }
-                
+
                 item {
-                    LargeAveragesSection(solves = solves)
+                    ChartsSection(solves = filteredSolves)
                 }
-                
-                item {
-                    SectionDivider()
-                }
-                
-                item {
-                    ActivityTracker(solves = solves)
-                }
-                
+
                 item {
                     SectionDivider()
                 }
-                
+
                 item {
-                    PenaltyStatsSection(solves = solves)
+                    AveragesSection(solves = filteredSolves)
                 }
-                
+
+                item {
+                    SectionDivider()
+                }
+
+                item {
+                    LargeAveragesSection(solves = filteredSolves)
+                }
+
+                item {
+                    SectionDivider()
+                }
+
+                item {
+                    ActivityTracker(solves = filteredSolves)
+                }
+
+                item {
+                    SectionDivider()
+                }
+
+                item {
+                    PenaltyStatsSection(solves = filteredSolves)
+                }
+
                 item {
                     SectionDivider()
                 }
@@ -166,28 +216,28 @@ fun StatsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         SectionHeader(
-                            title = "Solve History",
+                            title = "Solve History (${filteredSolves.size})",
                             modifier = Modifier.weight(1f)
                         )
-                        if (solves.isNotEmpty()) {
+                        if (filteredSolves.isNotEmpty()) {
                             FilledTonalButton(
                                 onClick = {
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                     showClearDialog = true
                                 }
                             ) {
-                                Text("Clear All")
+                                Text(if (statsFilter is StatsFilter.ActiveSession) "Clear Session" else "Clear All")
                             }
                         }
                     }
                 }
-                
-                val isHistoryCapped = solves.size > 200
-                val recentSolves = if (isHistoryCapped) solves.takeLast(200) else solves
+
+                val isHistoryCapped = filteredSolves.size > 200
+                val recentSolves = if (isHistoryCapped) filteredSolves.takeLast(200) else filteredSolves
                 if (isHistoryCapped) {
                     item {
                         Text(
-                            text = "Showing last 200 of ${solves.size} solves",
+                            text = "Showing last 200 of ${filteredSolves.size} solves",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                             modifier = Modifier
@@ -236,7 +286,7 @@ fun StatsScreen(
 
                     SolveCard(
                         solve = solve,
-                        solveNumber = solves.size - index,
+                        solveNumber = filteredSolves.size - index,
                         onDelete = deleteSolve,
                         onSetPenalty = setPenalty,
                         onHaptic = {
@@ -245,7 +295,7 @@ fun StatsScreen(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                     )
                 }
-                
+
                 item {
                     Spacer(modifier = Modifier.height(16.dp))
                 }
@@ -254,20 +304,28 @@ fun StatsScreen(
     }
 
     if (showClearDialog) {
+        val isSessionScope = statsFilter is StatsFilter.ActiveSession
+        val clearTitle = if (isSessionScope) "Clear Session Solves?" else "Clear All Solves?"
+        val clearMessage = if (isSessionScope) {
+            "This will delete ${filteredSolves.size} solve(s) from the current session."
+        } else {
+            "This will delete all ${filteredSolves.size} solve(s) from your history."
+        }
+
         AlertDialog(
             onDismissRequest = { showClearDialog = false },
-            title = { Text("Clear All Solves?") },
-            text = { Text("This will delete all ${solves.size} solve(s) from your history.") },
+            title = { Text(clearTitle) },
+            text = { Text(clearMessage) },
             confirmButton = {
                 TextButton(
                     onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        val previousSolves = solves
-                        viewModel.clearAllSolves()
+                        val previousSolves = filteredSolves
+                        viewModel.clearFilteredSolves()
                         showClearDialog = false
                         scope.launch {
                             val result = snackbarHostState.showSnackbar(
-                                message = "All solves cleared",
+                                message = "Solves cleared",
                                 actionLabel = "Undo",
                                 duration = SnackbarDuration.Short
                             )
@@ -289,6 +347,86 @@ fun StatsScreen(
                 }
             }
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SessionFilterBar(
+    currentFilter: StatsFilter,
+    onFilterSelected: (StatsFilter) -> Unit,
+    activeSession: Session?,
+    activeSessionSolvesCount: Int,
+    allSolvesCount: Int,
+    sessions: List<Session>,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        FilterChip(
+            selected = currentFilter is StatsFilter.ActiveSession,
+            onClick = { onFilterSelected(StatsFilter.ActiveSession) },
+            label = {
+                Text(
+                    text = "Active Session ($activeSessionSolvesCount)",
+                    style = MaterialTheme.typography.labelMedium
+                )
+            },
+            leadingIcon = if (currentFilter is StatsFilter.ActiveSession) {
+                {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            } else null
+        )
+
+        FilterChip(
+            selected = currentFilter is StatsFilter.AllSessions,
+            onClick = { onFilterSelected(StatsFilter.AllSessions) },
+            label = {
+                Text(
+                    text = "All Solves ($allSolvesCount)",
+                    style = MaterialTheme.typography.labelMedium
+                )
+            },
+            leadingIcon = if (currentFilter is StatsFilter.AllSessions) {
+                {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            } else null
+        )
+
+        if (currentFilter is StatsFilter.SpecificSession) {
+            FilterChip(
+                selected = true,
+                onClick = {},
+                label = {
+                    Text(
+                        text = currentFilter.sessionName,
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            )
+        }
     }
 }
 
@@ -1701,16 +1839,16 @@ private fun findBestAverageOfN(solves: List<SolveTime>, n: Int): Long? {
 }
 
 // Session calculation: group solves with max 1 hour gap between consecutive solves
-private data class Session(
+private data class AutoCalculatedSession(
     val solves: List<SolveTime>,
     val startTime: Long,
     val endTime: Long
 )
 
-private fun calculateSessions(solves: List<SolveTime>): List<Session> {
+private fun calculateSessions(solves: List<SolveTime>): List<AutoCalculatedSession> {
     if (solves.isEmpty()) return emptyList()
     
-    val sessions = mutableListOf<Session>()
+    val sessions = mutableListOf<AutoCalculatedSession>()
     val oneHourInMillis = 60 * 60 * 1000L
     
     var currentSession = mutableListOf<SolveTime>()
@@ -1727,7 +1865,7 @@ private fun calculateSessions(solves: List<SolveTime>): List<Session> {
             
             if (timeSinceLastSolve > oneHourInMillis) {
                 // Start new session
-                sessions.add(Session(
+                sessions.add(AutoCalculatedSession(
                     solves = currentSession.toList(),
                     startTime = sessionStart,
                     endTime = currentSession.last().timestamp
@@ -1742,7 +1880,7 @@ private fun calculateSessions(solves: List<SolveTime>): List<Session> {
     
     // Add the last session
     if (currentSession.isNotEmpty()) {
-        sessions.add(Session(
+        sessions.add(AutoCalculatedSession(
             solves = currentSession.toList(),
             startTime = sessionStart,
             endTime = currentSession.last().timestamp

@@ -7,12 +7,14 @@ import com.maciekhetman.cubetimer.data.SettingsRepository
 import com.maciekhetman.cubetimer.data.SolvesRepository
 import com.maciekhetman.cubetimer.domain.AverageCalculator
 import com.maciekhetman.cubetimer.domain.ScrambleGenerator
+import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Penalty
 import com.maciekhetman.cubetimer.model.RecordCelebration
 import com.maciekhetman.cubetimer.model.RecordType
 import com.maciekhetman.cubetimer.model.RunningTimerDisplay
 import com.maciekhetman.cubetimer.model.SolveTime
+import com.maciekhetman.cubetimer.model.StatsFilter
 import com.maciekhetman.cubetimer.model.TimerState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -22,6 +24,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
@@ -30,10 +33,37 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.milliseconds
 
+import com.maciekhetman.cubetimer.data.auth.AuthManager
+import com.maciekhetman.cubetimer.data.auth.AuthManagerImpl
+import com.maciekhetman.cubetimer.data.local.CubeDatabase
+import com.maciekhetman.cubetimer.data.session.SessionManager
+import com.maciekhetman.cubetimer.data.session.SessionManagerImpl
+import com.maciekhetman.cubetimer.data.session.SessionRepositoryImpl
+import com.maciekhetman.cubetimer.model.ownerId
+import com.maciekhetman.cubetimer.model.Session
+import kotlinx.coroutines.flow.combine
+
 @OptIn(ExperimentalCoroutinesApi::class)
-class TimerViewModel(application: Application) : AndroidViewModel(application) {
-    private val repository = SolvesRepository(application)
-    private val settingsRepository = SettingsRepository(application)
+class TimerViewModel(
+    application: Application,
+    private val repository: SolvesRepository,
+    private val settingsRepository: SettingsRepository,
+    private val sessionManager: SessionManager,
+    private val authManager: AuthManager
+) : AndroidViewModel(application) {
+
+    constructor(application: Application) : this(
+        application = application,
+        repository = SolvesRepository(application),
+        settingsRepository = SettingsRepository(application),
+        sessionManager = SessionManagerImpl(
+            context = application,
+            sessionRepository = SessionRepositoryImpl(CubeDatabase.getInstance(application)),
+            solveDao = CubeDatabase.getInstance(application).solveDao(),
+            authManager = AuthManagerImpl.getInstance(application)
+        ),
+        authManager = AuthManagerImpl.getInstance(application)
+    )
 
     private val _timerState = MutableStateFlow<TimerState>(TimerState.Idle)
     val timerState: StateFlow<TimerState> = _timerState.asStateFlow()
@@ -88,10 +118,48 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     private val _hapticsEnabled = MutableStateFlow(true)
     val hapticsEnabled: StateFlow<Boolean> = _hapticsEnabled.asStateFlow()
 
-    private val _allSolves = MutableStateFlow<List<SolveTime>>(emptyList())
+    private val solvesByOwner = mutableMapOf<String, List<SolveTime>>()
+    private val pendingDeletedIds = mutableSetOf<String>()
 
     private val _solves = MutableStateFlow<List<SolveTime>>(emptyList())
     val solves: StateFlow<List<SolveTime>> = _solves.asStateFlow()
+
+    private val _allSolves = MutableStateFlow<List<SolveTime>>(emptyList())
+    val allSolves: StateFlow<List<SolveTime>> = _allSolves.asStateFlow()
+
+    private val _statsFilter = MutableStateFlow<StatsFilter>(StatsFilter.ActiveSession)
+    val statsFilter: StateFlow<StatsFilter> = _statsFilter.asStateFlow()
+
+    /**
+     * Active session for the currently selected Mode.
+     */
+    val activeSession: StateFlow<Session?> = combine(_currentMode, authManager.authState) { mode, authState ->
+        Pair(authState.ownerId, mode)
+    }.flatMapLatest { (ownerId, mode) ->
+        sessionManager.getActiveSessionFlow(ownerId, mode)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /**
+     * Solves filtered for StatsScreen based on the selected StatsFilter (ActiveSession, AllSessions, SpecificSession).
+     */
+    val statsFilteredSolves: StateFlow<List<SolveTime>> = combine(
+        _solves,
+        activeSession,
+        _statsFilter
+    ) { modeSolves, activeSes, filter ->
+        when (filter) {
+            is StatsFilter.ActiveSession -> {
+                val activeId = activeSes?.id
+                if (activeId != null) {
+                    modeSolves.filter { it.sessionId == activeId }
+                } else {
+                    modeSolves
+                }
+            }
+            is StatsFilter.AllSessions -> modeSolves
+            is StatsFilter.SpecificSession -> modeSolves.filter { it.sessionId == filter.sessionId }
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     private val _currentScramble = MutableStateFlow("")
     val currentScramble: StateFlow<String> = _currentScramble.asStateFlow()
@@ -123,13 +191,57 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
             settingsRepository.migrateFromLegacyIfNeeded()
         }
 
-        // Load saved solves on initialization
+        // Synchronously reset and reload in-memory state when auth owner transitions
         viewModelScope.launch {
-            repository.solvesFlow.collect { savedSolves ->
-                _allSolves.value = savedSolves
-                _solves.value = savedSolves.filter { it.mode == _currentMode.value }
+            var lastOwnerId: String? = null
+            authManager.authState.collect { authState ->
+                val newOwnerId = authState.ownerId
+                if (lastOwnerId != newOwnerId) {
+                    val currentMode = _currentMode.value
+                    val ownerSolves = solvesByOwner[newOwnerId] ?: emptyList()
+                    _allSolves.value = ownerSolves
+                    _solves.value = ownerSolves.filter { it.mode == currentMode }
+                }
+                lastOwnerId = newOwnerId
             }
         }
+
+        // Reactive Room flow collector for the active owner
+        viewModelScope.launch {
+            authManager.authState.flatMapLatest { authState ->
+                val flowOwner = authState.ownerId
+                repository.getAllSolvesFlow(flowOwner).map { dbSolves -> Pair(flowOwner, dbSolves) }
+            }.collect { (flowOwner, dbSolves) ->
+                if (flowOwner == authManager.currentOwnerId) {
+                    val currentOwnerSolves = solvesByOwner[flowOwner] ?: emptyList()
+                    val activeDbSolves = dbSolves.filter { it.id !in pendingDeletedIds }
+                    val dbMap = activeDbSolves.associateBy { it.id }
+                    val pendingLocal = currentOwnerSolves.filter { it.id !in dbMap && it.id !in pendingDeletedIds }
+                    val currentMap = currentOwnerSolves.associateBy { it.id }
+                    val reconciledDb = activeDbSolves.map { dbSolve ->
+                        val local = currentMap[dbSolve.id]
+                        if (local != null && local.penalty != dbSolve.penalty) {
+                            local
+                        } else {
+                            dbSolve
+                        }
+                    }
+                    val merged = (reconciledDb + pendingLocal).sortedBy { it.timestamp }
+                    solvesByOwner[flowOwner] = merged
+                    _allSolves.value = merged
+                    _solves.value = merged.filter { it.mode == _currentMode.value }
+                }
+            }
+        }
+
+        // Reactive update for mode selection
+        viewModelScope.launch {
+            _currentMode.collect { mode ->
+                _solves.value = _allSolves.value.filter { it.mode == mode }
+            }
+        }
+
+
 
         // Load settings
         viewModelScope.launch {
@@ -296,23 +408,41 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     fun saveSolveWithPenalty(penalty: Penalty) {
         val currentState = _timerState.value
         if (currentState is TimerState.Finished) {
-            val newSolve = SolveTime(
-                timeInMillis = currentState.time,
-                penalty = penalty,
-                scramble = _currentScramble.value,
-                mode = _currentMode.value
-            )
-            val newAllSolves = _allSolves.value + newSolve
+            val nowMs = System.currentTimeMillis()
+            val currentModeValue = _currentMode.value
+            val ownerId = authManager.currentOwnerId
 
-            _allSolves.value = newAllSolves
-            _solves.value = newAllSolves.filter { it.mode == _currentMode.value }
             viewModelScope.launch {
-                repository.saveSolves(newAllSolves)
-            }
+                val activeSession = sessionManager.getOrCreateActiveSession(
+                    ownerId = ownerId,
+                    mode = currentModeValue,
+                    solveTimestamp = nowMs
+                )
 
-            // Check for records using the actual saved penalty.
-            val previousSolves = _solves.value - newSolve
-            checkForRecords(newSolve, previousSolves, _solves.value)
+                val newSolve = SolveTime(
+                    timeInMillis = currentState.time,
+                    penalty = penalty,
+                    scramble = _currentScramble.value,
+                    mode = currentModeValue,
+                    timestamp = nowMs,
+                    sessionId = activeSession.id
+                )
+
+                val currentForOwner = solvesByOwner[ownerId] ?: emptyList()
+                val newAllSolves = (currentForOwner.filter { it.id != newSolve.id } + newSolve).sortedBy { it.timestamp }
+                solvesByOwner[ownerId] = newAllSolves
+                pendingDeletedIds.remove(newSolve.id)
+                if (authManager.currentOwnerId == ownerId) {
+                    _allSolves.value = newAllSolves
+                    _solves.value = newAllSolves.filter { it.mode == currentModeValue }
+                }
+
+                repository.saveSolve(newSolve, ownerId = ownerId, sessionId = activeSession.id)
+
+                // Check for records using the actual saved penalty.
+                val previousSolves = _solves.value - newSolve
+                checkForRecords(newSolve, previousSolves, _solves.value)
+            }
 
             resetTimer()
             generateNewScramble()
@@ -342,56 +472,87 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun deleteSolve(solve: SolveTime) {
-        val newAllSolves = _allSolves.value - solve
+        val ownerId = authManager.currentOwnerId
+        pendingDeletedIds.add(solve.id)
+        val currentForOwner = solvesByOwner[ownerId] ?: _allSolves.value
+        val newAllSolves = currentForOwner.filter { it.id != solve.id }
+        solvesByOwner[ownerId] = newAllSolves
         _allSolves.value = newAllSolves
         _solves.value = newAllSolves.filter { it.mode == _currentMode.value }
         viewModelScope.launch {
-            repository.saveSolves(newAllSolves)
+            repository.deleteSolve(solve, ownerId = ownerId)
         }
     }
 
     fun updateSolvePenalty(solve: SolveTime, penalty: Penalty) {
-        val newAllSolves = _allSolves.value.map { existing ->
-            if (existing.id == solve.id) {
-                existing.copy(penalty = penalty)
-            } else {
-                existing
-            }
+        val ownerId = authManager.currentOwnerId
+        val currentForOwner = solvesByOwner[ownerId] ?: _allSolves.value
+        val newAllSolves = currentForOwner.map { existing ->
+            if (existing.id == solve.id) existing.copy(penalty = penalty) else existing
         }
-        if (newAllSolves == _allSolves.value) return
+        solvesByOwner[ownerId] = newAllSolves
         _allSolves.value = newAllSolves
         _solves.value = newAllSolves.filter { it.mode == _currentMode.value }
         viewModelScope.launch {
-            repository.saveSolves(newAllSolves)
+            repository.updateSolvePenalty(solve, penalty, ownerId = ownerId)
         }
     }
 
     fun addSolve(solve: SolveTime) {
-        val newAllSolves = (_allSolves.value + solve).sortedBy { it.timestamp }
+        val ownerId = authManager.currentOwnerId
+        pendingDeletedIds.remove(solve.id)
+        val currentForOwner = solvesByOwner[ownerId] ?: _allSolves.value
+        val newAllSolves = (currentForOwner.filter { it.id != solve.id } + solve).sortedBy { it.timestamp }
+        solvesByOwner[ownerId] = newAllSolves
         _allSolves.value = newAllSolves
         _solves.value = newAllSolves.filter { it.mode == _currentMode.value }
         viewModelScope.launch {
-            repository.saveSolves(newAllSolves)
+            repository.saveSolve(solve, ownerId = ownerId, sessionId = solve.sessionId)
+        }
+    }
+
+    fun setStatsFilter(filter: StatsFilter) {
+        _statsFilter.value = filter
+    }
+
+    fun clearFilteredSolves() {
+        val toDelete = statsFilteredSolves.value
+        if (toDelete.isEmpty()) return
+        val ownerId = authManager.currentOwnerId
+        val toDeleteIds = toDelete.map { it.id }.toSet()
+        pendingDeletedIds.addAll(toDeleteIds)
+        val currentForOwner = solvesByOwner[ownerId] ?: _allSolves.value
+        val newAllSolves = currentForOwner.filter { it.id !in toDeleteIds }
+        solvesByOwner[ownerId] = newAllSolves
+        _allSolves.value = newAllSolves
+        _solves.value = newAllSolves.filter { it.mode == _currentMode.value }
+        viewModelScope.launch {
+            repository.deleteSolves(toDelete, ownerId = ownerId)
         }
     }
 
     fun clearAllSolves() {
+        val ownerId = authManager.currentOwnerId
+        pendingDeletedIds.addAll(_allSolves.value.map { it.id })
+        solvesByOwner[ownerId] = emptyList()
         _allSolves.value = emptyList()
         _solves.value = emptyList()
         viewModelScope.launch {
-            repository.saveSolves(emptyList())
+            repository.clearAllSolves(ownerId = ownerId)
         }
     }
 
     fun restoreSolves(previous: List<SolveTime>) {
-        val current = _allSolves.value
-        val merged = (previous + current)
-            .distinctBy { it.id }
-            .sortedBy { it.timestamp }
+        val ownerId = authManager.currentOwnerId
+        val toRestoreIds = previous.map { it.id }.toSet()
+        pendingDeletedIds.removeAll(toRestoreIds)
+        val currentForOwner = solvesByOwner[ownerId] ?: _allSolves.value
+        val merged = (currentForOwner.filter { it.id !in toRestoreIds } + previous).sortedBy { it.timestamp }
+        solvesByOwner[ownerId] = merged
         _allSolves.value = merged
         _solves.value = merged.filter { it.mode == _currentMode.value }
         viewModelScope.launch {
-            repository.saveSolves(merged)
+            repository.restoreSolves(previous, ownerId = ownerId)
         }
     }
 

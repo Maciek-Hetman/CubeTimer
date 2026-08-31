@@ -14,6 +14,7 @@ object ScrambleGenerator {
     )
 
     fun generateScramble(mode: Mode): String {
+        AndroidSha1PrngProvider.install()
         val registry = scramblersByMode.getValue(mode)
         return registry.getScrambler().generateScramble()
     }

@@ -10,6 +10,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -17,10 +18,10 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -29,64 +30,124 @@ import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
-
-import com.maciekhetman.cubetimer.ui.screens.StatsScreen
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.maciekhetman.cubetimer.data.sync.SyncStateManager
+import com.maciekhetman.cubetimer.model.AuthState
+import com.maciekhetman.cubetimer.model.Session
+import com.maciekhetman.cubetimer.ui.auth.AuthDialog
+import com.maciekhetman.cubetimer.ui.auth.AuthDialogType
+import com.maciekhetman.cubetimer.ui.screens.AdminDashboardScreen
 import com.maciekhetman.cubetimer.ui.screens.SettingsScreen
+import com.maciekhetman.cubetimer.ui.screens.StatsScreen
 import com.maciekhetman.cubetimer.ui.screens.TimerScreen
+import com.maciekhetman.cubetimer.ui.session.CreateSessionDialog
+import com.maciekhetman.cubetimer.ui.session.DeleteSessionDialog
+import com.maciekhetman.cubetimer.ui.session.RenameSessionDialog
+import com.maciekhetman.cubetimer.ui.session.SessionManagementSheet
+import com.maciekhetman.cubetimer.ui.sync.SyncStatusDialog
 import com.maciekhetman.cubetimer.ui.theme.CubeTimerTheme
+import com.maciekhetman.cubetimer.viewmodel.AdminViewModel
+import com.maciekhetman.cubetimer.viewmodel.AuthViewModel
+import com.maciekhetman.cubetimer.viewmodel.SessionViewModel
 import com.maciekhetman.cubetimer.viewmodel.TimerViewModel
 
 class MainActivity : ComponentActivity() {
     private lateinit var timerViewModel: TimerViewModel
-    
+    private lateinit var sessionViewModel: SessionViewModel
+    private lateinit var authViewModel: AuthViewModel
+    private lateinit var adminViewModel: AdminViewModel
+    private lateinit var syncStateManager: SyncStateManager
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        
-        timerViewModel = ViewModelProvider(this)[TimerViewModel::class.java]
-        
+
+        val app = application as CubeTimerApplication
+        val factory = object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+                return when {
+                    modelClass.isAssignableFrom(TimerViewModel::class.java) -> {
+                        TimerViewModel(
+                            application = app,
+                            repository = app.solvesRepository,
+                            settingsRepository = com.maciekhetman.cubetimer.data.SettingsRepository(app),
+                            sessionManager = app.sessionManager,
+                            authManager = app.authManager
+                        ) as T
+                    }
+                    modelClass.isAssignableFrom(SessionViewModel::class.java) -> {
+                        SessionViewModel(
+                            application = app,
+                            sessionManager = app.sessionManager,
+                            sessionRepository = app.sessionRepository,
+                            authManager = app.authManager
+                        ) as T
+                    }
+                    modelClass.isAssignableFrom(AuthViewModel::class.java) -> {
+                        AuthViewModel(
+                            application = app,
+                            authManager = app.authManager
+                        ) as T
+                    }
+                    modelClass.isAssignableFrom(AdminViewModel::class.java) -> {
+                        AdminViewModel(
+                            application = app,
+                            adminRepository = app.adminRepository
+                        ) as T
+                    }
+                    else -> super.create(modelClass)
+                }
+            }
+        }
+        timerViewModel = ViewModelProvider(this, factory)[TimerViewModel::class.java]
+        sessionViewModel = ViewModelProvider(this, factory)[SessionViewModel::class.java]
+        authViewModel = ViewModelProvider(this, factory)[AuthViewModel::class.java]
+        adminViewModel = ViewModelProvider(this, factory)[AdminViewModel::class.java]
+        syncStateManager = app.syncStateManager
+
         // Keep screen on while app is open
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        
+
         setContent {
             val dynamicColorEnabled by timerViewModel.dynamicColorEnabled.collectAsStateWithLifecycle()
             val amoledEnabled by timerViewModel.amoledEnabled.collectAsStateWithLifecycle()
@@ -96,17 +157,23 @@ class MainActivity : ComponentActivity() {
                 amoled = amoledEnabled && !dynamicColorEnabled
             ) {
                 OptionalHapticsProvider(enabled = hapticsEnabled) {
-                    CubeTimerApp(timerViewModel)
+                    CubeTimerApp(
+                        viewModel = timerViewModel,
+                        sessionViewModel = sessionViewModel,
+                        authViewModel = authViewModel,
+                        adminViewModel = adminViewModel,
+                        syncStateManager = syncStateManager
+                    )
                 }
             }
         }
     }
-    
+
     override fun onResume() {
         super.onResume()
         timerViewModel.resetAppStartTime()
     }
-    
+
     override fun onPause() {
         super.onPause()
         timerViewModel.updateAppTime()
@@ -132,18 +199,61 @@ private object NoHapticFeedback : HapticFeedback {
 }
 
 @Composable
-fun CubeTimerApp(viewModel: TimerViewModel) {
+fun CubeTimerApp(
+    viewModel: TimerViewModel,
+    sessionViewModel: SessionViewModel = viewModel(),
+    authViewModel: AuthViewModel = viewModel(),
+    adminViewModel: AdminViewModel = viewModel(),
+    syncStateManager: SyncStateManager = (LocalContext.current.applicationContext as? CubeTimerApplication)?.syncStateManager ?: SyncStateManager()
+) {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.TIMER) }
     val currentMode by viewModel.currentMode.collectAsStateWithLifecycle()
     val isTimerRunning by viewModel.isTimerRunning.collectAsStateWithLifecycle()
     val focusMode by viewModel.focusMode.collectAsStateWithLifecycle()
-    val haptic = LocalHapticFeedback.current
     val focusModeActive = focusMode && isTimerRunning
+
+    // Reactive Auth & Sync States
+    val authState by authViewModel.authState.collectAsStateWithLifecycle()
+    val authFormState by authViewModel.formState.collectAsStateWithLifecycle()
+    val syncUiState by syncStateManager.syncUiState.collectAsStateWithLifecycle()
+
+    // Reactive Session States
+    val activeSession by sessionViewModel.activeSession.collectAsStateWithLifecycle()
+    val isAutomaticMode by sessionViewModel.isAutomaticMode.collectAsStateWithLifecycle()
+    val sessionsList by sessionViewModel.sessionsList.collectAsStateWithLifecycle()
+    val archivedSessionsList by sessionViewModel.archivedSessionsList.collectAsStateWithLifecycle()
+
+    // Modals visibility states
+    var showSyncDialog by rememberSaveable { mutableStateOf(false) }
+    var showCreateSessionDialog by rememberSaveable { mutableStateOf(false) }
+    var showRenameSessionDialog by rememberSaveable { mutableStateOf(false) }
+    var sessionToRename by remember { mutableStateOf<Session?>(null) }
+    var showDeleteSessionDialog by rememberSaveable { mutableStateOf(false) }
+    var sessionToDelete by remember { mutableStateOf<Session?>(null) }
+    var showSessionManagementSheet by rememberSaveable { mutableStateOf(false) }
+
     ApplyStatusBarColor()
 
     // Predictive back navigation support
     BackHandler(enabled = currentDestination != AppDestinations.TIMER && !isTimerRunning) {
-        currentDestination = AppDestinations.TIMER
+        if (currentDestination == AppDestinations.ADMIN) {
+            currentDestination = AppDestinations.SETTINGS
+        } else {
+            currentDestination = AppDestinations.TIMER
+        }
+    }
+
+    val onModeSelected: (com.maciekhetman.cubetimer.model.Mode) -> Unit = { mode ->
+        viewModel.setMode(mode)
+        sessionViewModel.setMode(mode)
+    }
+
+    val onAuthClick: () -> Unit = {
+        if (authState is AuthState.Guest) {
+            authViewModel.openDialog(AuthDialogType.LOGIN)
+        } else {
+            authViewModel.openDialog(AuthDialogType.USER_PROFILE)
+        }
     }
 
     @Composable
@@ -191,7 +301,18 @@ fun CubeTimerApp(viewModel: TimerViewModel) {
                     TimerScreen(
                         viewModel = viewModel,
                         currentMode = currentMode,
-                        onModeSelected = { mode -> viewModel.setMode(mode) },
+                        onModeSelected = onModeSelected,
+                        activeSession = activeSession,
+                        isAutomaticMode = isAutomaticMode,
+                        onSwitchToAutomatic = { sessionViewModel.switchToAutomaticSession() },
+                        sessions = sessionsList,
+                        onSessionSelected = { session -> sessionViewModel.switchSession(session.id) },
+                        onCreateSessionClick = { showCreateSessionDialog = true },
+                        onManageSessionsClick = { showSessionManagementSheet = true },
+                        syncUiState = syncUiState,
+                        onSyncClick = { showSyncDialog = true },
+                        authState = authState,
+                        onAuthClick = onAuthClick,
                         modifier = contentModifier
                     )
                 }
@@ -202,7 +323,18 @@ fun CubeTimerApp(viewModel: TimerViewModel) {
                     StatsScreen(
                         viewModel = viewModel,
                         currentMode = currentMode,
-                        onModeSelected = { mode -> viewModel.setMode(mode) },
+                        onModeSelected = onModeSelected,
+                        activeSession = activeSession,
+                        isAutomaticMode = isAutomaticMode,
+                        onSwitchToAutomatic = { sessionViewModel.switchToAutomaticSession() },
+                        sessions = sessionsList,
+                        onSessionSelected = { session -> sessionViewModel.switchSession(session.id) },
+                        onCreateSessionClick = { showCreateSessionDialog = true },
+                        onManageSessionsClick = { showSessionManagementSheet = true },
+                        syncUiState = syncUiState,
+                        onSyncClick = { showSyncDialog = true },
+                        authState = authState,
+                        onAuthClick = onAuthClick,
                         modifier = contentModifier
                     )
                 }
@@ -210,7 +342,27 @@ fun CubeTimerApp(viewModel: TimerViewModel) {
                     SettingsScreen(
                         viewModel = viewModel,
                         currentMode = currentMode,
-                        onModeSelected = { mode -> viewModel.setMode(mode) },
+                        onModeSelected = onModeSelected,
+                        activeSession = activeSession,
+                        isAutomaticMode = isAutomaticMode,
+                        onSwitchToAutomatic = { sessionViewModel.switchToAutomaticSession() },
+                        sessions = sessionsList,
+                        onSessionSelected = { session -> sessionViewModel.switchSession(session.id) },
+                        onCreateSessionClick = { showCreateSessionDialog = true },
+                        onManageSessionsClick = { showSessionManagementSheet = true },
+                        syncUiState = syncUiState,
+                        onSyncClick = { showSyncDialog = true },
+                        authState = authState,
+                        onAuthClick = onAuthClick,
+                        onNavigateToAdmin = { currentDestination = AppDestinations.ADMIN },
+                        modifier = contentModifier
+                    )
+                }
+                AppDestinations.ADMIN -> {
+                    AdminDashboardScreen(
+                        viewModel = adminViewModel,
+                        authState = authState,
+                        onNavigateBack = { currentDestination = AppDestinations.SETTINGS },
                         modifier = contentModifier
                     )
                 }
@@ -223,8 +375,8 @@ fun CubeTimerApp(viewModel: TimerViewModel) {
     ) { innerPadding ->
         Box(modifier = Modifier.fillMaxSize()) {
             AppContent(innerPadding)
-            
-            if (!focusModeActive) {
+
+            if (!focusModeActive && currentDestination != AppDestinations.ADMIN) {
                 FloatingNavigationBar(
                     currentDestination = currentDestination,
                     onNavigate = { currentDestination = it },
@@ -233,6 +385,89 @@ fun CubeTimerApp(viewModel: TimerViewModel) {
                 )
             }
         }
+    }
+
+    // Modal dialogs and bottom sheets
+    AuthDialog(
+        formState = authFormState,
+        authState = authState,
+        viewModel = authViewModel,
+        onDismiss = { authViewModel.dismissDialog() },
+        onOpenAdminDashboard = { currentDestination = AppDestinations.ADMIN }
+    )
+
+    if (showSyncDialog) {
+        SyncStatusDialog(
+            syncState = syncUiState,
+            onTriggerSync = { syncStateManager.triggerSync() },
+            onDismiss = { showSyncDialog = false },
+            onLoginClick = { authViewModel.openDialog(AuthDialogType.LOGIN) }
+        )
+    }
+
+    if (showCreateSessionDialog) {
+        CreateSessionDialog(
+            onDismiss = { showCreateSessionDialog = false },
+            onConfirm = { name -> sessionViewModel.createManualSession(name) }
+        )
+    }
+
+    if (showRenameSessionDialog && sessionToRename != null) {
+        RenameSessionDialog(
+            initialName = sessionToRename!!.name,
+            onDismiss = {
+                showRenameSessionDialog = false
+                sessionToRename = null
+            },
+            onConfirm = { newName ->
+                sessionToRename?.let { session ->
+                    sessionViewModel.renameSession(session.id, newName)
+                }
+                showRenameSessionDialog = false
+                sessionToRename = null
+            }
+        )
+    }
+
+    if (showDeleteSessionDialog && sessionToDelete != null) {
+        DeleteSessionDialog(
+            sessionName = sessionToDelete!!.name,
+            onDismiss = {
+                showDeleteSessionDialog = false
+                sessionToDelete = null
+            },
+            onConfirm = {
+                sessionToDelete?.let { session ->
+                    sessionViewModel.deleteSession(session.id)
+                }
+                showDeleteSessionDialog = false
+                sessionToDelete = null
+            }
+        )
+    }
+
+    if (showSessionManagementSheet) {
+        SessionManagementSheet(
+            onDismissRequest = { showSessionManagementSheet = false },
+            currentMode = currentMode,
+            activeSession = activeSession,
+            isAutomaticMode = isAutomaticMode,
+            onSwitchToAutomatic = { sessionViewModel.switchToAutomaticSession() },
+            activeSessions = sessionsList,
+            archivedSessions = archivedSessionsList,
+            onSelectSession = { session -> sessionViewModel.switchSession(session.id) },
+            onCreateSession = { showCreateSessionDialog = true },
+            onRenameSession = { session ->
+                sessionToRename = session
+                showRenameSessionDialog = true
+            },
+            onArchiveSession = { session -> sessionViewModel.archiveSession(session.id) },
+            onUnarchiveSession = { session -> sessionViewModel.unarchiveSession(session.id) },
+            onDeleteSession = { session ->
+                sessionToDelete = session
+                showDeleteSessionDialog = true
+            }
+        )
     }
 }
 
@@ -244,6 +479,8 @@ fun FloatingNavigationBar(
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
+    val visibleDestinations = listOf(AppDestinations.TIMER, AppDestinations.STATS, AppDestinations.SETTINGS)
+
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainer,
         shape = CircleShape,
@@ -266,14 +503,14 @@ fun FloatingNavigationBar(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            AppDestinations.entries.forEach { destination ->
+            visibleDestinations.forEach { destination ->
                 val selected = destination == currentDestination
                 val color = if (selected) {
                     MaterialTheme.colorScheme.primary
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 }
-                
+
                 val scale by animateFloatAsState(
                     targetValue = if (selected) 1.22f else 1.0f,
                     animationSpec = spring(
@@ -334,4 +571,5 @@ enum class AppDestinations(
     TIMER("Timer", Icons.Default.Home),
     STATS("Stats", Icons.AutoMirrored.Filled.List),
     SETTINGS("Settings", Icons.Default.Settings),
+    ADMIN("Admin", Icons.Default.AdminPanelSettings),
 }
