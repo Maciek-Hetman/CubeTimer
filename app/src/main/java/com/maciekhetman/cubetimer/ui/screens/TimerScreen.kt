@@ -701,7 +701,6 @@ private fun ScrambleDisplay(
     val safeScale = scale.coerceIn(0.8f, 1.4f)
     val contentPadding = 16.dp * safeScale
     val spacerWidth = 12.dp * safeScale
-    val textEndPadding = 8.dp * safeScale
     val buttonSize = 40.dp * safeScale
     val iconSize = 20.dp * safeScale
     val baseTextStyle = MaterialTheme.typography.bodyLarge
@@ -731,7 +730,7 @@ private fun ScrambleDisplay(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(contentPadding),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
@@ -739,15 +738,13 @@ private fun ScrambleDisplay(
                 style = scrambleTextStyle,
                 fontFamily = FontFamily.Monospace,
                 color = MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Start,
+                textAlign = TextAlign.Center,
                 maxLines = maxLines,
                 overflow = TextOverflow.Ellipsis,
                 onTextLayout = { textLayoutResult ->
                     isTruncated = textLayoutResult.hasVisualOverflow
                 },
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(end = textEndPadding)
+                modifier = Modifier.weight(1f)
             )
             if (showRefreshButton) {
                 Spacer(modifier = Modifier.width(spacerWidth))
