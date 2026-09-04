@@ -25,6 +25,7 @@ class SettingsRepository(private val context: Context) {
     private val HIDE_AVERAGES_DURING_SOLVE_KEY = booleanPreferencesKey("hide_averages_during_solve")
     private val HIDE_LAST_RESULTS_DURING_SOLVE_KEY = booleanPreferencesKey("hide_last_results_during_solve")
     private val HIDE_LAST_RESULTS_ON_TIMER_KEY = booleanPreferencesKey("hide_last_results_on_timer")
+    private val HIDE_START_HINT_KEY = booleanPreferencesKey("hide_start_hint")
     private val FOCUS_MODE_KEY = booleanPreferencesKey("focus_mode")
     private val HAPTICS_ENABLED_KEY = booleanPreferencesKey("haptics_enabled")
 
@@ -51,6 +52,7 @@ class SettingsRepository(private val context: Context) {
             legacy[HIDE_AVERAGES_DURING_SOLVE_KEY]?.let { prefs[HIDE_AVERAGES_DURING_SOLVE_KEY] = it }
             legacy[HIDE_LAST_RESULTS_DURING_SOLVE_KEY]?.let { prefs[HIDE_LAST_RESULTS_DURING_SOLVE_KEY] = it }
             legacy[HIDE_LAST_RESULTS_ON_TIMER_KEY]?.let { prefs[HIDE_LAST_RESULTS_ON_TIMER_KEY] = it }
+            legacy[HIDE_START_HINT_KEY]?.let { prefs[HIDE_START_HINT_KEY] = it }
             legacy[FOCUS_MODE_KEY]?.let { prefs[FOCUS_MODE_KEY] = it }
             legacy[HAPTICS_ENABLED_KEY]?.let { prefs[HAPTICS_ENABLED_KEY] = it }
         }
@@ -108,6 +110,10 @@ class SettingsRepository(private val context: Context) {
 
     val hideLastResultsOnTimerFlow: Flow<Boolean> = context.settingsDataStore.data.map { preferences ->
         preferences[HIDE_LAST_RESULTS_ON_TIMER_KEY] ?: false
+    }
+
+    val hideStartHintFlow: Flow<Boolean> = context.settingsDataStore.data.map { preferences ->
+        preferences[HIDE_START_HINT_KEY] ?: false
     }
 
     val focusModeFlow: Flow<Boolean> = context.settingsDataStore.data.map { preferences ->
@@ -189,6 +195,12 @@ class SettingsRepository(private val context: Context) {
     suspend fun setHideLastResultsOnTimer(hide: Boolean) {
         context.settingsDataStore.edit { preferences ->
             preferences[HIDE_LAST_RESULTS_ON_TIMER_KEY] = hide
+        }
+    }
+
+    suspend fun setHideStartHint(hide: Boolean) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[HIDE_START_HINT_KEY] = hide
         }
     }
 

@@ -112,6 +112,9 @@ class TimerViewModel(
     private val _hideLastResultsOnTimer = MutableStateFlow(false)
     val hideLastResultsOnTimer: StateFlow<Boolean> = _hideLastResultsOnTimer.asStateFlow()
 
+    private val _hideStartHint = MutableStateFlow(false)
+    val hideStartHint: StateFlow<Boolean> = _hideStartHint.asStateFlow()
+
     private val _focusMode = MutableStateFlow(false)
     val focusMode: StateFlow<Boolean> = _focusMode.asStateFlow()
 
@@ -306,6 +309,11 @@ class TimerViewModel(
         viewModelScope.launch {
             settingsRepository.hideLastResultsOnTimerFlow.collect { hide ->
                 _hideLastResultsOnTimer.value = hide
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.hideStartHintFlow.collect { hide ->
+                _hideStartHint.value = hide
             }
         }
         viewModelScope.launch {
@@ -631,6 +639,12 @@ class TimerViewModel(
     fun setHideLastResultsOnTimer(hide: Boolean) {
         viewModelScope.launch {
             settingsRepository.setHideLastResultsOnTimer(hide)
+        }
+    }
+
+    fun setHideStartHint(hide: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setHideStartHint(hide)
         }
     }
 

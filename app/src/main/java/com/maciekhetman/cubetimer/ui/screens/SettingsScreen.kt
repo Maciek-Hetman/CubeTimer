@@ -92,6 +92,7 @@ fun SettingsScreen(
     val hideAveragesDuringSolve by viewModel.hideAveragesDuringSolve.collectAsStateWithLifecycle()
     val hideLastResultsDuringSolve by viewModel.hideLastResultsDuringSolve.collectAsStateWithLifecycle()
     val hideLastResultsOnTimer by viewModel.hideLastResultsOnTimer.collectAsStateWithLifecycle()
+    val hideStartHint by viewModel.hideStartHint.collectAsStateWithLifecycle()
     val focusMode by viewModel.focusMode.collectAsStateWithLifecycle()
     val hapticsEnabled by viewModel.hapticsEnabled.collectAsStateWithLifecycle()
     val haptic = LocalHapticFeedback.current
@@ -248,6 +249,12 @@ fun SettingsScreen(
                         title = "Hide last results on timer",
                         checked = hideLastResultsOnTimer,
                         onCheckedChange = { viewModel.setHideLastResultsOnTimer(it) }
+                    )
+                    SettingsDivider()
+                    SettingToggleRow(
+                        title = "Hide start hint",
+                        checked = hideStartHint,
+                        onCheckedChange = { viewModel.setHideStartHint(it) }
                     )
                     SettingsDivider()
                     SettingToggleRow(

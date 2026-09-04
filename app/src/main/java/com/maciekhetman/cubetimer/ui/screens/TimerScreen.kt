@@ -95,6 +95,7 @@ fun TimerScreen(
     val hideAveragesDuringSolve by viewModel.hideAveragesDuringSolve.collectAsStateWithLifecycle()
     val hideLastResultsDuringSolve by viewModel.hideLastResultsDuringSolve.collectAsStateWithLifecycle()
     val hideLastResultsOnTimer by viewModel.hideLastResultsOnTimer.collectAsStateWithLifecycle()
+    val hideStartHint by viewModel.hideStartHint.collectAsStateWithLifecycle()
     val hapticsEnabled by viewModel.hapticsEnabled.collectAsStateWithLifecycle()
     val focusMode by viewModel.focusMode.collectAsStateWithLifecycle()
     val haptic = LocalHapticFeedback.current
@@ -241,7 +242,8 @@ fun TimerScreen(
                 timerState = timerState,
                 viewModel = viewModel,
                 runningTimerDisplay = runningTimerDisplay,
-                focusModeActive = focusModeActive
+                focusModeActive = focusModeActive,
+                hideStartHint = hideStartHint
             )
         }
         
@@ -314,6 +316,7 @@ private fun TimerContent(
     viewModel: TimerViewModel,
     runningTimerDisplay: RunningTimerDisplay,
     focusModeActive: Boolean,
+    hideStartHint: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
@@ -342,15 +345,19 @@ private fun TimerContent(
                 showDecimals = timerState !is TimerState.Running ||
                     runningTimerDisplay == RunningTimerDisplay.FULL
             )
-            Spacer(modifier = Modifier.height(24.dp))
+            if (timerState !is TimerState.Idle || !hideStartHint) {
+                Spacer(modifier = Modifier.height(24.dp))
+            }
         }
         when (timerState) {
             is TimerState.Idle -> {
-                Text(
-                    text = "Tap and hold to start",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                if (!hideStartHint) {
+                    Text(
+                        text = "Tap and hold to start",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
             is TimerState.Holding -> {
                 val color = if (timerState.progress < 1f) {
