@@ -16,22 +16,47 @@ class AndroidSha1PrngProvider : Provider("SUN", 1.0, "Android SHA1PRNG provider 
     }
 
     class AndroidSha1PrngSecureRandom : SecureRandomSpi() {
-        private val delegate = SecureRandom()
+        private val random = java.util.Random().apply {
+            try {
+                val urandom = java.io.File("/dev/urandom")
+                if (urandom.exists() && urandom.canRead()) {
+                    java.io.FileInputStream(urandom).use { stream ->
+                        val seed = ByteArray(8)
+                        val bytesRead = stream.read(seed)
+                        if (bytesRead == 8) {
+                            var s = 0L
+                            for (b in seed) {
+                                s = (s shl 8) or (b.toLong() and 0xffL)
+                            }
+                            setSeed(s)
+                        }
+                    }
+                }
+            } catch (_: Throwable) {
+                // Fallback to default nanoTime-based seed in java.util.Random
+            }
+        }
 
         override fun engineSetSeed(seed: ByteArray?) {
             if (seed != null) {
-                delegate.setSeed(seed)
+                var s = 0L
+                for (b in seed) {
+                    s = (s shl 8) or (b.toLong() and 0xffL)
+                }
+                random.setSeed(s)
             }
         }
 
         override fun engineNextBytes(bytes: ByteArray?) {
             if (bytes != null) {
-                delegate.nextBytes(bytes)
+                random.nextBytes(bytes)
             }
         }
 
         override fun engineGenerateSeed(numBytes: Int): ByteArray {
-            return delegate.generateSeed(numBytes)
+            val seed = ByteArray(numBytes)
+            engineNextBytes(seed)
+            return seed
         }
     }
 
@@ -44,16 +69,32 @@ class AndroidSha1PrngProvider : Provider("SUN", 1.0, "Android SHA1PRNG provider 
             synchronized(this) {
                 if (installed) return
                 try {
-                    Security.removeProvider("SUN")
-                    val sunProvider = AndroidSha1PrngProvider()
-                    Security.insertProviderAt(sunProvider, 1)
-
-                    val genericProvider = object : Provider("AndroidSHA1PRNG", 1.0, "Generic SHA1PRNG Provider") {
-                        init {
-                            put("SecureRandom.SHA1PRNG", AndroidSha1PrngSecureRandom::class.java.name)
-                        }
+                    val sunAlreadyAvailable = try {
+                        SecureRandom.getInstance("SHA1PRNG", "SUN") != null
+                    } catch (_: Throwable) {
+                        false
                     }
-                    Security.addProvider(genericProvider)
+
+                    if (!sunAlreadyAvailable) {
+                        val sunProvider = AndroidSha1PrngProvider()
+                        Security.addProvider(sunProvider)
+                    }
+
+                    val genericAvailable = try {
+                        SecureRandom.getInstance("SHA1PRNG") != null
+                    } catch (_: Throwable) {
+                        false
+                    }
+
+                    if (!genericAvailable) {
+                        val genericProvider = object : Provider("AndroidSHA1PRNG", 1.0, "Generic SHA1PRNG Provider") {
+                            init {
+                                put("SecureRandom.SHA1PRNG", AndroidSha1PrngSecureRandom::class.java.name)
+                            }
+                        }
+                        Security.addProvider(genericProvider)
+                    }
+
                     installed = true
                 } catch (e: Throwable) {
                     e.printStackTrace()

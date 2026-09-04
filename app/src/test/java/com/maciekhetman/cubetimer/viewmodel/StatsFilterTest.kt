@@ -116,11 +116,16 @@ class StatsFilterTest {
 
     @After
     fun tearDown() {
-        runBlocking {
-            application.settingsDataStore.edit { it.clear() }
-            application.solvesDataStore.edit { it.clear() }
+        try {
+            if (::application.isInitialized) {
+                runBlocking {
+                    application.settingsDataStore.edit { it.clear() }
+                    application.solvesDataStore.edit { it.clear() }
+                }
+            }
+        } finally {
+            Dispatchers.resetMain()
         }
-        Dispatchers.resetMain()
     }
 
     @Test
