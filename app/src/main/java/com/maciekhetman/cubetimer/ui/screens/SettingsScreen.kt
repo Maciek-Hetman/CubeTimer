@@ -362,7 +362,7 @@ fun SettingsSection(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(
-                modifier = Modifier.padding(top = 2.dp, bottom = 8.dp)
+                modifier = Modifier.padding(vertical = 4.dp)
             ) {
                 content()
             }
@@ -384,7 +384,8 @@ fun SettingsRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .heightIn(min = 60.dp)
+            .padding(horizontal = 16.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
@@ -412,7 +413,7 @@ fun SettingSliderRow(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 8.dp)
+            .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -429,6 +430,7 @@ fun SettingSliderRow(
                 color = MaterialTheme.colorScheme.primary
             )
         }
+        Spacer(modifier = Modifier.height(4.dp))
         Slider(
             value = sliderValue,
             onValueChange = {
@@ -454,11 +456,16 @@ fun SettingToggleRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
-    SettingsRow(title = title) {
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange
-        )
+    Surface(
+        onClick = { onCheckedChange(!checked) },
+        color = androidx.compose.ui.graphics.Color.Transparent
+    ) {
+        SettingsRow(title = title) {
+            Switch(
+                checked = checked,
+                onCheckedChange = null
+            )
+        }
     }
 }
 
