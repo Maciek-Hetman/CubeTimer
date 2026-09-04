@@ -1,5 +1,6 @@
 package com.maciekhetman.cubetimer.ui.session
 
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -8,6 +9,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 
 @Composable
 fun DeleteSessionDialog(
@@ -18,6 +20,8 @@ fun DeleteSessionDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(24.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         title = { Text("Delete Session?") },
         text = {
             Text(
@@ -28,6 +32,7 @@ fun DeleteSessionDialog(
         },
         confirmButton = {
             Button(
+                shape = RoundedCornerShape(20.dp),
                 onClick = {
                     onConfirm()
                     onDismiss()
@@ -41,7 +46,10 @@ fun DeleteSessionDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(
+                shape = RoundedCornerShape(20.dp),
+                onClick = onDismiss
+            ) {
                 Text("Cancel")
             }
         },

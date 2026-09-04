@@ -62,4 +62,59 @@ Implement automated unit and integration tests covering Room DAOs, API client co
 ### Automated Verification
 - [ ] `./gradlew testDebugUnitTest` runs and passes 100% of automated tests.
 - [ ] `./gradlew assembleDebug` completes with zero build errors.
+
+
+## 2026-09-04T11:44:59Z
+
+<USER_REQUEST>
+This is a single self-contained fix; keep it small and focused.
+
+Comprehensive UI/UX overhaul across CubeTimer to establish a consistent, expressive Google product look and feel (inspired by Google Clock and Material You Expressive design): cohesive Material 3 tonal surface container hierarchies (eliminating harsh dividers), unified 24dp rounded corner card geometry, matched pill action buttons, fluid spring animations, a distraction-free Timer header, and an animated floating pill navbar, completely free of AI-styled buttons or chips.
+
+Working directory: /Users/maciek/AndroidStudioProjects/CubeTimer
+Integrity mode: development
+
+## Requirements
+
+### R1. Unified Material 3 Expressive Foundations & Surfaces
+Establish a cohesive Material Design 3 token and shape hierarchy across all theme configurations (Dynamic Color on Android 12+, AMOLED dark, standard dark/light).
+- Standardize corner radii: 24dp for cards, summary panels, and dialog surfaces; uniform 20dp/pill geometry for action and modal buttons; 16dp/pill for chips and badges.
+- Replace ad-hoc alpha color tints and harsh line dividers with canonical Material 3 surface containers (`surfaceContainerLow`, `surfaceContainer`, `surfaceContainerHigh`) and clean whitespace grouping.
+- Ensure no AI-branded buttons, sparkle icons, or generative AI chips are introduced anywhere in the interface.
+
+### R2. Distraction-Free Header & TopBar Hierarchy
+Unify top bar architecture across all screens according to their functional intent:
+- TimerScreen features an uncluttered, distraction-free top header with compact pill selectors for Mode and Session alongside subtle cloud sync and profile status badges.
+- StatsScreen and SettingsScreen share a standardized Material 3 Medium TopAppBar with matching typography, padding, and smooth scroll collapse behavior.
+
+### R3. Animated Floating Pill Navbar & M3 Screen Transitions
+Preserve the floating bottom navigation bar while elevating it to Google Material You standards:
+- Introduce an animated Material You indicator pill (smooth sliding and morphing container behind the active destination icon) with refined haptic cues.
+- Replace lateral horizontal sliding transitions between top-level tabs (Timer, Stats, Settings) with silky Material 3 fade-through / shared-axis transitions.
+
+### R4. Screen-by-Screen Component Harmonization
+Apply the unified design system across every screen and modal in the application:
+- **TimerScreen**: Large clean timer typography with balanced vertical breathing room; unified 24dp scramble container with smooth refresh micro-interaction; solve resolution buttons (Save Time, +2, DNF, Discard) sharing identical height and corner geometry; clean floating pill averages and recent solve chips.
+- **StatsScreen**: Harmonized 24dp stat cards and large session average cards; unified M3 filter chips for session filtering; PB progress and solve distribution charts mapped to semantic Material 3 theme colors (primary, secondary, tertiary) rather than hardcoded hex colors; polished solve history items.
+- **SettingsScreen**: Unified rounded grouped setting sections with cohesive toggles, sliders, and picker menus, eliminating raw horizontal dividers.
+- **Modals, Sheets & Admin**: Restyle `SessionManagementSheet`, `AuthDialog`, and `AdminDashboardScreen` to seamlessly adopt the identical M3 card, surface container, chip, and button tokens so no visual discontinuities exist.
+
+## Acceptance Criteria
+
+### Design System & Theme Foundations
+- [ ] All primary cards and section containers across Timer, Stats, Settings, and Admin consistently use 24dp rounded corners.
+- [ ] All action buttons on the finished solve state (+2, DNF, Discard, Save) share identical height and uniform corner radius without mismatched corner geometry.
+- [ ] Surface hierarchy strictly uses M3 tokens (`surfaceContainerLow`, `surfaceContainer`, `surfaceContainerHigh`) without arbitrary alpha tints or repetitive `HorizontalDivider` lines separating cards.
+- [ ] The app renders consistently in Light mode, Dark mode, AMOLED dark mode, and Dynamic Color mode (Android 12+).
+- [ ] No AI-styled sparkle or star action buttons exist in the application.
+
+### Navigation & Motion
+- [ ] Floating navbar displays an animated active indicator pill behind the selected destination.
+- [ ] Transitions between Timer, Stats, and Settings use Material 3 fade-through / shared-axis animations without abrupt lateral sliding.
+- [ ] Timer screen features an uncluttered top header, while Stats and Settings use unified Medium TopAppBars with consistent scroll behavior.
+
+### Verification & Build Integrity
+- [ ] `./gradlew testDebugUnitTest` runs with 100% passing tests (0 failures, 0 errors).
+- [ ] `./gradlew assembleDebug` compiles cleanly with 0 build errors.
+
 </USER_REQUEST>

@@ -9,6 +9,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -17,13 +18,13 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.calculateEndPadding
@@ -32,10 +33,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
+import kotlin.math.roundToInt
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.AdminPanelSettings
@@ -48,7 +51,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -62,10 +67,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -269,32 +276,14 @@ fun CubeTimerApp(
         AnimatedContent(
             targetState = currentDestination,
             transitionSpec = {
-                val springSpec = spring<IntOffset>(
-                    dampingRatio = Spring.DampingRatioNoBouncy,
-                    stiffness = Spring.StiffnessMediumLow
-                )
-                val fadeSpec = tween<Float>(durationMillis = 180)
-                if (targetState.ordinal > initialState.ordinal) {
-                    (slideInHorizontally(springSpec) { width -> width / 4 } +
-                        fadeIn(fadeSpec) +
-                        scaleIn(initialScale = 0.96f, animationSpec = tween(220)))
-                        .togetherWith(
-                            slideOutHorizontally(springSpec) { width -> -width / 5 } +
-                                fadeOut(fadeSpec) +
-                                scaleOut(targetScale = 0.98f, animationSpec = tween(180))
-                        )
-                } else {
-                    (slideInHorizontally(springSpec) { width -> -width / 4 } +
-                        fadeIn(fadeSpec) +
-                        scaleIn(initialScale = 0.96f, animationSpec = tween(220)))
-                        .togetherWith(
-                            slideOutHorizontally(springSpec) { width -> width / 5 } +
-                                fadeOut(fadeSpec) +
-                                scaleOut(targetScale = 0.98f, animationSpec = tween(180))
-                        )
-                }.using(SizeTransform(clip = false))
+                (fadeIn(animationSpec = tween(durationMillis = 220, delayMillis = 60)) +
+                    scaleIn(initialScale = 0.94f, animationSpec = tween(durationMillis = 220, delayMillis = 60)))
+                    .togetherWith(
+                        fadeOut(animationSpec = tween(durationMillis = 140)) +
+                            scaleOut(targetScale = 0.98f, animationSpec = tween(durationMillis = 140))
+                    ).using(SizeTransform(clip = false))
             },
-            label = "screen_transition"
+            label = "screen_fade_through_transition"
         ) { destination ->
             when (destination) {
                 AppDestinations.TIMER -> {
@@ -479,16 +468,33 @@ fun FloatingNavigationBar(
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
+    val density = LocalDensity.current
     val visibleDestinations = listOf(AppDestinations.TIMER, AppDestinations.STATS, AppDestinations.SETTINGS)
+    val selectedIndex = visibleDestinations.indexOf(currentDestination).let { if (it >= 0) it else 0 }
+
+    var previousIndex by remember { mutableIntStateOf(selectedIndex) }
+    val isMovingRight = selectedIndex >= previousIndex
+    SideEffect {
+        previousIndex = selectedIndex
+    }
+
+    val leftSpring = spring<Float>(
+        dampingRatio = Spring.DampingRatioLowBouncy,
+        stiffness = if (isMovingRight) Spring.StiffnessMediumLow else Spring.StiffnessMedium
+    )
+    val rightSpring = spring<Float>(
+        dampingRatio = Spring.DampingRatioLowBouncy,
+        stiffness = if (isMovingRight) Spring.StiffnessMedium else Spring.StiffnessMediumLow
+    )
 
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainer,
         shape = CircleShape,
         border = BorderStroke(
             width = 1.dp,
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+            color = MaterialTheme.colorScheme.outlineVariant
         ),
-        tonalElevation = 6.dp,
+        tonalElevation = 4.dp,
         shadowElevation = 8.dp,
         modifier = modifier
             .widthIn(max = 280.dp)
@@ -496,51 +502,103 @@ fun FloatingNavigationBar(
             .navigationBarsPadding()
             .padding(bottom = 16.dp, start = 8.dp, end = 8.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp, horizontal = 2.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            visibleDestinations.forEach { destination ->
-                val selected = destination == currentDestination
-                val color = if (selected) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                }
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            BoxWithConstraints(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 6.dp, horizontal = 6.dp)
+            ) {
+                val totalWidth = maxWidth
+                val itemWidth = totalWidth / visibleDestinations.size
+                val indicatorWidth = (itemWidth - 12.dp).coerceAtMost(64.dp)
+                val indicatorHeight = 36.dp
 
-                val scale by animateFloatAsState(
-                    targetValue = if (selected) 1.22f else 1.0f,
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessMediumLow
-                    ),
-                    label = "nav_icon_scale"
+                val baseHalfWidth = indicatorWidth / 2f
+                val targetCenter = (itemWidth * selectedIndex) + (itemWidth / 2f)
+                val targetLeft = targetCenter - baseHalfWidth
+                val targetRight = targetCenter + baseHalfWidth
+
+                val targetLeftPx = with(density) { targetLeft.toPx() }
+                val targetRightPx = with(density) { targetRight.toPx() }
+
+                val animatedLeft by animateFloatAsState(
+                    targetValue = targetLeftPx,
+                    animationSpec = leftSpring,
+                    label = "nav_indicator_left"
+                )
+                val animatedRight by animateFloatAsState(
+                    targetValue = targetRightPx,
+                    animationSpec = rightSpring,
+                    label = "nav_indicator_right"
                 )
 
+                val pillLeft = animatedLeft
+                val pillWidth = (animatedRight - animatedLeft).coerceAtLeast(with(density) { indicatorHeight.toPx() })
+
+                // Animated Material You indicator pill sliding & morphing behind active destination
                 Box(
-                    contentAlignment = Alignment.Center,
                     modifier = Modifier
-                        .weight(1f)
-                        .height(48.dp)
-                        .clip(CircleShape)
-                        .clickable {
-                            if (!isTimerRunning && currentDestination != destination) {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                onNavigate(destination)
-                            }
+                        .offset {
+                            IntOffset(x = pillLeft.roundToInt(), y = 0)
                         }
+                        .size(
+                            width = with(density) { pillWidth.toDp() },
+                            height = indicatorHeight
+                        )
+                        .align(Alignment.CenterStart)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.secondaryContainer)
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = destination.icon,
-                        contentDescription = destination.label,
-                        tint = color,
-                        modifier = Modifier
-                            .size(26.dp)
-                            .scale(scale)
-                    )
+                    visibleDestinations.forEach { destination ->
+                        val selected = destination == currentDestination
+                        val iconColor by animateColorAsState(
+                            targetValue = if (selected) {
+                                MaterialTheme.colorScheme.onSecondaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            animationSpec = tween(durationMillis = 200),
+                            label = "nav_icon_color"
+                        )
+
+                        val scale by animateFloatAsState(
+                            targetValue = if (selected) 1.15f else 1.0f,
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                stiffness = Spring.StiffnessMediumLow
+                            ),
+                            label = "nav_icon_scale"
+                        )
+
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp)
+                                .clip(CircleShape)
+                                .clickable {
+                                    if (!isTimerRunning && currentDestination != destination) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        onNavigate(destination)
+                                    }
+                                }
+                        ) {
+                            Icon(
+                                imageVector = destination.icon,
+                                contentDescription = destination.label,
+                                tint = iconColor,
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .scale(scale)
+                            )
+                        }
+                    }
                 }
             }
         }

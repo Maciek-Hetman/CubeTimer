@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -130,6 +131,8 @@ private fun LoginDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(24.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         title = { Text("Sign In") },
         text = {
             Column(
@@ -216,6 +219,7 @@ private fun LoginDialog(
         },
         confirmButton = {
             Button(
+                shape = RoundedCornerShape(20.dp),
                 onClick = viewModel::submitLogin,
                 enabled = !formState.isLoading
             ) {
@@ -231,7 +235,11 @@ private fun LoginDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !formState.isLoading) {
+            TextButton(
+                shape = RoundedCornerShape(20.dp),
+                onClick = onDismiss,
+                enabled = !formState.isLoading
+            ) {
                 Text("Cancel")
             }
         },
@@ -249,6 +257,8 @@ private fun RegisterDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(24.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         title = { Text("Create Account") },
         text = {
             Column(
@@ -334,6 +344,7 @@ private fun RegisterDialog(
         },
         confirmButton = {
             Button(
+                shape = RoundedCornerShape(20.dp),
                 onClick = viewModel::submitRegister,
                 enabled = !formState.isLoading
             ) {
@@ -349,7 +360,11 @@ private fun RegisterDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !formState.isLoading) {
+            TextButton(
+                shape = RoundedCornerShape(20.dp),
+                onClick = onDismiss,
+                enabled = !formState.isLoading
+            ) {
                 Text("Cancel")
             }
         },
@@ -367,6 +382,8 @@ private fun ForgotPasswordDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(24.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         title = { Text("Forgot Password") },
         text = {
             Column(
@@ -421,6 +438,7 @@ private fun ForgotPasswordDialog(
         },
         confirmButton = {
             Button(
+                shape = RoundedCornerShape(20.dp),
                 onClick = viewModel::submitForgotPassword,
                 enabled = !formState.isLoading
             ) {
@@ -436,7 +454,11 @@ private fun ForgotPasswordDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !formState.isLoading) {
+            TextButton(
+                shape = RoundedCornerShape(20.dp),
+                onClick = onDismiss,
+                enabled = !formState.isLoading
+            ) {
                 Text("Cancel")
             }
         },
@@ -454,6 +476,8 @@ private fun ResetPasswordDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(24.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         title = { Text("Reset Password") },
         text = {
             Column(
@@ -514,6 +538,7 @@ private fun ResetPasswordDialog(
         },
         confirmButton = {
             Button(
+                shape = RoundedCornerShape(20.dp),
                 onClick = viewModel::submitResetPassword,
                 enabled = !formState.isLoading
             ) {
@@ -529,7 +554,11 @@ private fun ResetPasswordDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !formState.isLoading) {
+            TextButton(
+                shape = RoundedCornerShape(20.dp),
+                onClick = onDismiss,
+                enabled = !formState.isLoading
+            ) {
                 Text("Cancel")
             }
         },
@@ -547,6 +576,8 @@ private fun EmailVerificationDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(24.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         title = { Text("Verify Email") },
         text = {
             Column(
@@ -577,6 +608,7 @@ private fun EmailVerificationDialog(
         },
         confirmButton = {
             Button(
+                shape = RoundedCornerShape(20.dp),
                 onClick = viewModel::submitVerifyEmail,
                 enabled = !formState.isLoading
             ) {
@@ -592,7 +624,11 @@ private fun EmailVerificationDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !formState.isLoading) {
+            TextButton(
+                shape = RoundedCornerShape(20.dp),
+                onClick = onDismiss,
+                enabled = !formState.isLoading
+            ) {
                 Text("Cancel")
             }
         },
@@ -610,6 +646,8 @@ private fun UserProfileDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(24.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
@@ -646,6 +684,7 @@ private fun UserProfileDialog(
                         if (onOpenAdminDashboard != null) {
                             Spacer(modifier = Modifier.height(12.dp))
                             OutlinedButton(
+                                shape = RoundedCornerShape(20.dp),
                                 onClick = {
                                     onDismiss()
                                     onOpenAdminDashboard()
@@ -674,6 +713,7 @@ private fun UserProfileDialog(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 OutlinedButton(
+                    shape = RoundedCornerShape(20.dp),
                     onClick = viewModel::adoptGuestData,
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -683,6 +723,7 @@ private fun UserProfileDialog(
         },
         confirmButton = {
             Button(
+                shape = RoundedCornerShape(20.dp),
                 onClick = viewModel::submitLogout,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.error,
@@ -693,7 +734,10 @@ private fun UserProfileDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(
+                shape = RoundedCornerShape(20.dp),
+                onClick = onDismiss
+            ) {
                 Text("Close")
             }
         },
@@ -708,8 +752,9 @@ private fun ProfileInfoCard(
     isAdmin: Boolean
 ) {
     Card(
+        shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
         ),
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -727,6 +772,7 @@ private fun ProfileInfoCard(
                 if (isVerified) {
                     AssistChip(
                         onClick = {},
+                        shape = RoundedCornerShape(16.dp),
                         label = { Text("VERIFIED") },
                         leadingIcon = {
                             Icon(
@@ -745,6 +791,7 @@ private fun ProfileInfoCard(
                 if (isAdmin) {
                     AssistChip(
                         onClick = {},
+                        shape = RoundedCornerShape(16.dp),
                         label = { Text("ADMIN") },
                         leadingIcon = {
                             Icon(
@@ -767,6 +814,7 @@ private fun ProfileInfoCard(
 @Composable
 private fun ErrorBanner(message: String) {
     Card(
+        shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.errorContainer
         ),
@@ -784,6 +832,7 @@ private fun ErrorBanner(message: String) {
 @Composable
 private fun SuccessBanner(message: String) {
     Card(
+        shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer
         ),

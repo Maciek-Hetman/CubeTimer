@@ -112,7 +112,7 @@ private val LightColorScheme = lightColorScheme(
     surfaceContainerLow = Gray95,
     surfaceContainer = Color(0xFFEDEDED),
     surfaceContainerHigh = Gray90,
-    surfaceContainerHighest = Gray95,
+    surfaceContainerHighest = Color(0xFFE0E0E0),
     surfaceVariant = Gray90,
     onSurfaceVariant = Gray30,
     outline = Gray50,
@@ -150,6 +150,7 @@ fun CubeTimerTheme(
     MaterialTheme(
         colorScheme = colorScheme,
         typography = Typography,
+        shapes = Shapes,
         content = content
     )
 }

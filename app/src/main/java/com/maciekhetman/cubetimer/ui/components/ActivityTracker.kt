@@ -114,7 +114,7 @@ fun ActivityTracker(
                 Text(
                     text = "Less",
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 repeat(5) { level ->
                     Box(
@@ -126,7 +126,7 @@ fun ActivityTracker(
                             )
                             .border(
                                 width = 0.5.dp,
-                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                                color = MaterialTheme.colorScheme.outlineVariant,
                                 shape = RoundedCornerShape(3.dp)
                             )
                     )
@@ -134,7 +134,7 @@ fun ActivityTracker(
                 Text(
                     text = "More",
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -163,7 +163,7 @@ fun ActivityTracker(
                             text = day,
                             style = MaterialTheme.typography.labelMedium,
                             fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -188,7 +188,7 @@ fun ActivityTracker(
                                     )
                                     .border(
                                         width = 0.5.dp,
-                                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                                        color = MaterialTheme.colorScheme.outlineVariant,
                                         shape = RoundedCornerShape(3.dp)
                                     )
                             )
@@ -203,11 +203,11 @@ fun ActivityTracker(
 @Composable
 private fun getActivityColor(level: Int, baseColor: Color): Color {
     return when (level) {
-        0 -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-        1 -> baseColor.copy(alpha = 0.2f)
-        2 -> baseColor.copy(alpha = 0.4f)
-        3 -> baseColor.copy(alpha = 0.6f)
-        4 -> baseColor.copy(alpha = 0.9f)
+        0 -> MaterialTheme.colorScheme.surfaceContainerHighest
+        1 -> baseColor.copy(alpha = 0.25f)
+        2 -> baseColor.copy(alpha = 0.45f)
+        3 -> baseColor.copy(alpha = 0.7f)
+        4 -> baseColor
         else -> baseColor
     }
 }

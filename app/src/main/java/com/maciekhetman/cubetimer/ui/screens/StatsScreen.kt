@@ -33,7 +33,6 @@ import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Penalty
 import com.maciekhetman.cubetimer.model.SolveTime
 import com.maciekhetman.cubetimer.ui.components.ActivityTracker
-import com.maciekhetman.cubetimer.ui.components.SectionDivider
 import com.maciekhetman.cubetimer.ui.components.SectionHeader
 import com.maciekhetman.cubetimer.ui.components.CollapsingTopBar
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -121,7 +120,7 @@ fun StatsScreen(
                 end = endPadding,
                 bottom = bottomPadding + 104.dp
             ),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // Session Filter Chips Bar
             item {
@@ -146,7 +145,7 @@ fun StatsScreen(
                         Text(
                             text = if (solves.isEmpty()) "No solves yet" else "No solves in selected filter",
                             style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -156,15 +155,7 @@ fun StatsScreen(
                 }
 
                 item {
-                    SectionDivider()
-                }
-
-                item {
                     SessionStatsSection(solves = filteredSolves)
-                }
-
-                item {
-                    SectionDivider()
                 }
 
                 item {
@@ -172,15 +163,7 @@ fun StatsScreen(
                 }
 
                 item {
-                    SectionDivider()
-                }
-
-                item {
                     AveragesSection(solves = filteredSolves)
-                }
-
-                item {
-                    SectionDivider()
                 }
 
                 item {
@@ -188,23 +171,19 @@ fun StatsScreen(
                 }
 
                 item {
-                    SectionDivider()
-                }
-
-                item {
-                    ActivityTracker(solves = filteredSolves)
-                }
-
-                item {
-                    SectionDivider()
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        shape = RoundedCornerShape(24.dp)
+                    ) {
+                        ActivityTracker(solves = filteredSolves)
+                    }
                 }
 
                 item {
                     PenaltyStatsSection(solves = filteredSolves)
-                }
-
-                item {
-                    SectionDivider()
                 }
 
                 item {
@@ -224,7 +203,8 @@ fun StatsScreen(
                                 onClick = {
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                     showClearDialog = true
-                                }
+                                },
+                                shape = RoundedCornerShape(20.dp)
                             ) {
                                 Text(if (statsFilter is StatsFilter.ActiveSession) "Clear Session" else "Clear All")
                             }
@@ -239,7 +219,7 @@ fun StatsScreen(
                         Text(
                             text = "Showing last 200 of ${filteredSolves.size} solves",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp, vertical = 4.dp)
@@ -314,6 +294,7 @@ fun StatsScreen(
 
         AlertDialog(
             onDismissRequest = { showClearDialog = false },
+            shape = RoundedCornerShape(24.dp),
             title = { Text(clearTitle) },
             text = { Text(clearMessage) },
             confirmButton = {
@@ -333,16 +314,20 @@ fun StatsScreen(
                                 viewModel.restoreSolves(previousSolves)
                             }
                         }
-                    }
+                    },
+                    shape = RoundedCornerShape(20.dp)
                 ) {
                     Text("Clear")
                 }
             },
             dismissButton = {
-                TextButton(onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    showClearDialog = false
-                }) {
+                TextButton(
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        showClearDialog = false
+                    },
+                    shape = RoundedCornerShape(20.dp)
+                ) {
                     Text("Cancel")
                 }
             }
@@ -371,6 +356,7 @@ private fun SessionFilterBar(
         FilterChip(
             selected = currentFilter is StatsFilter.ActiveSession,
             onClick = { onFilterSelected(StatsFilter.ActiveSession) },
+            shape = RoundedCornerShape(16.dp),
             label = {
                 Text(
                     text = "Active Session ($activeSessionSolvesCount)",
@@ -391,6 +377,7 @@ private fun SessionFilterBar(
         FilterChip(
             selected = currentFilter is StatsFilter.AllSessions,
             onClick = { onFilterSelected(StatsFilter.AllSessions) },
+            shape = RoundedCornerShape(16.dp),
             label = {
                 Text(
                     text = "All Solves ($allSolvesCount)",
@@ -412,6 +399,7 @@ private fun SessionFilterBar(
             FilterChip(
                 selected = true,
                 onClick = {},
+                shape = RoundedCornerShape(16.dp),
                 label = {
                     Text(
                         text = currentFilter.sessionName,
@@ -633,7 +621,7 @@ private fun AveragesSection(solves: List<SolveTime>) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            shape = RoundedCornerShape(16.dp)
+            shape = RoundedCornerShape(24.dp)
         ) {
             Column(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
@@ -671,7 +659,7 @@ private fun AveragesSection(solves: List<SolveTime>) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            shape = RoundedCornerShape(16.dp)
+            shape = RoundedCornerShape(24.dp)
         ) {
             Column(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
@@ -747,7 +735,7 @@ private fun LargeAveragesSection(solves: List<SolveTime>) {
                                 .weight(1f)
                                 .heightIn(min = 88.dp),
                             color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            shape = RoundedCornerShape(16.dp)
+                            shape = RoundedCornerShape(24.dp)
                         ) {
                             Column(
                                 modifier = Modifier.padding(16.dp),
@@ -763,7 +751,7 @@ private fun LargeAveragesSection(solves: List<SolveTime>) {
                                     text = if (current != null) formatTime(current) else "N/A",
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontFamily = FontFamily.Monospace,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 // Always reserve space for PB line
                                 if (best != null && best != current) {
@@ -807,14 +795,14 @@ private fun SessionStatsSection(solves: List<SolveTime>) {
             Text(
                 text = "Not enough data",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 6.dp)
             )
         } else {
             Text(
                 text = "Sessions are groups of solves with no more than 1 hour gap between consecutive solves.",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 4.dp)
             )
             
@@ -936,7 +924,7 @@ private fun PersonalBestsChart(solves: List<SolveTime>) {
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(24.dp),
         tonalElevation = 1.dp
     ) {
         Column(
@@ -945,9 +933,9 @@ private fun PersonalBestsChart(solves: List<SolveTime>) {
         ) {
             SectionHeader(title = "Personal Best Progress")
             
-            val singleColor = Color(0xFF4CAF50) // Green
-            val ao5Color = Color(0xFF2196F3) // Blue
-            val ao12Color = Color(0xFFFF9800) // Orange
+            val singleColor = MaterialTheme.colorScheme.primary
+            val ao5Color = MaterialTheme.colorScheme.secondary
+            val ao12Color = MaterialTheme.colorScheme.tertiary
             val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
             
             val rangeStartIndex = rangeStartIndex(solves.size, selectedRange)
@@ -978,7 +966,7 @@ private fun PersonalBestsChart(solves: List<SolveTime>) {
                     Text(
                         text = "No personal bests yet",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = onSurfaceVariant.copy(alpha = 0.6f)
+                        color = onSurfaceVariant
                     )
                 }
             } else {
@@ -1069,8 +1057,8 @@ private fun PersonalBestsChart(solves: List<SolveTime>) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Surface(
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        shape = MaterialTheme.shapes.large
+                        color = MaterialTheme.colorScheme.surfaceContainer,
+                        shape = RoundedCornerShape(16.dp)
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -1149,7 +1137,7 @@ private fun SolveTimesChart(solves: List<SolveTime>) {
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(24.dp),
         tonalElevation = 1.dp
     ) {
         Column(
@@ -1168,7 +1156,7 @@ private fun SolveTimesChart(solves: List<SolveTime>) {
                     Text(
                         text = "Complete more solves to see solve times",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             } else {
@@ -1262,7 +1250,7 @@ private fun AveragesChart(solves: List<SolveTime>) {
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(24.dp),
         tonalElevation = 1.dp
     ) {
         Column(
@@ -1271,8 +1259,8 @@ private fun AveragesChart(solves: List<SolveTime>) {
         ) {
             SectionHeader(title = "Progress Chart")
         
-        val ao5Color = Color(0xFF2196F3) // Blue
-        val ao12Color = Color(0xFFFF9800) // Orange
+        val ao5Color = MaterialTheme.colorScheme.primary
+        val ao12Color = MaterialTheme.colorScheme.tertiary
         val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
         
         val validAo5 = displayAo5List.filterNotNull()
@@ -1289,7 +1277,7 @@ private fun AveragesChart(solves: List<SolveTime>) {
                 Text(
                     text = "Complete 5 solves to see progress chart",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = onSurfaceVariant.copy(alpha = 0.6f)
+                    color = onSurfaceVariant
                 )
             }
         } else {
@@ -1377,8 +1365,8 @@ private fun AveragesChart(solves: List<SolveTime>) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    shape = MaterialTheme.shapes.large
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                    shape = RoundedCornerShape(16.dp)
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -1400,8 +1388,8 @@ private fun AveragesChart(solves: List<SolveTime>) {
                 }
                 Spacer(modifier = Modifier.width(12.dp))
                 Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    shape = MaterialTheme.shapes.large
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                    shape = RoundedCornerShape(16.dp)
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -1440,6 +1428,7 @@ private fun ChartRangeSelector(
             FilterChip(
                 selected = selectedRange == range,
                 onClick = { onRangeSelected(range) },
+                shape = RoundedCornerShape(16.dp),
                 label = {
                     Text(
                         text = range,
@@ -1469,11 +1458,11 @@ private fun FeaturedStatCard(
     value: String,
     modifier: Modifier = Modifier,
     containerColor: Color = MaterialTheme.colorScheme.primaryContainer,
-    contentColor: Color = MaterialTheme.colorScheme.onSurface
+    contentColor: Color = contentColorFor(containerColor)
 ) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(24.dp),
         color = containerColor,
         contentColor = contentColor,
         tonalElevation = 0.dp
@@ -1488,7 +1477,7 @@ private fun FeaturedStatCard(
             Text(
                 text = label,
                 style = MaterialTheme.typography.titleMedium,
-                color = contentColor.copy(alpha = 0.85f),
+                color = contentColor,
                 fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth()
@@ -1512,11 +1501,11 @@ private fun StatCard(
     value: String,
     modifier: Modifier = Modifier,
     containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
-    contentColor: Color = MaterialTheme.colorScheme.onSurface
+    contentColor: Color = contentColorFor(containerColor)
 ) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(24.dp),
         color = containerColor,
         contentColor = contentColor,
         tonalElevation = 0.dp
@@ -1531,7 +1520,7 @@ private fun StatCard(
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelLarge,
-                color = contentColor.copy(alpha = 0.8f),
+                color = contentColor,
                 fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth()
@@ -1555,11 +1544,11 @@ private fun AverageCard(
     value: String,
     modifier: Modifier = Modifier,
     containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
-    contentColor: Color = MaterialTheme.colorScheme.onSurface
+    contentColor: Color = contentColorFor(containerColor)
 ) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(24.dp),
         color = containerColor,
         contentColor = contentColor,
         tonalElevation = 0.dp
@@ -1574,7 +1563,7 @@ private fun AverageCard(
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelLarge,
-                color = contentColor.copy(alpha = 0.9f),
+                color = contentColor,
                 fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth()
@@ -1610,11 +1599,11 @@ private fun PenaltyCard(
     count: Int,
     modifier: Modifier = Modifier,
     containerColor: Color,
-    contentColor: Color = MaterialTheme.colorScheme.onSurface
+    contentColor: Color = contentColorFor(containerColor)
 ) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(24.dp),
         color = containerColor,
         contentColor = contentColor,
         tonalElevation = 0.dp
@@ -1629,7 +1618,7 @@ private fun PenaltyCard(
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelLarge,
-                color = contentColor.copy(alpha = 0.8f),
+                color = contentColor,
                 fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth()
@@ -1645,7 +1634,7 @@ private fun PenaltyCard(
             Text(
                 text = "$count ${if (count == 1) "solve" else "solves"}",
                 style = MaterialTheme.typography.bodyMedium,
-                color = contentColor.copy(alpha = 0.7f),
+                color = contentColor,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -1666,7 +1655,7 @@ private fun SolveCard(
 
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(24.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         tonalElevation = 0.dp
     ) {
@@ -1685,7 +1674,7 @@ private fun SolveCard(
                     Text(
                         text = "Solve #$solveNumber",
                         style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = FontWeight.Medium
                     )
                     Box {
@@ -1696,7 +1685,7 @@ private fun SolveCard(
                             Icon(
                                 imageVector = Icons.Default.MoreVert,
                                 contentDescription = "Solve options",
-                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                         DropdownMenu(
@@ -1761,7 +1750,7 @@ private fun SolveCard(
                                 Penalty.PLUS_TWO -> MaterialTheme.colorScheme.tertiaryContainer
                                 else -> Color.Transparent
                             },
-                            shape = MaterialTheme.shapes.medium
+                            shape = RoundedCornerShape(16.dp)
                         ) {
                             Text(
                                 text = when (solve.penalty) {
@@ -1785,7 +1774,7 @@ private fun SolveCard(
                 Text(
                     text = formatTimestamp(solve.timestamp),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 if (solve.scramble.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(8.dp))
@@ -1793,7 +1782,7 @@ private fun SolveCard(
                         text = solve.scramble,
                         style = MaterialTheme.typography.bodySmall,
                         fontFamily = FontFamily.Monospace,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         lineHeight = 18.sp
                     )
                 }

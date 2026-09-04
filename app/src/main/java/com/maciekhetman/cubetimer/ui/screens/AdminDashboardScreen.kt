@@ -47,17 +47,17 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -125,6 +125,7 @@ fun AdminDashboardScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         AssistChip(
                             onClick = {},
+                            shape = RoundedCornerShape(16.dp),
                             label = { Text("ADMIN", style = MaterialTheme.typography.labelSmall) },
                             colors = AssistChipDefaults.assistChipColors(
                                 containerColor = MaterialTheme.colorScheme.errorContainer,
@@ -149,7 +150,11 @@ fun AdminDashboardScreen(
                             modifier = if (uiState.isRefreshing) Modifier.rotate(rotation) else Modifier
                         )
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer
+                )
             )
         },
         modifier = modifier.fillMaxSize()
@@ -180,6 +185,7 @@ private fun AdminAccessDeniedContent(onNavigateBack: () -> Unit) {
         contentAlignment = Alignment.Center
     ) {
         Card(
+            shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.errorContainer
             ),
@@ -209,10 +215,13 @@ private fun AdminAccessDeniedContent(onNavigateBack: () -> Unit) {
                     text = "Administrator privileges (user_role == 'admin') are required to access backend system metrics.",
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
+                    color = MaterialTheme.colorScheme.onErrorContainer
                 )
                 Spacer(modifier = Modifier.height(20.dp))
-                Button(onClick = onNavigateBack) {
+                Button(
+                    shape = RoundedCornerShape(20.dp),
+                    onClick = onNavigateBack
+                ) {
                     Text("Return")
                 }
             }
@@ -226,7 +235,10 @@ private fun AdminDashboardContent(
     viewModel: AdminViewModel
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
-        TabRow(selectedTabIndex = uiState.selectedTab.ordinal) {
+        PrimaryTabRow(
+            selectedTabIndex = uiState.selectedTab.ordinal,
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
+        ) {
             AdminTab.entries.forEach { tab ->
                 Tab(
                     selected = uiState.selectedTab == tab,
@@ -332,8 +344,9 @@ private fun OverviewTabContent(state: OverviewUiState) {
                 // Platform Totals Card
                 item {
                     Card(
+                        shape = RoundedCornerShape(24.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                            containerColor = MaterialTheme.colorScheme.surfaceContainer
                         ),
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -356,8 +369,9 @@ private fun OverviewTabContent(state: OverviewUiState) {
                 // User Growth & Activity
                 item {
                     Card(
+                        shape = RoundedCornerShape(24.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                            containerColor = MaterialTheme.colorScheme.surfaceContainer
                         ),
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -419,6 +433,7 @@ private fun TrafficTabContent(
                 FilterChip(
                     selected = selectedRange == range,
                     onClick = { onRangeSelected(range) },
+                    shape = RoundedCornerShape(16.dp),
                     label = { Text(range.label) },
                     leadingIcon = if (selectedRange == range) {
                         { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
@@ -485,8 +500,9 @@ private fun TrafficTabContent(
                     // Request Types Breakdown
                     item {
                         Card(
+                            shape = RoundedCornerShape(24.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                containerColor = MaterialTheme.colorScheme.surfaceContainer
                             ),
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -515,7 +531,7 @@ private fun TrafficTabContent(
                                                 modifier = Modifier
                                                     .size(10.dp)
                                                     .clip(CircleShape)
-                                                    .background(typeItem.category.color)
+                                                    .background(typeItem.category.toThemeColor())
                                             )
                                             Spacer(modifier = Modifier.width(8.dp))
                                             Text(
@@ -537,8 +553,9 @@ private fun TrafficTabContent(
                     // Volume & Status Code Stacked Bar Chart
                     item {
                         Card(
+                            shape = RoundedCornerShape(24.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                containerColor = MaterialTheme.colorScheme.surfaceContainer
                             ),
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -550,14 +567,19 @@ private fun TrafficTabContent(
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
 
+                                val statusSuccessColor = MaterialTheme.colorScheme.primary
+                                val statusRedirColor = MaterialTheme.colorScheme.secondary
+                                val statusClientErrorColor = MaterialTheme.colorScheme.tertiary
+                                val statusServerErrorColor = MaterialTheme.colorScheme.error
+
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
-                                    LegendIndicator(label = "2xx Success", color = Color(0xFF4CAF50))
-                                    LegendIndicator(label = "3xx Redir", color = Color(0xFF2196F3))
-                                    LegendIndicator(label = "4xx Client", color = Color(0xFFFFA000))
-                                    LegendIndicator(label = "5xx Server", color = Color(0xFFE53935))
+                                    LegendIndicator(label = "2xx Success", color = statusSuccessColor)
+                                    LegendIndicator(label = "3xx Redir", color = statusRedirColor)
+                                    LegendIndicator(label = "4xx Client", color = statusClientErrorColor)
+                                    LegendIndicator(label = "5xx Server", color = statusServerErrorColor)
                                 }
 
                                 Spacer(modifier = Modifier.height(12.dp))
@@ -574,6 +596,10 @@ private fun TrafficTabContent(
                                 } else {
                                     VolumeStatusStackedBarChart(
                                         points = traffic.points,
+                                        successColor = statusSuccessColor,
+                                        redirColor = statusRedirColor,
+                                        clientErrorColor = statusClientErrorColor,
+                                        serverErrorColor = statusServerErrorColor,
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .height(150.dp)
@@ -586,8 +612,9 @@ private fun TrafficTabContent(
                     // Throughput RPM Line Chart
                     item {
                         Card(
+                            shape = RoundedCornerShape(24.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                containerColor = MaterialTheme.colorScheme.surfaceContainer
                             ),
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -625,8 +652,9 @@ private fun TrafficTabContent(
                     // Latency Curve Line Chart
                     item {
                         Card(
+                            shape = RoundedCornerShape(24.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                containerColor = MaterialTheme.colorScheme.surfaceContainer
                             ),
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -650,7 +678,7 @@ private fun TrafficTabContent(
                                 } else {
                                     MetricSparklineChart(
                                         values = traffic.points.map { it.averageDurationMs.toFloat() },
-                                        lineColor = Color(0xFF9C27B0),
+                                        lineColor = MaterialTheme.colorScheme.tertiary,
                                         unit = "ms",
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -737,7 +765,10 @@ private fun ErrorsTabContent(
                                     if (state.isLoadingMore) {
                                         CircularProgressIndicator(modifier = Modifier.size(24.dp))
                                     } else {
-                                        Button(onClick = onLoadMore) {
+                                        Button(
+                                            shape = RoundedCornerShape(20.dp),
+                                            onClick = onLoadMore
+                                        ) {
                                             Text("Load More Errors")
                                         }
                                     }
@@ -756,8 +787,9 @@ private fun ErrorLogCard(item: AdminErrorLogItem) {
     var expandedJson by remember { mutableStateOf(false) }
 
     Card(
+        shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
         ),
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -771,7 +803,7 @@ private fun ErrorLogCard(item: AdminErrorLogItem) {
                     // Method badge
                     Surface(
                         color = MaterialTheme.colorScheme.primaryContainer,
-                        shape = RoundedCornerShape(4.dp)
+                        shape = RoundedCornerShape(16.dp)
                     ) {
                         Text(
                             text = item.method.uppercase(),
@@ -785,17 +817,27 @@ private fun ErrorLogCard(item: AdminErrorLogItem) {
                     Spacer(modifier = Modifier.width(6.dp))
 
                     // Status code badge
-                    val statusColor = if (item.status >= 500) Color(0xFFE53935) else Color(0xFFFFA000)
+                    val isServerError = item.status >= 500
+                    val badgeContainerColor = if (isServerError) {
+                        MaterialTheme.colorScheme.errorContainer
+                    } else {
+                        MaterialTheme.colorScheme.tertiaryContainer
+                    }
+                    val badgeContentColor = if (isServerError) {
+                        MaterialTheme.colorScheme.onErrorContainer
+                    } else {
+                        MaterialTheme.colorScheme.onTertiaryContainer
+                    }
                     Surface(
-                        color = statusColor.copy(alpha = 0.2f),
-                        shape = RoundedCornerShape(4.dp)
+                        color = badgeContainerColor,
+                        shape = RoundedCornerShape(16.dp)
                     ) {
                         Text(
                             text = "${item.status}",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
-                            color = statusColor,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            color = badgeContentColor,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                         )
                     }
 
@@ -854,9 +896,9 @@ private fun ErrorLogCard(item: AdminErrorLogItem) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(6.dp))
+                    .clip(RoundedCornerShape(16.dp))
                     .clickable { expandedJson = !expandedJson }
-                    .padding(vertical = 4.dp),
+                    .padding(horizontal = 4.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
@@ -895,7 +937,7 @@ private fun ErrorLogCard(item: AdminErrorLogItem) {
 
                 Surface(
                     color = MaterialTheme.colorScheme.surface,
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(16.dp),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 8.dp)
@@ -916,6 +958,17 @@ private fun ErrorLogCard(item: AdminErrorLogItem) {
 // -------------------------------------------------------------------------------------------------
 
 @Composable
+private fun RequestTypeCategory.toThemeColor(): Color = when (this) {
+    RequestTypeCategory.AUTH -> MaterialTheme.colorScheme.primary
+    RequestTypeCategory.ACCOUNT -> MaterialTheme.colorScheme.secondary
+    RequestTypeCategory.SYNC -> MaterialTheme.colorScheme.tertiary
+    RequestTypeCategory.SNAPSHOT -> MaterialTheme.colorScheme.error
+    RequestTypeCategory.SESSIONS -> MaterialTheme.colorScheme.primaryContainer
+    RequestTypeCategory.STATS -> MaterialTheme.colorScheme.secondaryContainer
+    RequestTypeCategory.OTHER -> MaterialTheme.colorScheme.outline
+}
+
+@Composable
 private fun RequestTypeDistributionBar(
     types: List<com.maciekhetman.cubetimer.model.admin.AdminRequestTypeItem>,
     modifier: Modifier = Modifier
@@ -926,7 +979,7 @@ private fun RequestTypeDistributionBar(
         modifier = modifier
             .fillMaxWidth()
             .height(14.dp)
-            .clip(RoundedCornerShape(7.dp))
+            .clip(CircleShape)
     ) {
         types.forEach { item ->
             if (item.sharePercentage > 0) {
@@ -934,7 +987,7 @@ private fun RequestTypeDistributionBar(
                     modifier = Modifier
                         .weight(item.sharePercentage.toFloat().coerceAtLeast(0.01f))
                         .fillMaxSize()
-                        .background(item.category.color)
+                        .background(item.category.toThemeColor())
                 )
             }
         }
@@ -944,6 +997,10 @@ private fun RequestTypeDistributionBar(
 @Composable
 private fun VolumeStatusStackedBarChart(
     points: List<AdminTrafficPoint>,
+    successColor: Color = MaterialTheme.colorScheme.primary,
+    redirColor: Color = MaterialTheme.colorScheme.secondary,
+    clientErrorColor: Color = MaterialTheme.colorScheme.tertiary,
+    serverErrorColor: Color = MaterialTheme.colorScheme.error,
     modifier: Modifier = Modifier
 ) {
     Canvas(modifier = modifier) {
@@ -960,45 +1017,45 @@ private fun VolumeStatusStackedBarChart(
 
             var currentY = size.height
 
-            // 2xx (Green)
+            // 2xx (Success)
             if (p.status2xx > 0) {
                 val h2xx = (p.status2xx.toFloat() / maxVal) * size.height
                 currentY -= h2xx
                 drawRect(
-                    color = Color(0xFF4CAF50),
+                    color = successColor,
                     topLeft = Offset(x, currentY),
                     size = Size(barWidth, h2xx)
                 )
             }
 
-            // 3xx (Blue)
+            // 3xx (Redir)
             if (p.status3xx > 0) {
                 val h3xx = (p.status3xx.toFloat() / maxVal) * size.height
                 currentY -= h3xx
                 drawRect(
-                    color = Color(0xFF2196F3),
+                    color = redirColor,
                     topLeft = Offset(x, currentY),
                     size = Size(barWidth, h3xx)
                 )
             }
 
-            // 4xx (Amber)
+            // 4xx (Client Error)
             if (p.status4xx > 0) {
                 val h4xx = (p.status4xx.toFloat() / maxVal) * size.height
                 currentY -= h4xx
                 drawRect(
-                    color = Color(0xFFFFA000),
+                    color = clientErrorColor,
                     topLeft = Offset(x, currentY),
                     size = Size(barWidth, h4xx)
                 )
             }
 
-            // 5xx (Red)
+            // 5xx (Server Error)
             if (p.status5xx > 0) {
                 val h5xx = (p.status5xx.toFloat() / maxVal) * size.height
                 currentY -= h5xx
                 drawRect(
-                    color = Color(0xFFE53935),
+                    color = serverErrorColor,
                     topLeft = Offset(x, currentY),
                     size = Size(barWidth, h5xx)
                 )
@@ -1012,6 +1069,7 @@ private fun MetricSparklineChart(
     values: List<Float>,
     lineColor: Color,
     unit: String,
+    guidelineColor: Color = MaterialTheme.colorScheme.outlineVariant,
     modifier: Modifier = Modifier
 ) {
     Canvas(modifier = modifier) {
@@ -1025,19 +1083,19 @@ private fun MetricSparklineChart(
 
         // Draw guideline lines
         drawLine(
-            color = Color.Gray.copy(alpha = 0.2f),
+            color = guidelineColor,
             start = Offset(0f, 0f),
             end = Offset(size.width, 0f),
             strokeWidth = 1f
         )
         drawLine(
-            color = Color.Gray.copy(alpha = 0.2f),
+            color = guidelineColor,
             start = Offset(0f, size.height / 2f),
             end = Offset(size.width, size.height / 2f),
             strokeWidth = 1f
         )
         drawLine(
-            color = Color.Gray.copy(alpha = 0.2f),
+            color = guidelineColor,
             start = Offset(0f, size.height),
             end = Offset(size.width, size.height),
             strokeWidth = 1f
@@ -1074,8 +1132,9 @@ private fun KpiMiniCard(
     modifier: Modifier = Modifier
 ) {
     Card(
+        shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
         ),
         modifier = modifier
     ) {

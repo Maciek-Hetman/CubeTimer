@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
@@ -58,6 +59,8 @@ fun SyncStatusDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(24.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 when (syncState.status) {
@@ -109,6 +112,7 @@ fun SyncStatusDialog(
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     Card(
+                        shape = RoundedCornerShape(24.dp),
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.secondaryContainer
                         ),
@@ -157,6 +161,7 @@ fun SyncStatusDialog(
                     if (syncState.errorMessage != null) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Card(
+                            shape = RoundedCornerShape(24.dp),
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.errorContainer
                             ),
@@ -176,6 +181,7 @@ fun SyncStatusDialog(
         confirmButton = {
             if (syncState.isGuest) {
                 Button(
+                    shape = RoundedCornerShape(20.dp),
                     onClick = {
                         onDismiss()
                         onLoginClick()
@@ -185,6 +191,7 @@ fun SyncStatusDialog(
                 }
             } else {
                 Button(
+                    shape = RoundedCornerShape(20.dp),
                     onClick = onTriggerSync,
                     enabled = syncState.status != SyncStatusType.SYNCING
                 ) {
@@ -193,7 +200,10 @@ fun SyncStatusDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(
+                shape = RoundedCornerShape(20.dp),
+                onClick = onDismiss
+            ) {
                 Text("Close")
             }
         },

@@ -10,9 +10,10 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuDefaults
@@ -91,7 +92,7 @@ fun SessionDropdownMenu(
 
         val manualSessions = sessions.filter { it.kind == SessionKind.MANUAL }
         if (manualSessions.isNotEmpty()) {
-            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             manualSessions.forEach { session ->
                 val isSelected = !isAutomaticMode && activeSession?.id == session.id
                 DropdownMenuItem(
@@ -120,7 +121,7 @@ fun SessionDropdownMenu(
             }
         }
 
-        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
         DropdownMenuItem(
             text = { Text("+ New Manual Session") },

@@ -37,8 +37,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -80,6 +80,8 @@ fun SessionManagementSheet(
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
         sheetState = sheetState,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         modifier = modifier
     ) {
         Column(
@@ -100,7 +102,8 @@ fun SessionManagementSheet(
 
                 Button(
                     onClick = onCreateSession,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                    shape = RoundedCornerShape(20.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(4.dp))
@@ -110,7 +113,7 @@ fun SessionManagementSheet(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            TabRow(selectedTabIndex = selectedTabIndex) {
+            PrimaryTabRow(selectedTabIndex = selectedTabIndex) {
                 Tab(
                     selected = selectedTabIndex == 0,
                     onClick = { selectedTabIndex = 0 },
@@ -134,16 +137,17 @@ fun SessionManagementSheet(
                     // Auto-session item
                     item {
                         Card(
+                            shape = RoundedCornerShape(24.dp),
                             colors = CardDefaults.cardColors(
                                 containerColor = if (isAutomaticMode) {
-                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                    MaterialTheme.colorScheme.primaryContainer
                                 } else {
-                                    MaterialTheme.colorScheme.surfaceVariant
+                                    MaterialTheme.colorScheme.surfaceContainer
                                 }
                             ),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
+                                .clip(RoundedCornerShape(24.dp))
                                 .clickable {
                                     if (!isAutomaticMode) onSwitchToAutomatic()
                                 }
@@ -182,6 +186,7 @@ fun SessionManagementSheet(
                                 if (isAutomaticMode) {
                                     AssistChip(
                                         onClick = {},
+                                        shape = RoundedCornerShape(16.dp),
                                         label = { Text("ACTIVE") },
                                         leadingIcon = {
                                             Icon(
@@ -287,16 +292,17 @@ private fun SessionItemCard(
     var menuExpanded by remember { mutableStateOf(false) }
 
     Card(
+        shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected) {
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                MaterialTheme.colorScheme.primaryContainer
             } else {
-                MaterialTheme.colorScheme.surfaceVariant
+                MaterialTheme.colorScheme.surfaceContainer
             }
         ),
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(24.dp))
             .clickable {
                 if (!isSelected && !isArchived) onSelect()
             }
@@ -336,6 +342,7 @@ private fun SessionItemCard(
                 if (isSelected) {
                     AssistChip(
                         onClick = {},
+                        shape = RoundedCornerShape(16.dp),
                         label = { Text("ACTIVE") },
                         leadingIcon = {
                             Icon(

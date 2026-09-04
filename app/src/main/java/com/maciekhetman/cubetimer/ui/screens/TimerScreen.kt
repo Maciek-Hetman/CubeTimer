@@ -54,7 +54,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.Session
 import com.maciekhetman.cubetimer.model.SyncUiState
-import com.maciekhetman.cubetimer.ui.components.TopBar
+import kotlinx.coroutines.launch
+import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.rotate
+import com.maciekhetman.cubetimer.ui.components.TimerTopHeader
 import com.maciekhetman.cubetimer.viewmodel.TimerViewModel
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.delay
@@ -158,8 +163,7 @@ fun TimerScreen(
 
     Column(modifier = modifier.fillMaxSize()) {
         if (showTopBar) {
-            TopBar(
-                title = "Timer",
+            TimerTopHeader(
                 currentMode = currentMode,
                 onModeSelected = onModeSelected,
                 activeSession = activeSession,
@@ -345,7 +349,7 @@ private fun TimerContent(
                 Text(
                     text = "Tap and hold to start",
                     style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             is TimerState.Holding -> {
@@ -380,14 +384,14 @@ private fun TimerContent(
                 Text(
                     text = "Tap to stop",
                     style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
             is TimerState.Finished -> {
                 Spacer(modifier = Modifier.height(16.dp))
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.padding(horizontal = 16.dp)
                 ) {
                     Button(
@@ -397,12 +401,12 @@ private fun TimerContent(
                         },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(64.dp),
-                        shape = MaterialTheme.shapes.extraLarge
+                            .height(56.dp),
+                        shape = RoundedCornerShape(20.dp)
                     ) {
                         Text(
                             text = "Save Time",
-                            style = MaterialTheme.typography.titleLarge,
+                            style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -419,7 +423,7 @@ private fun TimerContent(
                             modifier = Modifier
                                 .weight(1f)
                                 .height(56.dp),
-                            shape = MaterialTheme.shapes.large
+                            shape = RoundedCornerShape(20.dp)
                         ) {
                             Text(
                                 text = "+2",
@@ -435,7 +439,7 @@ private fun TimerContent(
                             modifier = Modifier
                                 .weight(1f)
                                 .height(56.dp),
-                            shape = MaterialTheme.shapes.extraLarge,
+                            shape = RoundedCornerShape(20.dp),
                             colors = ButtonDefaults.filledTonalButtonColors(
                                 containerColor = MaterialTheme.colorScheme.errorContainer,
                                 contentColor = MaterialTheme.colorScheme.onErrorContainer
@@ -455,7 +459,7 @@ private fun TimerContent(
                             modifier = Modifier
                                 .weight(1f)
                                 .height(56.dp),
-                            shape = MaterialTheme.shapes.medium
+                            shape = RoundedCornerShape(20.dp)
                         ) {
                             Text(
                                 text = "Discard",
@@ -472,6 +476,7 @@ private fun TimerContent(
     if (showDiscardDialog) {
         AlertDialog(
             onDismissRequest = { showDiscardDialog = false },
+            shape = RoundedCornerShape(24.dp),
             title = { Text("Discard solve?") },
             text = { Text("This solve will be removed without saving.") },
             confirmButton = {
@@ -481,6 +486,7 @@ private fun TimerContent(
                         showDiscardDialog = false
                         viewModel.discardSolve()
                     },
+                    shape = RoundedCornerShape(20.dp),
                     colors = ButtonDefaults.filledTonalButtonColors(
                         containerColor = MaterialTheme.colorScheme.errorContainer,
                         contentColor = MaterialTheme.colorScheme.onErrorContainer
@@ -494,7 +500,8 @@ private fun TimerContent(
                     onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         showDiscardDialog = false
-                    }
+                    },
+                    shape = RoundedCornerShape(20.dp)
                 ) {
                     Text("Cancel")
                 }
@@ -558,11 +565,11 @@ private fun AveragesDisplay(
 
     Surface(
         modifier = modifier,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.7f),
-        shape = MaterialTheme.shapes.large
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = RoundedCornerShape(24.dp)
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -589,7 +596,7 @@ private fun AverageStat(
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(modifier = Modifier.height(2.dp))
         Text(
@@ -631,9 +638,9 @@ private fun RecentSolvesDisplay(
         }
 
         val dynamicHorizontalPadding = when {
-            estimatedItemWidth < 50.dp -> 4.dp
-            estimatedItemWidth < 60.dp -> 5.dp
-            else -> 6.dp
+            estimatedItemWidth < 50.dp -> 6.dp
+            estimatedItemWidth < 60.dp -> 8.dp
+            else -> 10.dp
         }
 
         Row(
@@ -642,8 +649,8 @@ private fun RecentSolvesDisplay(
         ) {
             recentSolves.forEach { solve ->
                 Surface(
-                    shape = MaterialTheme.shapes.small,
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 ) {
                     Text(
                         text = formatDisplayTime(solve.displayTime),
@@ -651,13 +658,13 @@ private fun RecentSolvesDisplay(
                         fontSize = dynamicFontSize,
                         fontFamily = FontFamily.Monospace,
                         color = when (solve.penalty) {
-                            Penalty.DNF -> MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
-                            Penalty.PLUS_TWO -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.8f)
-                            Penalty.NONE -> MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                            Penalty.DNF -> MaterialTheme.colorScheme.error
+                            Penalty.PLUS_TWO -> MaterialTheme.colorScheme.tertiary
+                            Penalty.NONE -> MaterialTheme.colorScheme.onBackground
                         },
                         modifier = Modifier.padding(
                             horizontal = dynamicHorizontalPadding,
-                            vertical = 2.dp
+                            vertical = 4.dp
                         )
                     )
                 }
@@ -681,6 +688,8 @@ private fun ScrambleDisplay(
     var showFullScramble by remember { mutableStateOf(false) }
     var isTruncated by remember { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
+    val coroutineScope = rememberCoroutineScope()
+    val refreshRotation = remember { Animatable(0f) }
     val maxLines = 4
     val safeScale = scale.coerceIn(0.8f, 1.4f)
     val contentPadding = 16.dp * safeScale
@@ -708,8 +717,8 @@ private fun ScrambleDisplay(
                 }
             ),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = MaterialTheme.shapes.large,
-        tonalElevation = 3.dp
+        shape = RoundedCornerShape(24.dp),
+        tonalElevation = 2.dp
     ) {
         Row(
             modifier = Modifier
@@ -738,14 +747,27 @@ private fun ScrambleDisplay(
                 FilledTonalIconButton(
                     onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        coroutineScope.launch {
+                            refreshRotation.snapTo(0f)
+                            refreshRotation.animateTo(
+                                targetValue = 360f,
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioLowBouncy,
+                                    stiffness = Spring.StiffnessMediumLow
+                                )
+                            )
+                        }
                         onRefresh()
                     },
-                    modifier = Modifier.size(buttonSize)
+                    modifier = Modifier.size(buttonSize),
+                    shape = CircleShape
                 ) {
                     Icon(
                         imageVector = Icons.Default.Refresh,
                         contentDescription = "Generate new scramble",
-                        modifier = Modifier.size(iconSize)
+                        modifier = Modifier
+                            .size(iconSize)
+                            .rotate(refreshRotation.value)
                     )
                 }
             }
@@ -756,6 +778,7 @@ private fun ScrambleDisplay(
     if (showFullScramble) {
         AlertDialog(
             onDismissRequest = { showFullScramble = false },
+            shape = RoundedCornerShape(24.dp),
             title = {
                 Text(
                     text = "Full Scramble",
@@ -776,10 +799,13 @@ private fun ScrambleDisplay(
                 }
             },
             confirmButton = {
-                TextButton(onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    showFullScramble = false
-                }) {
+                TextButton(
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        showFullScramble = false
+                    },
+                    shape = RoundedCornerShape(20.dp)
+                ) {
                     Text("Close")
                 }
             }
@@ -817,7 +843,7 @@ private fun RecordCelebrationOverlay(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.45f))
+                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.45f))
                 .pointerInput(Unit) {
                     detectTapGestures {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -831,7 +857,7 @@ private fun RecordCelebrationOverlay(
                     modifier = Modifier
                         .fillMaxWidth(0.84f)
                         .padding(16.dp),
-                    shape = MaterialTheme.shapes.extraLarge,
+                    shape = RoundedCornerShape(24.dp),
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
                     contentColor = MaterialTheme.colorScheme.onSurface,
                     tonalElevation = 6.dp,
@@ -853,7 +879,7 @@ private fun RecordCelebrationOverlay(
                         )
                         Surface(
                             color = MaterialTheme.colorScheme.primaryContainer,
-                            shape = MaterialTheme.shapes.large
+                            shape = RoundedCornerShape(16.dp)
                         ) {
                             Text(
                                 text = when (it.type) {

@@ -1,7 +1,8 @@
 package com.maciekhetman.cubetimer.ui.components
 
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,7 +31,7 @@ fun SectionDivider(
     modifier: Modifier = Modifier,
     verticalPadding: Dp = 8.dp
 ) {
-    HorizontalDivider(
-        modifier = modifier.padding(horizontal = 16.dp, vertical = verticalPadding)
+    Spacer(
+        modifier = modifier.height(verticalPadding)
     )
 }
