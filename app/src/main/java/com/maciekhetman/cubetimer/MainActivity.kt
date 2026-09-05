@@ -487,6 +487,11 @@ fun FloatingNavigationBar(
         stiffness = if (isMovingRight) Spring.StiffnessMedium else Spring.StiffnessMediumLow
     )
 
+    val indicatorWidth = 64.dp
+    val indicatorHeight = 42.dp
+    val containerPadding = 5.dp
+    val itemGap = 6.dp
+
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainer,
         shape = CircleShape,
@@ -497,26 +502,15 @@ fun FloatingNavigationBar(
         tonalElevation = 4.dp,
         shadowElevation = 8.dp,
         modifier = modifier
-            .widthIn(max = 280.dp)
-            .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(bottom = 16.dp, start = 8.dp, end = 8.dp)
+            .padding(bottom = 16.dp)
     ) {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-            BoxWithConstraints(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 6.dp, horizontal = 6.dp)
+            Box(
+                modifier = Modifier.padding(containerPadding)
             ) {
-                val totalWidth = maxWidth
-                val itemWidth = totalWidth / visibleDestinations.size
-                val indicatorWidth = (itemWidth - 12.dp).coerceAtMost(64.dp)
-                val indicatorHeight = 36.dp
-
-                val baseHalfWidth = indicatorWidth / 2f
-                val targetCenter = (itemWidth * selectedIndex) + (itemWidth / 2f)
-                val targetLeft = targetCenter - baseHalfWidth
-                val targetRight = targetCenter + baseHalfWidth
+                val targetLeft = (indicatorWidth + itemGap) * selectedIndex
+                val targetRight = targetLeft + indicatorWidth
 
                 val targetLeftPx = with(density) { targetLeft.toPx() }
                 val targetRightPx = with(density) { targetRight.toPx() }
@@ -533,7 +527,7 @@ fun FloatingNavigationBar(
                 )
 
                 val pillLeft = animatedLeft
-                val pillWidth = (animatedRight - animatedLeft).coerceAtLeast(with(density) { indicatorHeight.toPx() })
+                val pillWidth = (animatedRight - animatedLeft).coerceAtLeast(with(density) { indicatorWidth.toPx() })
 
                 // Animated Material You indicator pill sliding & morphing behind active destination
                 Box(
@@ -545,14 +539,12 @@ fun FloatingNavigationBar(
                             width = with(density) { pillWidth.toDp() },
                             height = indicatorHeight
                         )
-                        .align(Alignment.CenterStart)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.secondaryContainer)
                 )
 
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    horizontalArrangement = Arrangement.spacedBy(itemGap),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     visibleDestinations.forEach { destination ->
@@ -579,8 +571,7 @@ fun FloatingNavigationBar(
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
-                                .weight(1f)
-                                .height(48.dp)
+                                .size(width = indicatorWidth, height = indicatorHeight)
                                 .clip(CircleShape)
                                 .clickable {
                                     if (!isTimerRunning && currentDestination != destination) {
