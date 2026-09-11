@@ -105,6 +105,7 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.mockwebserver)
     testImplementation(libs.androidx.test.core.ktx)
+    testImplementation(libs.androidx.compose.ui.test.junit4)
 
     // Instrumentation Testing
     androidTestImplementation(libs.androidx.junit)

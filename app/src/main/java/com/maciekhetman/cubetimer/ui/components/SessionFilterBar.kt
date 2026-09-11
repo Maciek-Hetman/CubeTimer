@@ -49,16 +49,16 @@ fun SessionFilterBar(
         verticalAlignment = Alignment.CenterVertically
     ) {
         FilterChip(
-            selected = currentFilter is StatsFilter.ActiveSession,
-            onClick = { onFilterSelected(StatsFilter.ActiveSession) },
+            selected = currentFilter is StatsFilter.AllSessions,
+            onClick = { onFilterSelected(StatsFilter.AllSessions) },
             shape = RoundedCornerShape(16.dp),
             label = {
                 Text(
-                    text = "Active Session ($activeSessionSolvesCount)",
+                    text = "All Time ($allSolvesCount)",
                     style = MaterialTheme.typography.labelMedium
                 )
             },
-            leadingIcon = if (currentFilter is StatsFilter.ActiveSession) {
+            leadingIcon = if (currentFilter is StatsFilter.AllSessions) {
                 {
                     Icon(
                         imageVector = Icons.Default.Check,
@@ -70,16 +70,16 @@ fun SessionFilterBar(
         )
 
         FilterChip(
-            selected = currentFilter is StatsFilter.AllSessions,
-            onClick = { onFilterSelected(StatsFilter.AllSessions) },
+            selected = currentFilter is StatsFilter.ActiveSession,
+            onClick = { onFilterSelected(StatsFilter.ActiveSession) },
             shape = RoundedCornerShape(16.dp),
             label = {
                 Text(
-                    text = "All Solves ($allSolvesCount)",
+                    text = "Active Session ($activeSessionSolvesCount)",
                     style = MaterialTheme.typography.labelMedium
                 )
             },
-            leadingIcon = if (currentFilter is StatsFilter.AllSessions) {
+            leadingIcon = if (currentFilter is StatsFilter.ActiveSession) {
                 {
                     Icon(
                         imageVector = Icons.Default.Check,

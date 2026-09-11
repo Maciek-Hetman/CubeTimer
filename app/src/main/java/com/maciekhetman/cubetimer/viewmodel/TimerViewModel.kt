@@ -121,6 +121,9 @@ class TimerViewModel(
     private val _hapticsEnabled = MutableStateFlow(true)
     val hapticsEnabled: StateFlow<Boolean> = _hapticsEnabled.asStateFlow()
 
+    private val _hideSessionMenuInTopBar = MutableStateFlow(false)
+    val hideSessionMenuInTopBar: StateFlow<Boolean> = _hideSessionMenuInTopBar.asStateFlow()
+
     private val solvesByOwner = mutableMapOf<String, List<SolveTime>>()
     private val pendingDeletedIds = mutableSetOf<String>()
 
@@ -130,7 +133,7 @@ class TimerViewModel(
     private val _allSolves = MutableStateFlow<List<SolveTime>>(emptyList())
     val allSolves: StateFlow<List<SolveTime>> = _allSolves.asStateFlow()
 
-    private val _statsFilter = MutableStateFlow<StatsFilter>(StatsFilter.ActiveSession)
+    private val _statsFilter = MutableStateFlow<StatsFilter>(StatsFilter.AllSessions)
     val statsFilter: StateFlow<StatsFilter> = _statsFilter.asStateFlow()
 
     /**
@@ -324,6 +327,11 @@ class TimerViewModel(
         viewModelScope.launch {
             settingsRepository.hapticsEnabledFlow.collect { enabled ->
                 _hapticsEnabled.value = enabled
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.hideSessionMenuInTopBarFlow.collect { hide ->
+                _hideSessionMenuInTopBar.value = hide
             }
         }
         // Load saved app time for the selected mode, switching collectors when the mode changes.
@@ -589,10 +597,8 @@ class TimerViewModel(
         }
     }
 
-    fun setScrambleScalePercent(percent: Int) {
-        viewModelScope.launch {
-            settingsRepository.setScrambleScalePercent(percent)
-        }
+    fun setScrambleScalePercent(percent: Int): Job = viewModelScope.launch {
+        settingsRepository.setScrambleScalePercent(percent)
     }
 
     fun setTimerStartDelayMillis(delayMillis: Int) {
@@ -657,6 +663,17 @@ class TimerViewModel(
     fun setHapticsEnabled(enabled: Boolean) {
         viewModelScope.launch {
             settingsRepository.setHapticsEnabled(enabled)
+        }
+    }
+
+    fun setHideSessionMenuInTopBar(hide: Boolean): Job = viewModelScope.launch {
+        settingsRepository.setHideSessionMenuInTopBar(hide)
+        if (hide) {
+            val ownerId = authManager.currentOwnerId
+            Mode.entries.forEach { mode ->
+                sessionManager.clearManualSessionOverride(ownerId, mode)
+                sessionManager.setAutomaticMode(mode, true)
+            }
         }
     }
 

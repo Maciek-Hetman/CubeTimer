@@ -468,8 +468,9 @@ class Milestone3Gen3Challenger2RollbackAndIsolationTest {
         realSolveDao.insertAll(solvesD)
 
         val vm = createViewModel()
+        vm.setFilter(StatsFilter.ActiveSession)
         vm.uiState.first { state ->
-            state.activeSession?.id == sessionA.id && !state.isLoading && state.totalCount == 10
+            state.activeSession?.id == sessionA.id && !state.isLoading && state.totalCount == 10 && state.currentFilter == StatsFilter.ActiveSession
         }
         advanceUntilIdle()
 

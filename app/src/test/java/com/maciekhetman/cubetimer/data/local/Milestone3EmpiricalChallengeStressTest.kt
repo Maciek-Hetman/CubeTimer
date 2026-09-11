@@ -321,8 +321,9 @@ class Milestone3EmpiricalChallengeStressTest {
             defaultDispatcher = testDispatcher
         )
 
+        viewModel.setFilter(StatsFilter.ActiveSession)
         viewModel.uiState.first { state ->
-            state.activeSession?.id == sessionA.id && !state.isLoading && state.totalCount == 10
+            state.activeSession?.id == sessionA.id && !state.isLoading && state.totalCount == 10 && state.currentFilter == StatsFilter.ActiveSession
         }
         advanceUntilIdle()
 

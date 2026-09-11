@@ -2,9 +2,11 @@ package com.maciekhetman.cubetimer.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -72,6 +74,7 @@ fun StatsScreen(
     onSyncClick: () -> Unit = {},
     authState: AuthState = AuthState.Guest,
     onAuthClick: () -> Unit = {},
+    hideSessionMenu: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val solves by viewModel.solves.collectAsStateWithLifecycle()
@@ -80,6 +83,7 @@ fun StatsScreen(
     val currentActiveSession by viewModel.activeSession.collectAsStateWithLifecycle()
     val effectiveActiveSession = activeSession ?: currentActiveSession
     val appTimeMillis by viewModel.appTimeMillis.collectAsStateWithLifecycle()
+    val hideSessionMenuInTopBar by viewModel.hideSessionMenuInTopBar.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
     val layoutDirection = LocalLayoutDirection.current
@@ -111,7 +115,8 @@ fun StatsScreen(
                 syncUiState = syncUiState,
                 onSyncClick = onSyncClick,
                 authState = authState,
-                onAuthClick = onAuthClick
+                onAuthClick = onAuthClick,
+                hideSessionMenu = hideSessionMenu || hideSessionMenuInTopBar
             )
         }
     ) { paddingValues ->
@@ -529,10 +534,7 @@ private fun CollapsibleSectionCard(
 ) {
     val rotationAngle by animateFloatAsState(
         targetValue = if (isExpanded) 180f else 0f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMediumLow
-        ),
+        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
         label = "arrow_rotation"
     )
 
@@ -543,9 +545,7 @@ private fun CollapsibleSectionCard(
         tonalElevation = 0.dp
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .animateContentSize()
+            modifier = Modifier.fillMaxWidth()
         ) {
             Row(
                 modifier = Modifier
@@ -604,10 +604,16 @@ private fun CollapsibleSectionCard(
 
             AnimatedVisibility(
                 visible = isExpanded,
-                enter = fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) +
-                        expandVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)),
-                exit = fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) +
-                       shrinkVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow))
+                enter = fadeIn(animationSpec = tween(durationMillis = 150)) +
+                        expandVertically(
+                            animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+                            expandFrom = Alignment.Top
+                        ),
+                exit = fadeOut(animationSpec = tween(durationMillis = 150)) +
+                       shrinkVertically(
+                           animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+                           shrinkTowards = Alignment.Top
+                       )
             ) {
                 Column(
                     modifier = Modifier
@@ -652,7 +658,6 @@ private fun LargeAveragesSection(
 
     CollapsibleSectionCard(
         title = "Large Averages",
-        subtitle = "Extended window averages (500, 1000, 2000)",
         badgeText = badgeText,
         isExpanded = isExpanded,
         onToggle = { isExpanded = !isExpanded },
@@ -737,19 +742,12 @@ private fun SessionMetricsSection(
 
     CollapsibleSectionCard(
         title = "Session & Detailed Metrics",
-        subtitle = "Session performance & aggregate statistics",
         badgeText = badgeText,
         isExpanded = isExpanded,
         onToggle = { isExpanded = !isExpanded },
         modifier = modifier
     ) {
         if (sessionStats != null) {
-            Text(
-                text = "Session Stats (Solves within 1h gaps)",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.SemiBold
-            )
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -803,13 +801,6 @@ private fun SessionMetricsSection(
             }
         }
 
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = "Detailed & Aggregate Metrics",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.secondary,
-            fontWeight = FontWeight.SemiBold
-        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -897,7 +888,6 @@ private fun PenaltyStatsSection(
 
     CollapsibleSectionCard(
         title = "Penalty Distribution",
-        subtitle = "DNF and +2 penalties ($cleanCount clean solves)",
         badgeText = badgeText,
         isExpanded = isExpanded,
         onToggle = { isExpanded = !isExpanded },
@@ -943,7 +933,7 @@ private fun PersonalBestsChart(solves: List<SolveTime>) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(vertical = 8.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         shape = RoundedCornerShape(24.dp),
         tonalElevation = 1.dp
@@ -1156,7 +1146,7 @@ private fun SolveTimesChart(solves: List<SolveTime>) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(vertical = 8.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         shape = RoundedCornerShape(24.dp),
         tonalElevation = 1.dp
@@ -1269,7 +1259,7 @@ private fun AveragesChart(solves: List<SolveTime>) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(vertical = 8.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         shape = RoundedCornerShape(24.dp),
         tonalElevation = 1.dp

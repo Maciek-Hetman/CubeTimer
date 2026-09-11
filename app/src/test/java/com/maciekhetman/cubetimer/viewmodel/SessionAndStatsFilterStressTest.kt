@@ -168,6 +168,10 @@ class SessionAndStatsFilterStressTest {
 
         assertEquals(100, timerViewModel.solves.value.size)
 
+        // Set filter to ActiveSession so active session switching filters solves
+        timerViewModel.setStatsFilter(StatsFilter.ActiveSession)
+        advanceUntilIdle()
+
         // Rapidly switch active session 50 times
         for (i in 0..49) {
             val targetSession = sessions[i % sessions.size]

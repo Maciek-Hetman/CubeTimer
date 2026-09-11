@@ -182,3 +182,52 @@ Tapping any solve card in the history list launches a modal dialog displaying a 
 - [ ] `./gradlew testDebugUnitTest` compiles and passes all unit and Robolectric tests cleanly.
 </USER_REQUEST>
 
+## 2026-09-11T11:48:24Z
+
+<USER_REQUEST>
+This is a single self-contained fix; keep it small and focused. Use a small focused team.
+
+Perform comprehensive UI adjustments across the Stats, History, and Settings screens in the CubeTimer Android application to reduce clutter, expand graph widths, increase activity padding, make collapsible card transitions responsive, add direct +2/DNF/delete solve actions, add a setting to hide top bar session management, and convert scramble size to a slider.
+
+Working directory: /Users/maciek/AndroidStudioProjects/CubeTimer
+Integrity mode: development
+
+## Requirements
+
+### R1. Stats Screen Layout & Spacing
+- Increase graph card widths by removing redundant horizontal padding from `PersonalBestsChart`, `SolveTimesChart`, and `AveragesChart` so their outer edges align consistently with other content cards.
+- Increase internal padding of the `ActivityTracker` card to give the heat map grid and legend comfortable breathing room.
+- Remove both the collapsible section header subtitles (under "Large Averages", "Session & Detailed Metrics", and "Penalty Distribution") and the intermediate section subtitles ("Session Stats (Solves within 1h gaps)" and "Detailed & Aggregate Metrics") to reduce visual clutter.
+
+### R2. Responsive Card Collapse/Expand Animation
+- Redesign the expand/collapse animation for bottom cards (`CollapsibleSectionCard`) to eliminate lag, delayed shrinking, and animation stutter, ensuring immediate, snappy transitions.
+
+### R3. History Screen Direct Solve Actions
+- Add a dedicated action row at the bottom of each `HistorySolveCard` featuring compact toggle chips for `+2` and `DNF` (with visual active states), plus a direct trash icon button for `Delete` (with undo snackbar support).
+
+### R4. Settings Screen Controls
+- In the "Defaults" section of Settings, add a persistent toggle "Hide session menu in top bar" which hides the session pill from the top bar across all screens and locks session handling into automatic mode.
+- In the "Scramble" section of Settings, replace the dropdown menu with a slider control spanning 70% to 140% in 5% discrete steps with live percentage readout and haptic tick feedback.
+
+## Acceptance Criteria
+
+### Verification & Robustness
+- [ ] `./gradlew testDebugUnitTest` compiles cleanly and passes without regressions.
+- [ ] Existing `StatsScreenRobustnessChallengeTest` assertions remain valid and passing.
+- [ ] Unit tests are added or updated to verify:
+  - The new session visibility preference default, mutation, and persistence.
+  - The scramble slider scale flow and persistence across the 70%..140% range.
+  - History solve card direct actions trigger +2, DNF, and Delete events properly.
+
+### Visual & Behavioral
+- [ ] Graph cards have equal horizontal width and alignment as other content cards in `StatsScreen`.
+- [ ] `ActivityTracker` card has increased internal padding.
+- [ ] Bottom cards in `StatsScreen` collapse and expand without delayed shrinkage or sluggish spring lag.
+- [ ] Section header subtitles and intermediate subtitles are removed from `StatsScreen`.
+- [ ] Solve cards on `HistoryScreen` include a bottom row with `+2` and `DNF` toggle chips and a Delete icon button.
+- [ ] The "Defaults" section in `SettingsScreen` includes a toggle to hide the session management menu in the top bar.
+- [ ] When the session toggle is enabled, the session pill in the top bar is hidden and automatic session mode remains active.
+- [ ] Scramble size in `SettingsScreen` is controlled via a slider ranging from 70% to 140% in 5% increments.
+</USER_REQUEST>
+
+

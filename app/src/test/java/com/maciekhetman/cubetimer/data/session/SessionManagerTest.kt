@@ -1,6 +1,7 @@
 package com.maciekhetman.cubetimer.data.session
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.test.core.app.ApplicationProvider
 import app.cash.turbine.test
@@ -191,6 +192,43 @@ class SessionManagerTest {
 
             cancelAndIgnoreRemainingEvents()
         }
+    }
+
+    @Test
+    fun testSessionModeLockedToAutomaticWhenHideSessionMenuInTopBarIsTrue() = runTest {
+        val hideKey = booleanPreferencesKey("hide_session_menu_in_top_bar")
+
+        // Create manual session and switch to it
+        val manualSession = sessionManager.createManualSession("Speed", Mode.CUBE_3x3, "guest")
+        assertEquals(SessionKind.MANUAL, sessionManager.getSessionModeFlow(Mode.CUBE_3x3).first())
+        assertFalse(sessionManager.isAutomaticModeFlow(Mode.CUBE_3x3).first())
+        assertEquals(manualSession.id, sessionManager.getActiveSessionFlow(Mode.CUBE_3x3).first()?.id)
+
+        // Enable hide_session_menu_in_top_bar
+        context.settingsDataStore.edit { it[hideKey] = true }
+
+        // Session mode should now be locked to AUTOMATIC
+        assertEquals(SessionKind.AUTOMATIC, sessionManager.getSessionModeFlow(Mode.CUBE_3x3).first())
+        assertTrue(sessionManager.isAutomaticModeFlow(Mode.CUBE_3x3).first())
+        val lockedActive = sessionManager.getActiveSessionFlow(Mode.CUBE_3x3).first()
+        // If an automatic session existed or when created, kind is AUTOMATIC
+        val activeOrCreated = sessionManager.getOrCreateActiveSession("guest", Mode.CUBE_3x3, System.currentTimeMillis())
+        assertEquals(SessionKind.AUTOMATIC, activeOrCreated.kind)
+
+        // Manual switches should be ignored / blocked
+        sessionManager.setSessionMode(Mode.CUBE_3x3, SessionKind.MANUAL)
+        assertEquals(SessionKind.AUTOMATIC, sessionManager.getSessionModeFlow(Mode.CUBE_3x3).first())
+        assertTrue(sessionManager.isAutomaticModeFlow(Mode.CUBE_3x3).first())
+
+        sessionManager.setActiveSession("guest", Mode.CUBE_3x3, manualSession.id)
+        assertTrue(sessionManager.isAutomaticModeFlow(Mode.CUBE_3x3).first())
+
+        // Disable hide_session_menu_in_top_bar
+        context.settingsDataStore.edit { it[hideKey] = false }
+        // Can now switch manually again
+        sessionManager.setActiveSession("guest", Mode.CUBE_3x3, manualSession.id)
+        assertEquals(manualSession.id, sessionManager.getActiveSessionFlow(Mode.CUBE_3x3).first()?.id)
+        assertFalse(sessionManager.isAutomaticModeFlow(Mode.CUBE_3x3).first())
     }
 
     private class FakeAuthManager(

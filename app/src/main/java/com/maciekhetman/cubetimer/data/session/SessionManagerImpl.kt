@@ -1,6 +1,7 @@
 package com.maciekhetman.cubetimer.data.session
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.maciekhetman.cubetimer.data.auth.AuthManager
@@ -37,13 +38,19 @@ class SessionManagerImpl(
 
     private val sessionMutex = Mutex()
 
+    private val HIDE_SESSION_MENU_KEY = booleanPreferencesKey("hide_session_menu_in_top_bar")
+
     private fun sessionModeKey(mode: Mode) = stringPreferencesKey("session_mode_${mode.name}")
     private fun activeManualSessionKey(mode: Mode) = stringPreferencesKey("active_manual_session_${mode.name}")
 
     override fun getSessionModeFlow(mode: Mode): Flow<SessionKind> {
         return context.settingsDataStore.data.map { prefs ->
-            val raw = prefs[sessionModeKey(mode)]
-            SessionKind.fromString(raw)
+            if (prefs[HIDE_SESSION_MENU_KEY] == true) {
+                SessionKind.AUTOMATIC
+            } else {
+                val raw = prefs[sessionModeKey(mode)]
+                SessionKind.fromString(raw)
+            }
         }.distinctUntilChanged()
     }
 
@@ -52,12 +59,16 @@ class SessionManagerImpl(
     }
 
     override suspend fun setSessionMode(mode: Mode, kind: SessionKind) {
+        val isLocked = context.settingsDataStore.data.map { it[HIDE_SESSION_MENU_KEY] == true }.first()
+        if (isLocked && kind != SessionKind.AUTOMATIC) return
         context.settingsDataStore.edit { prefs ->
             prefs[sessionModeKey(mode)] = kind.value
         }
     }
 
     override suspend fun setAutomaticMode(mode: Mode, enabled: Boolean) {
+        val isLocked = context.settingsDataStore.data.map { it[HIDE_SESSION_MENU_KEY] == true }.first()
+        if (isLocked && !enabled) return
         setSessionMode(mode, if (enabled) SessionKind.AUTOMATIC else SessionKind.MANUAL)
     }
 
@@ -70,7 +81,7 @@ class SessionManagerImpl(
 
     override fun getActiveSessionFlow(ownerId: String, mode: Mode): Flow<Session?> {
         return context.settingsDataStore.data.flatMapLatest { prefs ->
-            val kind = SessionKind.fromString(prefs[sessionModeKey(mode)])
+            val kind = if (prefs[HIDE_SESSION_MENU_KEY] == true) SessionKind.AUTOMATIC else SessionKind.fromString(prefs[sessionModeKey(mode)])
             if (kind == SessionKind.AUTOMATIC) {
                 sessionRepository.observeActiveSessions(ownerId, mode).map { sessions ->
                     sessions.firstOrNull { it.kind == SessionKind.AUTOMATIC && it.isOpen }
@@ -100,6 +111,8 @@ class SessionManagerImpl(
     }
 
     override suspend fun setActiveSession(ownerId: String, mode: Mode, sessionId: String) {
+        val isLocked = context.settingsDataStore.data.map { it[HIDE_SESSION_MENU_KEY] == true }.first()
+        if (isLocked) return
         context.settingsDataStore.edit { prefs ->
             prefs[sessionModeKey(mode)] = SessionKind.MANUAL.value
             prefs[activeManualSessionKey(mode)] = sessionId
@@ -113,7 +126,7 @@ class SessionManagerImpl(
     ): Session = sessionMutex.withLock {
         withContext(ioDispatcher) {
             val prefs = context.settingsDataStore.data.first()
-            val kind = SessionKind.fromString(prefs[sessionModeKey(mode)])
+            val kind = if (prefs[HIDE_SESSION_MENU_KEY] == true) SessionKind.AUTOMATIC else SessionKind.fromString(prefs[sessionModeKey(mode)])
             val nowEpochMs = solveTimestamp ?: System.currentTimeMillis()
 
             if (kind == SessionKind.AUTOMATIC) {

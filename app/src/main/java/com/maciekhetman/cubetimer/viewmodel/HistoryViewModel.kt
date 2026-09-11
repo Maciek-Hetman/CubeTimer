@@ -45,7 +45,7 @@ data class HistoryUiState(
     val activeSessionCount: Int = 0,
     val allSolvesCount: Int = 0,
     val currentMode: Mode = Mode.CUBE_3x3,
-    val currentFilter: StatsFilter = StatsFilter.ActiveSession,
+    val currentFilter: StatsFilter = StatsFilter.AllSessions,
     val activeSession: Session? = null,
     val sessions: List<Session> = emptyList(),
     val errorMessage: String? = null,
@@ -167,7 +167,7 @@ class HistoryViewModel(
     private val _currentMode = MutableStateFlow(Mode.CUBE_3x3)
     val currentMode: StateFlow<Mode> = _currentMode.asStateFlow()
 
-    private val _currentFilter = MutableStateFlow<StatsFilter>(StatsFilter.ActiveSession)
+    private val _currentFilter = MutableStateFlow<StatsFilter>(StatsFilter.AllSessions)
     val currentFilter: StateFlow<StatsFilter> = _currentFilter.asStateFlow()
 
     private val _solves = MutableStateFlow<List<SolveTime>>(emptyList())

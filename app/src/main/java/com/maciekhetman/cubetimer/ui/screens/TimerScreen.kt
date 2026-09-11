@@ -80,6 +80,7 @@ fun TimerScreen(
     onSyncClick: () -> Unit = {},
     authState: AuthState = AuthState.Guest,
     onAuthClick: () -> Unit = {},
+    hideSessionMenu: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val timerState by viewModel.timerState.collectAsStateWithLifecycle()
@@ -96,6 +97,7 @@ fun TimerScreen(
     val hideLastResultsDuringSolve by viewModel.hideLastResultsDuringSolve.collectAsStateWithLifecycle()
     val hideLastResultsOnTimer by viewModel.hideLastResultsOnTimer.collectAsStateWithLifecycle()
     val hideStartHint by viewModel.hideStartHint.collectAsStateWithLifecycle()
+    val hideSessionMenuInTopBar by viewModel.hideSessionMenuInTopBar.collectAsStateWithLifecycle()
     val hapticsEnabled by viewModel.hapticsEnabled.collectAsStateWithLifecycle()
     val focusMode by viewModel.focusMode.collectAsStateWithLifecycle()
     val haptic = LocalHapticFeedback.current
@@ -177,7 +179,8 @@ fun TimerScreen(
                 syncUiState = syncUiState,
                 onSyncClick = onSyncClick,
                 authState = authState,
-                onAuthClick = onAuthClick
+                onAuthClick = onAuthClick,
+                hideSessionMenu = hideSessionMenu || hideSessionMenuInTopBar
             )
         }
         

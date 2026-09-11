@@ -57,4 +57,68 @@ class SettingsRepositoryTest {
 
         assertTrue(repository.hideStartHintFlow.first())
     }
+
+    @Test
+    fun hideSessionMenuInTopBar_defaultsToFalse() = runTest {
+        assertFalse(repository.hideSessionMenuInTopBarFlow.first())
+    }
+
+    @Test
+    fun setHideSessionMenuInTopBar_persistsValue() = runTest {
+        repository.setHideSessionMenuInTopBar(true)
+        assertTrue(repository.hideSessionMenuInTopBarFlow.first())
+
+        repository.setHideSessionMenuInTopBar(false)
+        assertFalse(repository.hideSessionMenuInTopBarFlow.first())
+    }
+
+    @Test
+    fun migrateFromLegacy_copiesHideSessionMenuInTopBar() = runTest {
+        val legacyKey = booleanPreferencesKey("hide_session_menu_in_top_bar")
+        context.solvesDataStore.edit { prefs ->
+            prefs[legacyKey] = true
+        }
+
+        repository.migrateFromLegacyIfNeeded()
+
+        assertTrue(repository.hideSessionMenuInTopBarFlow.first())
+    }
+
+    @Test
+    fun scrambleScalePercent_defaultsTo100() = runTest {
+        org.junit.Assert.assertEquals(100, repository.scrambleScalePercentFlow.first())
+    }
+
+    @Test
+    fun setScrambleScalePercent_persistsValidValuesAcrossRange() = runTest {
+        val testScales = listOf(70, 75, 80, 100, 125, 140)
+        for (scale in testScales) {
+            repository.setScrambleScalePercent(scale)
+            org.junit.Assert.assertEquals(scale, repository.scrambleScalePercentFlow.first())
+        }
+    }
+
+    @Test
+    fun setScrambleScalePercent_coercesValuesOutside70To140() = runTest {
+        repository.setScrambleScalePercent(50)
+        org.junit.Assert.assertEquals(70, repository.scrambleScalePercentFlow.first())
+
+        repository.setScrambleScalePercent(180)
+        org.junit.Assert.assertEquals(140, repository.scrambleScalePercentFlow.first())
+    }
+
+    @Test
+    fun scrambleScalePercentFlow_coercesLegacyOrCorruptedValuesOnRead() = runTest {
+        val scrambleKey = androidx.datastore.preferences.core.intPreferencesKey("scramble_scale_percent")
+        context.settingsDataStore.edit { prefs ->
+            prefs[scrambleKey] = 50
+        }
+        org.junit.Assert.assertEquals(70, repository.scrambleScalePercentFlow.first())
+
+        context.settingsDataStore.edit { prefs ->
+            prefs[scrambleKey] = 200
+        }
+        org.junit.Assert.assertEquals(140, repository.scrambleScalePercentFlow.first())
+    }
 }
+

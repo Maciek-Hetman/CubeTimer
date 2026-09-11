@@ -129,8 +129,8 @@ class StatsFilterTest {
     }
 
     @Test
-    fun testDefaultStatsFilterIsActiveSession() = runTest(testDispatcher) {
-        assertEquals(StatsFilter.ActiveSession, timerViewModel.statsFilter.value)
+    fun testDefaultStatsFilterIsAllSessions() = runTest(testDispatcher) {
+        assertEquals(StatsFilter.AllSessions, timerViewModel.statsFilter.value)
     }
 
     @Test
@@ -145,7 +145,9 @@ class StatsFilterTest {
         timerViewModel.addSolve(solveB1)
         advanceUntilIdle()
 
-        // Filter is ActiveSession (Session A active) -> should show 2 solves
+        // Switch to ActiveSession filter (Session A active) -> should show 2 solves
+        timerViewModel.setStatsFilter(StatsFilter.ActiveSession)
+        advanceUntilIdle()
         val activeFiltered = timerViewModel.statsFilteredSolves.value
         assertEquals(2, activeFiltered.size)
         assertTrue(activeFiltered.all { it.sessionId == sessionAId })
@@ -172,6 +174,7 @@ class StatsFilterTest {
 
         timerViewModel.addSolve(solveA)
         timerViewModel.addSolve(solveB)
+        timerViewModel.setStatsFilter(StatsFilter.ActiveSession)
         advanceUntilIdle()
 
         assertEquals(1, timerViewModel.statsFilteredSolves.value.size)
@@ -193,11 +196,11 @@ class StatsFilterTest {
 
         timerViewModel.addSolve(solveA)
         timerViewModel.addSolve(solveB)
+        timerViewModel.setStatsFilter(StatsFilter.ActiveSession)
         advanceUntilIdle()
 
         assertEquals(1, timerViewModel.statsFilteredSolves.value.size)
 
-        timerViewModel.setStatsFilter(StatsFilter.ActiveSession)
         timerViewModel.clearFilteredSolves()
         advanceUntilIdle()
 

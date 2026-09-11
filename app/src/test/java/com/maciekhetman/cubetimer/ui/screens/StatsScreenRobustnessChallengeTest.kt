@@ -88,6 +88,28 @@ class StatsScreenRobustnessChallengeTest {
         assertTrue("PenaltyStatsSection must be present", content.contains("PenaltyStatsSection("))
     }
 
+    @Test
+    fun testStatsScreenSource_subtitlesExcisedAndChartsAligned() {
+        val possiblePaths = listOf(
+            "app/src/main/java/com/maciekhetman/cubetimer/ui/screens/StatsScreen.kt",
+            "src/main/java/com/maciekhetman/cubetimer/ui/screens/StatsScreen.kt"
+        )
+        val file = possiblePaths.map { File(it) }.firstOrNull { it.exists() }
+        assertNotNull(file)
+        val content = file!!.readText()
+
+        // Subtitles excised
+        assertFalse("Large averages subtitle must be excised", content.contains("Extended window averages (500, 1000, 2000)"))
+        assertFalse("Session & detailed metrics subtitle must be excised", content.contains("Session performance & aggregate statistics"))
+        assertFalse("Penalty distribution subtitle must be excised", content.contains("DNF and +2 penalties"))
+        assertFalse("Session stats intermediate subtitle must be excised", content.contains("Session Stats (Solves within 1h gaps)"))
+        assertFalse("Detailed & aggregate intermediate subtitle must be excised", content.contains("Detailed & Aggregate Metrics"))
+
+        // Card collapse animation has no conflicting animateContentSize
+        assertFalse("CollapsibleSectionCard must not use animateContentSize which causes animation stutter",
+            content.contains(".animateContentSize()"))
+    }
+
     // =========================================================================
     // 3. STATSHEROCARD RENDERING & MEASUREMENT UNDER NULL/EMPTY/EXTREME STATES
     // =========================================================================

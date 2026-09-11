@@ -43,6 +43,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.RunningTimerDisplay
@@ -78,6 +79,7 @@ fun SettingsScreen(
     authState: AuthState = AuthState.Guest,
     onAuthClick: () -> Unit = {},
     onNavigateToAdmin: () -> Unit = {},
+    hideSessionMenu: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val dynamicColorEnabled by viewModel.dynamicColorEnabled.collectAsStateWithLifecycle()
@@ -95,11 +97,11 @@ fun SettingsScreen(
     val hideStartHint by viewModel.hideStartHint.collectAsStateWithLifecycle()
     val focusMode by viewModel.focusMode.collectAsStateWithLifecycle()
     val hapticsEnabled by viewModel.hapticsEnabled.collectAsStateWithLifecycle()
+    val hideSessionMenuInTopBar by viewModel.hideSessionMenuInTopBar.collectAsStateWithLifecycle()
     val haptic = LocalHapticFeedback.current
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
 
     var defaultModeMenuExpanded by remember { mutableStateOf(value = false) }
-    var scrambleScaleMenuExpanded by remember { mutableStateOf(value = false) }
     var runningTimerDisplayMenuExpanded by remember { mutableStateOf(value = false) }
     var timerAveragesExpanded by remember { mutableStateOf(value = false) }
 
@@ -123,7 +125,8 @@ fun SettingsScreen(
                 syncUiState = syncUiState,
                 onSyncClick = onSyncClick,
                 authState = authState,
-                onAuthClick = onAuthClick
+                onAuthClick = onAuthClick,
+                hideSessionMenu = hideSessionMenu || hideSessionMenuInTopBar
             )
         }
     ) { paddingValues ->
@@ -169,24 +172,16 @@ fun SettingsScreen(
                         onCheckedChange = { viewModel.setShowScrambleRefreshButton(it) }
                     )
                     SettingsDivider()
-                    SettingMenuRow(
+                    SettingSliderRow(
                         title = "Scramble size",
-                        valueLabel = "$scrambleScalePercent%",
-                        onClick = { scrambleScaleMenuExpanded = true },
-                        menuExpanded = scrambleScaleMenuExpanded,
-                        onDismissMenu = { scrambleScaleMenuExpanded = false }
-                    ) {
-                        ScrambleScaleOptions.forEach { percent ->
-                            DropdownMenuItem(
-                                text = { Text("$percent%") },
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            scrambleScaleMenuExpanded = false
+                        value = scrambleScalePercent,
+                        valueRange = 70f..140f,
+                        steps = 13,
+                        valueFormatter = { "$it%" },
+                        onValueChangeFinished = { percent ->
                             viewModel.setScrambleScalePercent(percent)
-                        },
-                    )
                         }
-                    }
+                    )
                 }
             }
 
@@ -212,12 +207,12 @@ fun SettingsScreen(
                         RunningTimerDisplay.entries.forEach { display ->
                             DropdownMenuItem(
                                 text = { Text(display.displayName) },
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            runningTimerDisplayMenuExpanded = false
-                            viewModel.setRunningTimerDisplay(display)
-                        },
-                    )
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    runningTimerDisplayMenuExpanded = false
+                                    viewModel.setRunningTimerDisplay(display)
+                                },
+                            )
                         }
                     }
                     SettingsDivider()
@@ -296,14 +291,20 @@ fun SettingsScreen(
                         Mode.entries.forEach { mode ->
                             DropdownMenuItem(
                                 text = { Text(mode.displayName) },
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            defaultModeMenuExpanded = false
-                            viewModel.setDefaultMode(mode)
-                        },
-                    )
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    defaultModeMenuExpanded = false
+                                    viewModel.setDefaultMode(mode)
+                                },
+                            )
                         }
                     }
+                    SettingsDivider()
+                    SettingToggleRow(
+                        title = "Hide session menu in top bar",
+                        checked = hideSessionMenuInTopBar,
+                        onCheckedChange = { viewModel.setHideSessionMenuInTopBar(it) }
+                    )
                 }
             }
 
@@ -411,14 +412,18 @@ fun SettingSliderRow(
     value: Int,
     valueRange: ClosedFloatingPointRange<Float>,
     steps: Int,
+    modifier: Modifier = Modifier,
+    sliderModifier: Modifier = Modifier,
+    valueFormatter: (Int) -> String = { "${it}ms" },
     onValueChangeFinished: (Int) -> Unit
 ) {
-    var sliderValue by remember(value) { mutableFloatStateOf(value.toFloat()) }
-    var lastHapticValue by remember(value) { mutableIntStateOf(value) }
+    val clampedValue = value.toFloat().coerceIn(valueRange.start, valueRange.endInclusive)
+    var sliderValue by remember(value, valueRange) { mutableFloatStateOf(clampedValue) }
+    var lastHapticValue by remember(value, valueRange) { mutableIntStateOf(clampedValue.roundToInt()) }
     val haptic = LocalHapticFeedback.current
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
@@ -432,14 +437,15 @@ fun SettingSliderRow(
                 style = MaterialTheme.typography.bodyLarge
             )
             Text(
-                text = "${sliderValue.roundToInt()}ms",
+                text = valueFormatter(sliderValue.roundToInt()),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.primary
             )
         }
         Spacer(modifier = Modifier.height(4.dp))
         Slider(
-            value = sliderValue,
+            value = sliderValue.coerceIn(valueRange.start, valueRange.endInclusive),
+            modifier = sliderModifier.testTag("${title.lowercase().replace(' ', '_')}_slider"),
             onValueChange = {
                 sliderValue = it
                 val currentInt = it.roundToInt()
@@ -451,7 +457,7 @@ fun SettingSliderRow(
             valueRange = valueRange,
             steps = steps,
             onValueChangeFinished = {
-                onValueChangeFinished(sliderValue.roundToInt())
+                onValueChangeFinished(sliderValue.coerceIn(valueRange.start, valueRange.endInclusive).roundToInt())
             }
         )
     }
@@ -546,7 +552,7 @@ fun SettingMenuRow(
     }
 }
 
-val ScrambleScaleOptions = listOf(80, 90, 100, 110, 120, 130, 140)
+val ScrambleScaleOptions = listOf(70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135, 140)
 
 fun timerAveragesLabel(averages: Set<Int>): String {
     return if (averages.isEmpty()) "None"

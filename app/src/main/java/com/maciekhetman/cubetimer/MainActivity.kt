@@ -235,6 +235,7 @@ fun CubeTimerApp(
     val currentMode by viewModel.currentMode.collectAsStateWithLifecycle()
     val isTimerRunning by viewModel.isTimerRunning.collectAsStateWithLifecycle()
     val focusMode by viewModel.focusMode.collectAsStateWithLifecycle()
+    val hideSessionMenuInTopBar by viewModel.hideSessionMenuInTopBar.collectAsStateWithLifecycle()
     val focusModeActive = focusMode && isTimerRunning
 
     // Reactive Auth & Sync States
@@ -321,6 +322,7 @@ fun CubeTimerApp(
                         onSyncClick = { showSyncDialog = true },
                         authState = authState,
                         onAuthClick = onAuthClick,
+                        hideSessionMenu = hideSessionMenuInTopBar,
                         modifier = contentModifier
                     )
                 }
@@ -343,6 +345,7 @@ fun CubeTimerApp(
                         onSyncClick = { showSyncDialog = true },
                         authState = authState,
                         onAuthClick = onAuthClick,
+                        hideSessionMenu = hideSessionMenuInTopBar,
                         modifier = contentModifier
                     )
                 }
@@ -365,6 +368,7 @@ fun CubeTimerApp(
                         onSolveClick = { solve, solveNumber ->
                             // Hook for M4 ShareableSolveCardDialog
                         },
+                        hideSessionMenu = hideSessionMenuInTopBar,
                         modifier = contentModifier
                     )
                 }
@@ -385,6 +389,7 @@ fun CubeTimerApp(
                         authState = authState,
                         onAuthClick = onAuthClick,
                         onNavigateToAdmin = { currentDestination = AppDestinations.ADMIN },
+                        hideSessionMenu = hideSessionMenuInTopBar,
                         modifier = contentModifier
                     )
                 }

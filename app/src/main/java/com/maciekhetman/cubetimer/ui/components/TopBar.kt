@@ -80,6 +80,7 @@ fun TimerTopHeader(
     onSyncClick: () -> Unit = {},
     authState: AuthState = AuthState.Guest,
     onAuthClick: () -> Unit = {},
+    hideSessionMenu: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -98,16 +99,18 @@ fun TimerTopHeader(
                 currentMode = currentMode,
                 onModeSelected = onModeSelected
             )
-            SessionPillMenu(
-                currentMode = currentMode,
-                activeSession = activeSession,
-                isAutomaticMode = isAutomaticMode,
-                onSwitchToAutomatic = onSwitchToAutomatic,
-                sessions = sessions,
-                onSessionSelected = onSessionSelected,
-                onCreateSessionClick = onCreateSessionClick,
-                onManageSessionsClick = onManageSessionsClick
-            )
+            if (!hideSessionMenu) {
+                SessionPillMenu(
+                    currentMode = currentMode,
+                    activeSession = activeSession,
+                    isAutomaticMode = isAutomaticMode,
+                    onSwitchToAutomatic = onSwitchToAutomatic,
+                    sessions = sessions,
+                    onSessionSelected = onSessionSelected,
+                    onCreateSessionClick = onCreateSessionClick,
+                    onManageSessionsClick = onManageSessionsClick
+                )
+            }
         }
 
         Row(
@@ -143,6 +146,7 @@ fun TopBar(
     onSyncClick: () -> Unit = {},
     authState: AuthState = AuthState.Guest,
     onAuthClick: () -> Unit = {},
+    hideSessionMenu: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     if (title.isBlank() || title == "Timer") {
@@ -160,6 +164,7 @@ fun TopBar(
             onSyncClick = onSyncClick,
             authState = authState,
             onAuthClick = onAuthClick,
+            hideSessionMenu = hideSessionMenu,
             modifier = modifier
         )
     } else {
@@ -185,7 +190,8 @@ fun TopBar(
                     syncUiState = syncUiState,
                     onSyncClick = onSyncClick,
                     authState = authState,
-                    onAuthClick = onAuthClick
+                    onAuthClick = onAuthClick,
+                    hideSessionMenu = hideSessionMenu
                 )
             },
             modifier = modifier
@@ -212,6 +218,7 @@ fun CollapsingTopBar(
     authState: AuthState = AuthState.Guest,
     onAuthClick: () -> Unit = {},
     titleBadgeText: String? = null,
+    hideSessionMenu: Boolean = false,
     extraActions: @Composable RowScope.() -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -257,7 +264,8 @@ fun CollapsingTopBar(
                 syncUiState = syncUiState,
                 onSyncClick = onSyncClick,
                 authState = authState,
-                onAuthClick = onAuthClick
+                onAuthClick = onAuthClick,
+                hideSessionMenu = hideSessionMenu
             )
         },
         scrollBehavior = scrollBehavior,
@@ -283,7 +291,8 @@ private fun TopBarActionItems(
     syncUiState: SyncUiState,
     onSyncClick: () -> Unit,
     authState: AuthState,
-    onAuthClick: () -> Unit
+    onAuthClick: () -> Unit,
+    hideSessionMenu: Boolean = false
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         // Mode Selector Dropdown
@@ -293,16 +302,18 @@ private fun TopBarActionItems(
         )
 
         // Session Selector Dropdown (if session handling is wired)
-        SessionPillMenu(
-            currentMode = currentMode,
-            activeSession = activeSession,
-            isAutomaticMode = isAutomaticMode,
-            onSwitchToAutomatic = onSwitchToAutomatic,
-            sessions = sessions,
-            onSessionSelected = onSessionSelected,
-            onCreateSessionClick = onCreateSessionClick,
-            onManageSessionsClick = onManageSessionsClick
-        )
+        if (!hideSessionMenu) {
+            SessionPillMenu(
+                currentMode = currentMode,
+                activeSession = activeSession,
+                isAutomaticMode = isAutomaticMode,
+                onSwitchToAutomatic = onSwitchToAutomatic,
+                sessions = sessions,
+                onSessionSelected = onSessionSelected,
+                onCreateSessionClick = onCreateSessionClick,
+                onManageSessionsClick = onManageSessionsClick
+            )
+        }
 
         // Cloud Sync Status Icon
         SyncStatusIconButton(

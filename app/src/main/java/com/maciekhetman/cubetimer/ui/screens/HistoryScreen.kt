@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.History
@@ -28,6 +29,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -57,6 +60,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import com.maciekhetman.cubetimer.ui.components.SessionFilterBar
 import com.maciekhetman.cubetimer.ui.dialogs.ShareableSolveCardDialog
@@ -101,6 +105,7 @@ fun HistoryScreen(
     authState: AuthState = AuthState.Guest,
     onAuthClick: () -> Unit = {},
     onSolveClick: (SolveTime, Int) -> Unit = { _, _ -> },
+    hideSessionMenu: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -190,6 +195,7 @@ fun HistoryScreen(
                 authState = authState,
                 onAuthClick = onAuthClick,
                 titleBadgeText = if (uiState.totalCount > 0) "${uiState.totalCount}" else null,
+                hideSessionMenu = hideSessionMenu,
                 extraActions = {
                     IconButton(
                         onClick = {
@@ -411,32 +417,30 @@ fun HistoryScreen(
 }
 
 @Composable
-private fun HistorySolveCard(
+internal fun HistorySolveCard(
     solve: SolveTime,
     solveNumber: Int,
-    onClick: () -> Unit,
+    onClick: () -> Unit = {},
     onDelete: () -> Unit,
     onTogglePlusTwo: () -> Unit,
     onToggleDnf: () -> Unit,
-    onHaptic: () -> Unit,
+    onHaptic: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    var menuExpanded by remember { mutableStateOf(false) }
-
     Surface(
         modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(18.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         tonalElevation = 0.dp
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 16.dp, top = 12.dp, end = 12.dp, bottom = 14.dp)
+                .padding(start = 16.dp, top = 14.dp, end = 14.dp, bottom = 12.dp)
         ) {
-            // Header: Solve number and overflow menu
+            // Header: Solve number and timestamp on the right
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -444,146 +448,148 @@ private fun HistorySolveCard(
             ) {
                 Text(
                     text = "Solve #$solveNumber",
-                    style = MaterialTheme.typography.titleSmall,
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.SemiBold
                 )
-                Box {
-                    IconButton(
-                        onClick = {
-                            onHaptic()
-                            menuExpanded = true
-                        },
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.MoreVert,
-                            contentDescription = "Solve options",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    if (menuExpanded) {
-                        DropdownMenu(
-                            expanded = menuExpanded,
-                            onDismissRequest = { menuExpanded = false },
-                            tonalElevation = 6.dp,
-                            shadowElevation = 8.dp
+                Text(
+                    text = formatTimestamp(solve.timestamp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // Primary row: Duration and penalty badge on the left, clickable indicator on the right
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = TimeFormatter.formatTime(solve.displayTime),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        color = when (solve.penalty) {
+                            Penalty.DNF -> MaterialTheme.colorScheme.error
+                            Penalty.PLUS_TWO -> MaterialTheme.colorScheme.tertiary
+                            Penalty.NONE -> MaterialTheme.colorScheme.onSurface
+                        }
+                    )
+
+                    if (solve.penalty != Penalty.NONE) {
+                        Surface(
+                            color = when (solve.penalty) {
+                                Penalty.DNF -> MaterialTheme.colorScheme.errorContainer
+                                Penalty.PLUS_TWO -> MaterialTheme.colorScheme.tertiaryContainer
+                                else -> Color.Transparent
+                            },
+                            shape = RoundedCornerShape(12.dp)
                         ) {
-                            DropdownMenuItem(
-                                text = {
-                                    Text(if (solve.penalty == Penalty.PLUS_TWO) "Remove +2" else "Add +2")
+                            Text(
+                                text = when (solve.penalty) {
+                                    Penalty.DNF -> "DNF"
+                                    Penalty.PLUS_TWO -> "+2"
+                                    else -> ""
                                 },
-                                onClick = {
-                                    onHaptic()
-                                    menuExpanded = false
-                                    onTogglePlusTwo()
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = {
-                                    Text(if (solve.penalty == Penalty.DNF) "Remove DNF" else "Add DNF")
-                                },
-                                onClick = {
-                                    onHaptic()
-                                    menuExpanded = false
-                                    onToggleDnf()
-                                }
-                            )
-                            HorizontalDivider()
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        text = "Delete",
-                                        color = MaterialTheme.colorScheme.error
-                                    )
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.Delete,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.error
-                                    )
-                                },
-                                onClick = {
-                                    onHaptic()
-                                    menuExpanded = false
-                                    onDelete()
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                color = when (solve.penalty) {
+                                    Penalty.DNF -> MaterialTheme.colorScheme.onErrorContainer
+                                    Penalty.PLUS_TWO -> MaterialTheme.colorScheme.onTertiaryContainer
+                                    else -> Color.Unspecified
                                 }
                             )
                         }
                     }
                 }
+
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = "View solve details",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier.size(20.dp)
+                )
             }
 
-            Spacer(modifier = Modifier.height(2.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // Primary row: Duration and penalty badge
+            // Dedicated Action Row: +2 and DNF chips, and Delete icon button
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = TimeFormatter.formatTime(solve.displayTime),
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold,
-                    color = when (solve.penalty) {
-                        Penalty.DNF -> MaterialTheme.colorScheme.error
-                        Penalty.PLUS_TWO -> MaterialTheme.colorScheme.tertiary
-                        Penalty.NONE -> MaterialTheme.colorScheme.onSurface
-                    }
-                )
-
-                if (solve.penalty != Penalty.NONE) {
-                    Surface(
-                        color = when (solve.penalty) {
-                            Penalty.DNF -> MaterialTheme.colorScheme.errorContainer
-                            Penalty.PLUS_TWO -> MaterialTheme.colorScheme.tertiaryContainer
-                            else -> Color.Transparent
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    FilterChip(
+                        selected = solve.penalty == Penalty.PLUS_TWO,
+                        onClick = {
+                            onHaptic()
+                            onTogglePlusTwo()
                         },
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Text(
-                            text = when (solve.penalty) {
-                                Penalty.DNF -> "DNF"
-                                Penalty.PLUS_TWO -> "+2"
-                                else -> ""
-                            },
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                            color = when (solve.penalty) {
-                                Penalty.DNF -> MaterialTheme.colorScheme.onErrorContainer
-                                Penalty.PLUS_TWO -> MaterialTheme.colorScheme.onTertiaryContainer
-                                else -> Color.Unspecified
-                            }
+                        label = {
+                            Text(
+                                text = "+2",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.testTag("history_action_plus_two"),
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
                         )
-                    }
+                    )
+
+                    FilterChip(
+                        selected = solve.penalty == Penalty.DNF,
+                        onClick = {
+                            onHaptic()
+                            onToggleDnf()
+                        },
+                        label = {
+                            Text(
+                                text = "DNF",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.testTag("history_action_dnf"),
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.errorContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    )
                 }
-            }
 
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // Solve timestamp
-            Text(
-                text = formatTimestamp(solve.timestamp),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            // Scramble snippet
-            if (solve.scramble.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = solve.scramble,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    lineHeight = 16.sp
-                )
+                IconButton(
+                    onClick = {
+                        onHaptic()
+                        onDelete()
+                    },
+                    modifier = Modifier
+                        .size(32.dp)
+                        .testTag("history_action_delete")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Delete",
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
         }
     }

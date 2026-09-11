@@ -28,6 +28,7 @@ class SettingsRepository(private val context: Context) {
     private val HIDE_START_HINT_KEY = booleanPreferencesKey("hide_start_hint")
     private val FOCUS_MODE_KEY = booleanPreferencesKey("focus_mode")
     private val HAPTICS_ENABLED_KEY = booleanPreferencesKey("haptics_enabled")
+    private val HIDE_SESSION_MENU_IN_TOP_BAR_KEY = booleanPreferencesKey("hide_session_menu_in_top_bar")
 
     /**
      * One-time migration: settings used to live in the solves datastore.
@@ -55,6 +56,7 @@ class SettingsRepository(private val context: Context) {
             legacy[HIDE_START_HINT_KEY]?.let { prefs[HIDE_START_HINT_KEY] = it }
             legacy[FOCUS_MODE_KEY]?.let { prefs[FOCUS_MODE_KEY] = it }
             legacy[HAPTICS_ENABLED_KEY]?.let { prefs[HAPTICS_ENABLED_KEY] = it }
+            legacy[HIDE_SESSION_MENU_IN_TOP_BAR_KEY]?.let { prefs[HIDE_SESSION_MENU_IN_TOP_BAR_KEY] = it }
         }
     }
 
@@ -76,7 +78,7 @@ class SettingsRepository(private val context: Context) {
     }
 
     val scrambleScalePercentFlow: Flow<Int> = context.settingsDataStore.data.map { preferences ->
-        preferences[SCRAMBLE_SCALE_PERCENT_KEY] ?: 100
+        (preferences[SCRAMBLE_SCALE_PERCENT_KEY] ?: 100).coerceIn(70, 140)
     }
 
     val timerStartDelayMillisFlow: Flow<Int> = context.settingsDataStore.data.map { preferences ->
@@ -124,6 +126,10 @@ class SettingsRepository(private val context: Context) {
         preferences[HAPTICS_ENABLED_KEY] ?: true
     }
 
+    val hideSessionMenuInTopBarFlow: Flow<Boolean> = context.settingsDataStore.data.map { preferences ->
+        preferences[HIDE_SESSION_MENU_IN_TOP_BAR_KEY] ?: false
+    }
+
     suspend fun setDynamicColorEnabled(enabled: Boolean) {
         context.settingsDataStore.edit { preferences ->
             preferences[DYNAMIC_COLOR_KEY] = enabled
@@ -150,7 +156,7 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setScrambleScalePercent(percent: Int) {
         context.settingsDataStore.edit { preferences ->
-            preferences[SCRAMBLE_SCALE_PERCENT_KEY] = percent.coerceIn(80, 140)
+            preferences[SCRAMBLE_SCALE_PERCENT_KEY] = percent.coerceIn(70, 140)
         }
     }
 
@@ -213,6 +219,12 @@ class SettingsRepository(private val context: Context) {
     suspend fun setHapticsEnabled(enabled: Boolean) {
         context.settingsDataStore.edit { preferences ->
             preferences[HAPTICS_ENABLED_KEY] = enabled
+        }
+    }
+
+    suspend fun setHideSessionMenuInTopBar(hide: Boolean) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[HIDE_SESSION_MENU_IN_TOP_BAR_KEY] = hide
         }
     }
 
