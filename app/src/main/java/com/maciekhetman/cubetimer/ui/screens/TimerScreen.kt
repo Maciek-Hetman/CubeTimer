@@ -60,6 +60,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.rotate
 import com.maciekhetman.cubetimer.ui.components.TimerTopHeader
+import com.maciekhetman.cubetimer.ui.dialogs.ScramblePreviewDialog
 import com.maciekhetman.cubetimer.viewmodel.TimerViewModel
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.delay
@@ -201,9 +202,11 @@ fun TimerScreen(
                 ) {
                     ScrambleDisplay(
                         scramble = scramble,
+                        mode = currentMode,
                         onRefresh = { viewModel.generateNewScramble() },
                         showRefreshButton = showScrambleRefreshButton,
-                        scale = scrambleScalePercent / 100f
+                        scale = scrambleScalePercent / 100f,
+                        enabled = timerState !is TimerState.Running && timerState !is TimerState.Holding
                     )
                 }
             }
@@ -690,13 +693,14 @@ private fun formatDisplayTime(millis: Long): String {
 @Composable
 private fun ScrambleDisplay(
     scramble: String,
+    mode: Mode,
     onRefresh: () -> Unit,
     showRefreshButton: Boolean,
     scale: Float,
+    enabled: Boolean = true,
     modifier: Modifier = Modifier
 ) {
-    var showFullScramble by remember { mutableStateOf(false) }
-    var isTruncated by remember { mutableStateOf(false) }
+    var showPreviewDialog by remember { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
     val coroutineScope = rememberCoroutineScope()
     val refreshRotation = remember { Animatable(0f) }
@@ -716,10 +720,10 @@ private fun ScrambleDisplay(
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
             .then(
-                if (isTruncated) {
+                if (enabled) {
                     Modifier.clickable {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        showFullScramble = true
+                        showPreviewDialog = true
                     }
                 } else {
                     Modifier
@@ -744,9 +748,6 @@ private fun ScrambleDisplay(
                 textAlign = TextAlign.Center,
                 maxLines = maxLines,
                 overflow = TextOverflow.Ellipsis,
-                onTextLayout = { textLayoutResult ->
-                    isTruncated = textLayoutResult.hasVisualOverflow
-                },
                 modifier = Modifier.weight(1f)
             )
             if (showRefreshButton) {
@@ -781,41 +782,13 @@ private fun ScrambleDisplay(
         }
     }
     
-    // Full scramble dialog
-    if (showFullScramble) {
-        AlertDialog(
-            onDismissRequest = { showFullScramble = false },
-            shape = RoundedCornerShape(24.dp),
-            title = {
-                Text(
-                    text = "Full Scramble",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            text = {
-                Column(
-                    modifier = Modifier.verticalScroll(rememberScrollState())
-                ) {
-                    Text(
-                        text = scramble,
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontFamily = FontFamily.Monospace,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        showFullScramble = false
-                    },
-                    shape = RoundedCornerShape(20.dp)
-                ) {
-                    Text("Close")
-                }
-            }
+    // Scramble preview dialog
+    if (showPreviewDialog) {
+        ScramblePreviewDialog(
+            scramble = scramble,
+            mode = mode,
+            onDismiss = { showPreviewDialog = false },
+            onGenerateNewScramble = onRefresh
         )
     }
 }
