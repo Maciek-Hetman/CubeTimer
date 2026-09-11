@@ -56,6 +56,113 @@ interface SolveDao {
     """)
     fun observeSolveCount(ownerId: String, event: String): Flow<Int>
 
+    @Query("""
+        SELECT COUNT(*) FROM solves 
+        WHERE owner_id = :ownerId AND event = :event AND deleted_at IS NULL
+    """)
+    fun observeSolveCountByEvent(ownerId: String, event: String): Flow<Int>
+
+    @Query("""
+        SELECT COUNT(*) FROM solves 
+        WHERE owner_id = :ownerId AND session_id = :sessionId AND deleted_at IS NULL
+    """)
+    fun observeSolveCountBySession(ownerId: String, sessionId: String): Flow<Int>
+
+    @Query("""
+        SELECT COUNT(*) FROM solves 
+        WHERE owner_id = :ownerId AND deleted_at IS NULL
+    """)
+    fun observeAllSolvesCount(ownerId: String): Flow<Int>
+
+    @Query("""
+        SELECT COUNT(*) FROM solves 
+        WHERE owner_id = :ownerId AND event = :event AND deleted_at IS NULL
+    """)
+    suspend fun getSolveCountByEvent(ownerId: String, event: String): Int
+
+    @Query("""
+        SELECT COUNT(*) FROM solves 
+        WHERE owner_id = :ownerId AND session_id = :sessionId AND deleted_at IS NULL
+    """)
+    suspend fun getSolveCountBySession(ownerId: String, sessionId: String): Int
+
+    // --- Chunked Paged Queries ---
+
+    @Query("""
+        SELECT * FROM solves 
+        WHERE owner_id = :ownerId AND event = :event AND deleted_at IS NULL 
+        ORDER BY solved_at DESC 
+        LIMIT :limit OFFSET :offset
+    """)
+    suspend fun getSolvesPagedByEvent(
+        ownerId: String,
+        event: String,
+        limit: Int,
+        offset: Int
+    ): List<SolveEntity>
+
+    @Query("""
+        SELECT * FROM solves 
+        WHERE owner_id = :ownerId AND session_id = :sessionId AND deleted_at IS NULL 
+        ORDER BY solved_at DESC 
+        LIMIT :limit OFFSET :offset
+    """)
+    suspend fun getSolvesPagedBySession(
+        ownerId: String,
+        sessionId: String,
+        limit: Int,
+        offset: Int
+    ): List<SolveEntity>
+
+    @Query("""
+        SELECT * FROM solves 
+        WHERE owner_id = :ownerId AND deleted_at IS NULL 
+        ORDER BY solved_at DESC 
+        LIMIT :limit OFFSET :offset
+    """)
+    suspend fun getAllSolvesPaged(
+        ownerId: String,
+        limit: Int,
+        offset: Int
+    ): List<SolveEntity>
+
+    // --- Prior Best Solve Lookup (Historical PB Calculation) ---
+
+    @Query("""
+        SELECT MIN(CASE WHEN penalty = 'plus_two' THEN duration_ms + 2000 ELSE duration_ms END)
+        FROM solves 
+        WHERE owner_id = :ownerId 
+          AND event = :event 
+          AND (:excludeSolveId IS NULL OR id != :excludeSolveId)
+          AND solved_at < :solvedAt 
+          AND deleted_at IS NULL 
+          AND penalty != 'dnf'
+    """)
+    suspend fun getPriorBestSolveDuration(
+        ownerId: String,
+        event: String,
+        solvedAt: String,
+        excludeSolveId: String? = null
+    ): Long?
+
+    @Query("""
+        SELECT * FROM solves 
+        WHERE owner_id = :ownerId 
+          AND event = :event 
+          AND (:excludeSolveId IS NULL OR id != :excludeSolveId)
+          AND solved_at < :solvedAt 
+          AND deleted_at IS NULL 
+          AND penalty != 'dnf'
+        ORDER BY (CASE WHEN penalty = 'plus_two' THEN duration_ms + 2000 ELSE duration_ms END) ASC 
+        LIMIT 1
+    """)
+    suspend fun getPriorBestSolve(
+        ownerId: String,
+        event: String,
+        solvedAt: String,
+        excludeSolveId: String? = null
+    ): SolveEntity?
+
     // --- One-Shot Queries ---
 
     @Query("SELECT * FROM solves WHERE id = :id LIMIT 1")

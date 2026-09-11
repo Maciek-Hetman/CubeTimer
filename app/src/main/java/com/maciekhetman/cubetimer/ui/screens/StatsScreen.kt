@@ -1,19 +1,27 @@
 package com.maciekhetman.cubetimer.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.rememberCoroutineScope
-import kotlinx.coroutines.launch
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -25,6 +33,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.maciekhetman.cubetimer.domain.AverageCalculator
@@ -35,6 +44,7 @@ import com.maciekhetman.cubetimer.model.SolveTime
 import com.maciekhetman.cubetimer.ui.components.ActivityTracker
 import com.maciekhetman.cubetimer.ui.components.SectionHeader
 import com.maciekhetman.cubetimer.ui.components.CollapsingTopBar
+import com.maciekhetman.cubetimer.ui.components.SessionFilterBar
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.maciekhetman.cubetimer.viewmodel.TimerViewModel
 import java.text.SimpleDateFormat
@@ -44,7 +54,6 @@ import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.Session
 import com.maciekhetman.cubetimer.model.StatsFilter
 import com.maciekhetman.cubetimer.model.SyncUiState
-import androidx.compose.material.icons.filled.Check
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,9 +80,7 @@ fun StatsScreen(
     val currentActiveSession by viewModel.activeSession.collectAsStateWithLifecycle()
     val effectiveActiveSession = activeSession ?: currentActiveSession
     val appTimeMillis by viewModel.appTimeMillis.collectAsStateWithLifecycle()
-    var showClearDialog by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
     val layoutDirection = LocalLayoutDirection.current
     val haptic = LocalHapticFeedback.current
@@ -108,17 +115,16 @@ fun StatsScreen(
             )
         }
     ) { paddingValues ->
-        val startPadding = paddingValues.calculateStartPadding(layoutDirection)
-        val endPadding = paddingValues.calculateEndPadding(layoutDirection)
-        val bottomPadding = paddingValues.calculateBottomPadding()
+        val top = paddingValues.calculateTopPadding()
+        val bottom = paddingValues.calculateBottomPadding()
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                start = startPadding,
-                top = paddingValues.calculateTopPadding() + 8.dp,
-                end = endPadding,
-                bottom = bottomPadding + 104.dp
+                start = 16.dp,
+                top = top + 8.dp,
+                end = 16.dp,
+                bottom = bottom + 104.dp
             ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -151,11 +157,28 @@ fun StatsScreen(
                 }
             } else {
                 item {
-                    StatsHeader(solves = filteredSolves, appTimeMillis = appTimeMillis)
+                    val allTimePb = remember(solves) {
+                        solves.filter { it.penalty != Penalty.DNF }.minByOrNull { it.displayTime }
+                    }
+                    val sessionSolves = remember(solves, filteredSolves, statsFilter, effectiveActiveSession) {
+                        if (statsFilter is StatsFilter.AllSessions && effectiveActiveSession != null) {
+                            solves.filter { it.sessionId == effectiveActiveSession.id }
+                        } else {
+                            filteredSolves
+                        }
+                    }
+                    val sessionAo5 = remember(sessionSolves) { AverageCalculator.averageOfN(sessionSolves, 5) }
+                    val sessionAo12 = remember(sessionSolves) { AverageCalculator.averageOfN(sessionSolves, 12) }
+
+                    StatsHeroCard(
+                        allTimePb = allTimePb,
+                        sessionAo5 = sessionAo5,
+                        sessionAo12 = sessionAo12
+                    )
                 }
 
                 item {
-                    SessionStatsSection(solves = filteredSolves)
+                    CompactSummaryGrid(solves = filteredSolves)
                 }
 
                 item {
@@ -163,18 +186,8 @@ fun StatsScreen(
                 }
 
                 item {
-                    AveragesSection(solves = filteredSolves)
-                }
-
-                item {
-                    LargeAveragesSection(solves = filteredSolves)
-                }
-
-                item {
                     Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         color = MaterialTheme.colorScheme.surfaceContainerHigh,
                         shape = RoundedCornerShape(24.dp)
                     ) {
@@ -183,252 +196,26 @@ fun StatsScreen(
                 }
 
                 item {
+                    LargeAveragesSection(solves = filteredSolves)
+                }
+
+                item {
+                    SessionMetricsSection(solves = filteredSolves, appTimeMillis = appTimeMillis)
+                }
+
+                item {
                     PenaltyStatsSection(solves = filteredSolves)
                 }
-
-                item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        SectionHeader(
-                            title = "Solve History (${filteredSolves.size})",
-                            modifier = Modifier.weight(1f)
-                        )
-                        if (filteredSolves.isNotEmpty()) {
-                            FilledTonalButton(
-                                onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    showClearDialog = true
-                                },
-                                shape = RoundedCornerShape(20.dp)
-                            ) {
-                                Text(if (statsFilter is StatsFilter.ActiveSession) "Clear Session" else "Clear All")
-                            }
-                        }
-                    }
-                }
-
-                val isHistoryCapped = filteredSolves.size > 200
-                val recentSolves = if (isHistoryCapped) filteredSolves.takeLast(200) else filteredSolves
-                if (isHistoryCapped) {
-                    item {
-                        Text(
-                            text = "Showing last 200 of ${filteredSolves.size} solves",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 4.dp)
-                        )
-                    }
-                }
-                itemsIndexed(
-                    items = recentSolves.reversed(),
-                    key = { _, solve -> solve.id }
-                ) { index, solve ->
-                    val deleteSolve: () -> Unit = {
-                        viewModel.deleteSolve(solve)
-                        scope.launch {
-                            val result = snackbarHostState.showSnackbar(
-                                message = "Solve deleted",
-                                actionLabel = "Undo",
-                                duration = SnackbarDuration.Short
-                            )
-                            if (result == SnackbarResult.ActionPerformed) {
-                                viewModel.addSolve(solve)
-                            }
-                        }
-                    }
-                    val setPenalty: (Penalty) -> Unit = setPenalty@{ penalty ->
-                        if (solve.penalty == penalty) return@setPenalty
-                        val previousPenalty = solve.penalty
-                        viewModel.updateSolvePenalty(solve, penalty)
-                        val penaltyLabel = when (penalty) {
-                            Penalty.DNF -> "DNF"
-                            Penalty.PLUS_TWO -> "+2"
-                            Penalty.NONE -> "None"
-                        }
-                        scope.launch {
-                            val result = snackbarHostState.showSnackbar(
-                                message = "Penalty set to $penaltyLabel",
-                                actionLabel = "Undo",
-                                duration = SnackbarDuration.Short
-                            )
-                            if (result == SnackbarResult.ActionPerformed) {
-                                viewModel.updateSolvePenalty(solve, previousPenalty)
-                            }
-                        }
-                    }
-
-                    SolveCard(
-                        solve = solve,
-                        solveNumber = filteredSolves.size - index,
-                        onDelete = deleteSolve,
-                        onSetPenalty = setPenalty,
-                        onHaptic = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        },
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-                    )
-                }
-
-                item {
-                    Spacer(modifier = Modifier.height(16.dp))
-                }
             }
         }
     }
-
-    if (showClearDialog) {
-        val isSessionScope = statsFilter is StatsFilter.ActiveSession
-        val clearTitle = if (isSessionScope) "Clear Session Solves?" else "Clear All Solves?"
-        val clearMessage = if (isSessionScope) {
-            "This will delete ${filteredSolves.size} solve(s) from the current session."
-        } else {
-            "This will delete all ${filteredSolves.size} solve(s) from your history."
-        }
-
-        AlertDialog(
-            onDismissRequest = { showClearDialog = false },
-            shape = RoundedCornerShape(24.dp),
-            title = { Text(clearTitle) },
-            text = { Text(clearMessage) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        val previousSolves = filteredSolves
-                        viewModel.clearFilteredSolves()
-                        showClearDialog = false
-                        scope.launch {
-                            val result = snackbarHostState.showSnackbar(
-                                message = "Solves cleared",
-                                actionLabel = "Undo",
-                                duration = SnackbarDuration.Short
-                            )
-                            if (result == SnackbarResult.ActionPerformed) {
-                                viewModel.restoreSolves(previousSolves)
-                            }
-                        }
-                    },
-                    shape = RoundedCornerShape(20.dp)
-                ) {
-                    Text("Clear")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        showClearDialog = false
-                    },
-                    shape = RoundedCornerShape(20.dp)
-                ) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SessionFilterBar(
-    currentFilter: StatsFilter,
-    onFilterSelected: (StatsFilter) -> Unit,
-    activeSession: Session?,
-    activeSessionSolvesCount: Int,
-    allSolvesCount: Int,
-    sessions: List<Session>,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        FilterChip(
-            selected = currentFilter is StatsFilter.ActiveSession,
-            onClick = { onFilterSelected(StatsFilter.ActiveSession) },
-            shape = RoundedCornerShape(16.dp),
-            label = {
-                Text(
-                    text = "Active Session ($activeSessionSolvesCount)",
-                    style = MaterialTheme.typography.labelMedium
-                )
-            },
-            leadingIcon = if (currentFilter is StatsFilter.ActiveSession) {
-                {
-                    Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-            } else null
-        )
-
-        FilterChip(
-            selected = currentFilter is StatsFilter.AllSessions,
-            onClick = { onFilterSelected(StatsFilter.AllSessions) },
-            shape = RoundedCornerShape(16.dp),
-            label = {
-                Text(
-                    text = "All Solves ($allSolvesCount)",
-                    style = MaterialTheme.typography.labelMedium
-                )
-            },
-            leadingIcon = if (currentFilter is StatsFilter.AllSessions) {
-                {
-                    Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-            } else null
-        )
-
-        if (currentFilter is StatsFilter.SpecificSession) {
-            FilterChip(
-                selected = true,
-                onClick = {},
-                shape = RoundedCornerShape(16.dp),
-                label = {
-                    Text(
-                        text = currentFilter.sessionName,
-                        style = MaterialTheme.typography.labelMedium
-                    )
-                },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-            )
-        }
-    }
-}
 
 @Composable
 private fun ChartsSection(solves: List<SolveTime>) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            SectionHeader(title = "Charts")
-        }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SectionHeader(title = "Charts")
 
         PersonalBestsChart(solves = solves)
         SolveTimesChart(solves = solves)
@@ -436,342 +223,489 @@ private fun ChartsSection(solves: List<SolveTime>) {
     }
 }
 
+// =============================================================================
+// Top Hero Card Component
+// =============================================================================
+
 @Composable
-private fun StatsHeader(solves: List<SolveTime>, appTimeMillis: Long) {
-    val stats = remember(solves) {
-        val last100Solves = solves.takeLast(100)
-        val last100ValidSolves = last100Solves.filter { it.penalty != Penalty.DNF }
-        val allValidSolves = solves.filter { it.penalty != Penalty.DNF }
-
-        StatsSummary(
-            last100BestTime = last100ValidSolves.minOfOrNull { it.displayTime },
-            last100WorstTime = last100ValidSolves.maxOfOrNull { it.displayTime },
-            last100Ao100 = calculateAverageOfN(last100Solves, 100),
-            last100MeanTime = calculateMean(last100ValidSolves),
-            last100StandardDeviation = calculateStandardDeviation(last100ValidSolves),
-            allTimeBestTime = allValidSolves.minOfOrNull { it.displayTime },
-            allTimeWorstTime = allValidSolves.maxOfOrNull { it.displayTime },
-            allTimeAverage = calculateAverage(allValidSolves),
-            allTimeMeanTime = calculateMean(allValidSolves),
-            allTimeStandardDeviation = calculateStandardDeviation(allValidSolves),
-            totalSolvingTime = solves.sumOf { it.timeInMillis }
-        )
-    }
-
-    val last100BestTime = stats.last100BestTime
-    val last100WorstTime = stats.last100WorstTime
-    val last100Ao100 = stats.last100Ao100
-    val last100MeanTime = stats.last100MeanTime
-    val last100StandardDeviation = stats.last100StandardDeviation
-    val allTimeBestTime = stats.allTimeBestTime
-    val allTimeWorstTime = stats.allTimeWorstTime
-    val allTimeAverage = stats.allTimeAverage
-    val allTimeMeanTime = stats.allTimeMeanTime
-    val allTimeStandardDeviation = stats.allTimeStandardDeviation
-    val totalSolvingTime = stats.totalSolvingTime
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+fun StatsHeroCard(
+    allTimePb: SolveTime?,
+    sessionAo5: Long?,
+    sessionAo12: Long?,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = 0.dp
     ) {
-        SectionHeader(title = "Last 100 Solves")
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(StatCardSpacing)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            StatCard(
-                label = "Best Time",
-                value = formatOptionalTime(last100BestTime),
-                modifier = Modifier.weight(1f),
-                containerColor = MaterialTheme.colorScheme.secondaryContainer
-            )
-            StatCard(
-                label = "Worst Time",
-                value = formatOptionalTime(last100WorstTime),
-                modifier = Modifier.weight(1f),
-                containerColor = MaterialTheme.colorScheme.tertiaryContainer
-            )
-        }
+            // Header Row: Label + Timestamp
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "PERSONAL BEST",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    letterSpacing = 1.sp
+                )
+                if (allTimePb != null) {
+                    Text(
+                        text = formatTimestamp(allTimePb.timestamp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
 
-        FeaturedStatCard(
-            label = "Ao100",
-            value = formatOptionalTime(last100Ao100),
-            modifier = Modifier.fillMaxWidth(),
-            containerColor = MaterialTheme.colorScheme.primaryContainer
-        )
+            // Time Display with optional +2 badge
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = if (allTimePb != null) formatTime(allTimePb.displayTime) else "--",
+                    style = MaterialTheme.typography.displayMedium,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                if (allTimePb?.penalty == Penalty.PLUS_TWO) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = "+2",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+            }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(StatCardSpacing)
-        ) {
-            StatCard(
-                label = "Mean",
-                value = formatTime(last100MeanTime),
-                modifier = Modifier.weight(1f),
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-            )
-            StatCard(
-                label = "Std. Deviation",
-                value = formatTime(last100StandardDeviation.toLong()),
-                modifier = Modifier.weight(1f),
-                containerColor = MaterialTheme.colorScheme.surfaceContainer
-            )
-        }
+            // Scramble Box
+            if (allTimePb != null && allTimePb.scramble.isNotBlank()) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = allTimePb.scramble,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        lineHeight = 18.sp,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    )
+                }
+            }
 
-        Spacer(modifier = Modifier.height(4.dp))
-        SectionHeader(title = "All Time")
+            Spacer(modifier = Modifier.height(2.dp))
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(StatCardSpacing)
-        ) {
-            StatCard(
-                label = "Best Time",
-                value = formatOptionalTime(allTimeBestTime),
-                modifier = Modifier.weight(1f),
-                containerColor = MaterialTheme.colorScheme.secondaryContainer
-            )
-            StatCard(
-                label = "Worst Time",
-                value = formatOptionalTime(allTimeWorstTime),
-                modifier = Modifier.weight(1f),
-                containerColor = MaterialTheme.colorScheme.tertiaryContainer
-            )
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(StatCardSpacing)
-        ) {
-            StatCard(
-                label = "Average",
-                value = formatTime(allTimeAverage),
-                modifier = Modifier.weight(1f),
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-            )
-            StatCard(
-                label = "Mean",
-                value = formatTime(allTimeMeanTime),
-                modifier = Modifier.weight(1f),
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-            )
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(StatCardSpacing)
-        ) {
-            StatCard(
-                label = "Std. Deviation",
-                value = formatTime(allTimeStandardDeviation.toLong()),
-                modifier = Modifier.weight(1f),
-                containerColor = MaterialTheme.colorScheme.surfaceContainer
-            )
-            StatCard(
-                label = "Total Solves",
-                value = solves.size.toString(),
-                modifier = Modifier.weight(1f),
-                containerColor = MaterialTheme.colorScheme.primaryContainer
-            )
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(StatCardSpacing)
-        ) {
-            StatCard(
-                label = "Time Cubing",
-                value = formatDuration(appTimeMillis),
-                modifier = Modifier.weight(1f),
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-            )
-            StatCard(
-                label = "Time Solving",
-                value = formatDuration(totalSolvingTime),
-                modifier = Modifier.weight(1f),
-                containerColor = MaterialTheme.colorScheme.surfaceContainer
-            )
+            // Current Session Averages Pills Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                SessionAveragePill(
+                    label = "Current Ao5",
+                    time = sessionAo5,
+                    modifier = Modifier.weight(1f)
+                )
+                SessionAveragePill(
+                    label = "Current Ao12",
+                    time = sessionAo12,
+                    modifier = Modifier.weight(1f)
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun AveragesSection(solves: List<SolveTime>) {
-    val (ao5Current, ao12Current, bestAo5, bestAo12) = remember(solves) {
-        AveragesSummary(
-            ao5Current = calculateAverageOfN(solves, 5),
-            ao12Current = calculateAverageOfN(solves, 12),
-            bestAo5 = findBestAverageOfN(solves, 5),
-            bestAo12 = findBestAverageOfN(solves, 12)
+fun StatsHeroCard(
+    solves: List<SolveTime>,
+    modifier: Modifier = Modifier
+) {
+    val allTimePb = remember(solves) {
+        solves.filter { it.penalty != Penalty.DNF }.minByOrNull { it.displayTime }
+    }
+    val sessionAo5 = remember(solves) { AverageCalculator.averageOfN(solves, 5) }
+    val sessionAo12 = remember(solves) { AverageCalculator.averageOfN(solves, 12) }
+    StatsHeroCard(
+        allTimePb = allTimePb,
+        sessionAo5 = sessionAo5,
+        sessionAo12 = sessionAo12,
+        modifier = modifier
+    )
+}
+
+@Composable
+private fun SessionAveragePill(
+    label: String,
+    time: Long?,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = if (time != null) formatTime(time) else "--",
+                style = MaterialTheme.typography.labelLarge,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+                color = if (time != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+// =============================================================================
+// Compact Summary Grid Component (2x2: Ao5, Ao12, Ao50, Ao100)
+// =============================================================================
+
+data class StandardAverageData(
+    val label: String,
+    val count: Int,
+    val current: Long?,
+    val best: Long?
+)
+
+@Composable
+fun CompactSummaryGrid(
+    solves: List<SolveTime>,
+    modifier: Modifier = Modifier
+) {
+    val items = remember(solves) {
+        listOf(
+            StandardAverageData("Ao5", 5, calculateAverageOfN(solves, 5), findBestAverageOfN(solves, 5)),
+            StandardAverageData("Ao12", 12, calculateAverageOfN(solves, 12), findBestAverageOfN(solves, 12)),
+            StandardAverageData("Ao50", 50, calculateAverageOfN(solves, 50), findBestAverageOfN(solves, 50)),
+            StandardAverageData("Ao100", 100, calculateAverageOfN(solves, 100), findBestAverageOfN(solves, 100))
         )
     }
 
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        SectionHeader(title = "Averages")
-        
-        // Ao5 Section
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            shape = RoundedCornerShape(24.dp)
+        SectionHeader(title = "Standard Averages")
+
+        items.chunked(2).forEach { row ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                row.forEach { item ->
+                    StandardAverageCard(
+                        item = item,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StandardAverageCard(
+    item: StandardAverageData,
+    modifier: Modifier = Modifier
+) {
+    val isCurrentPb = item.current != null && item.best != null && item.current == item.best
+
+    Surface(
+        modifier = modifier.heightIn(min = 96.dp),
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Average of 5",
-                    style = MaterialTheme.typography.titleMedium,
+                    text = item.label,
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                if (isCurrentPb) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer
+                    ) {
+                        Text(
+                            text = "PB",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+            }
+
+            Text(
+                text = if (item.current != null) formatTime(item.current) else "--",
+                style = MaterialTheme.typography.titleLarge,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+                color = if (item.current != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "PB",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary
                 )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(StatCardSpacing)
+                Text(
+                    text = if (item.best != null) formatTime(item.best) else "--",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (item.best != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+// =============================================================================
+// Collapsible Section Architecture
+// =============================================================================
+
+@Composable
+private fun CollapsibleSectionCard(
+    title: String,
+    modifier: Modifier = Modifier,
+    isExpanded: Boolean,
+    onToggle: () -> Unit,
+    subtitle: String? = null,
+    badgeText: String? = null,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val rotationAngle by animateFloatAsState(
+        targetValue = if (isExpanded) 180f else 0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "arrow_rotation"
+    )
+
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = 0.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .animateContentSize()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onToggle() }
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    AverageCard(
-                        label = "Current",
-                        value = if (ao5Current != null) formatTime(ao5Current) else "N/A",
-                        modifier = Modifier.weight(1f),
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
-                    AverageCard(
-                        label = "Personal Best",
-                        value = if (bestAo5 != null) formatTime(bestAo5) else "N/A",
-                        modifier = Modifier.weight(1f),
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                    if (subtitle != null) {
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                if (badgeText != null && !isExpanded) {
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        modifier = Modifier.padding(end = 8.dp)
+                    ) {
+                        Text(
+                            text = badgeText,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+
+                IconButton(
+                    onClick = onToggle,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.KeyboardArrowDown,
+                        contentDescription = if (isExpanded) "Collapse $title" else "Expand $title",
+                        modifier = Modifier.rotate(rotationAngle),
+                        tint = MaterialTheme.colorScheme.primary
                     )
                 }
             }
-        }
-        
-        Spacer(modifier = Modifier.height(4.dp))
-        
-        // Ao12 Section
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            shape = RoundedCornerShape(24.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+
+            AnimatedVisibility(
+                visible = isExpanded,
+                enter = fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) +
+                        expandVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)),
+                exit = fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) +
+                       shrinkVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow))
             ) {
-                Text(
-                    text = "Average of 12",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.tertiary
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(StatCardSpacing)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    AverageCard(
-                        label = "Current",
-                        value = if (ao12Current != null) formatTime(ao12Current) else "N/A",
-                        modifier = Modifier.weight(1f),
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                    )
-                    AverageCard(
-                        label = "Personal Best",
-                        value = if (bestAo12 != null) formatTime(bestAo12) else "N/A",
-                        modifier = Modifier.weight(1f),
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                    )
+                    content()
                 }
             }
         }
     }
 }
 
+// =============================================================================
+// Collapsible Large Averages Section (Ao500, Ao1000, Ao2000)
+// =============================================================================
+
 private val LargeAverages = listOf(
-    50 to "Ao50",
-    100 to "Ao100",
-    200 to "Ao200",
     500 to "Ao500",
     1000 to "Ao1000",
     2000 to "Ao2000"
 )
 
 @Composable
-private fun LargeAveragesSection(solves: List<SolveTime>) {
+private fun LargeAveragesSection(
+    solves: List<SolveTime>,
+    modifier: Modifier = Modifier
+) {
+    var isExpanded by rememberSaveable { mutableStateOf(false) }
+
     val averagesData = remember(solves) {
         LargeAverages.associate { (count, _) ->
             count to (calculateAverageOfN(solves, count) to findBestAverageOfN(solves, count))
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    val badgeText = remember(solves, averagesData) {
+        val ao500 = averagesData[500]?.first
+        if (ao500 != null) "Ao500: ${formatTime(ao500)}" else "Ao500 • Ao1000 • Ao2000"
+    }
+
+    CollapsibleSectionCard(
+        title = "Large Averages",
+        subtitle = "Extended window averages (500, 1000, 2000)",
+        badgeText = badgeText,
+        isExpanded = isExpanded,
+        onToggle = { isExpanded = !isExpanded },
+        modifier = modifier
     ) {
-        SectionHeader(title = "Session Averages")
-
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            LargeAverages.chunked(2).forEach { row ->
+        LargeAverages.forEach { (count, label) ->
+            val (current, best) = averagesData.getValue(count)
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                shape = RoundedCornerShape(20.dp)
+            ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    row.forEach { (count, label) ->
-                        val (current, best) = averagesData.getValue(count)
-
-                        Surface(
-                            modifier = Modifier
-                                .weight(1f)
-                                .heightIn(min = 88.dp),
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            shape = RoundedCornerShape(24.dp)
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Text(
-                                    text = label,
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = if (current != null) formatTime(current) else "N/A",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontFamily = FontFamily.Monospace,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                // Always reserve space for PB line
-                                if (best != null && best != current) {
-                                    Text(
-                                        text = "PB: ${formatTime(best)}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                } else {
-                                    // Empty spacer to maintain consistent height
-                                    Spacer(modifier = Modifier.height(16.dp))
-                                }
-                            }
-                        }
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = if (solves.size < count) "Requires $count solves (${solves.size}/$count)" else "Window: $count solves",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
-                    
-                    // Add spacer if odd number of items in row
-                    if (row.size == 1) {
-                        Spacer(modifier = Modifier.weight(1f))
+
+                    Column(
+                        horizontalAlignment = Alignment.End,
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = if (current != null) formatTime(current) else "N/A",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        if (best != null) {
+                            Text(
+                                text = "PB: ${formatTime(best)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontFamily = FontFamily.Monospace,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                 }
             }
@@ -779,60 +713,69 @@ private fun LargeAveragesSection(solves: List<SolveTime>) {
     }
 }
 
-@Composable
-private fun SessionStatsSection(solves: List<SolveTime>) {
-    val sessionStats = remember(solves) { calculateSessionStats(solves) }
+// =============================================================================
+// Collapsible Session & Detailed Metrics Section
+// =============================================================================
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+@Composable
+private fun SessionMetricsSection(
+    solves: List<SolveTime>,
+    appTimeMillis: Long,
+    modifier: Modifier = Modifier
+) {
+    var isExpanded by rememberSaveable { mutableStateOf(false) }
+
+    val sessionStats = remember(solves) { calculateSessionStats(solves) }
+    val allValidSolves = remember(solves) { solves.filter { it.penalty != Penalty.DNF } }
+    val totalSolvingTime = remember(solves) { solves.sumOf { it.timeInMillis } }
+    val allTimeMean = remember(allValidSolves) { calculateMean(allValidSolves) }
+    val allTimeStdDev = remember(allValidSolves) { calculateStandardDeviation(allValidSolves) }
+
+    val badgeText = remember(solves, totalSolvingTime) {
+        "${solves.size} solves • ${formatDuration(totalSolvingTime)}"
+    }
+
+    CollapsibleSectionCard(
+        title = "Session & Detailed Metrics",
+        subtitle = "Session performance & aggregate statistics",
+        badgeText = badgeText,
+        isExpanded = isExpanded,
+        onToggle = { isExpanded = !isExpanded },
+        modifier = modifier
     ) {
-        SectionHeader(title = "Session Statistics")
-        
-        if (sessionStats == null) {
+        if (sessionStats != null) {
             Text(
-                text = "Not enough data",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(vertical = 6.dp)
+                text = "Session Stats (Solves within 1h gaps)",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold
             )
-        } else {
-            Text(
-                text = "Sessions are groups of solves with no more than 1 hour gap between consecutive solves.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = 4.dp)
-            )
-            
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(StatCardSpacing)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 StatCard(
                     label = "Session Best",
                     value = formatTime(sessionStats.bestSessionTime),
                     modifier = Modifier.weight(1f),
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                 )
                 StatCard(
                     label = "Session Worst",
                     value = formatTime(sessionStats.worstSessionTime),
                     modifier = Modifier.weight(1f),
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                 )
             }
-            
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(StatCardSpacing)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 StatCard(
                     label = "Session Avg",
                     value = formatTime(sessionStats.sessionAverage),
                     modifier = Modifier.weight(1f),
-                    containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                 )
                 StatCard(
                     label = "Mean Solve",
@@ -841,50 +784,128 @@ private fun SessionStatsSection(solves: List<SolveTime>) {
                     containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                 )
             }
-            
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(StatCardSpacing)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 StatCard(
-                    label = "Std. Deviation",
+                    label = "Session Std. Dev",
                     value = formatTime(sessionStats.standardDeviation.toLong()),
                     modifier = Modifier.weight(1f),
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                 )
                 StatCard(
                     label = "Time Cubing",
                     value = formatDuration(sessionStats.avgTimeCubingInSession),
                     modifier = Modifier.weight(1f),
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                 )
             }
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "Detailed & Aggregate Metrics",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.secondary,
+            fontWeight = FontWeight.SemiBold
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            StatCard(
+                label = "Total Solves",
+                value = "${solves.size}",
+                modifier = Modifier.weight(1f),
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+            )
+            StatCard(
+                label = "All-Time Mean",
+                value = formatTime(allTimeMean),
+                modifier = Modifier.weight(1f),
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            StatCard(
+                label = "Std. Deviation",
+                value = formatTime(allTimeStdDev.toLong()),
+                modifier = Modifier.weight(1f),
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+            )
+            StatCard(
+                label = "Time Solving",
+                value = formatDuration(totalSolvingTime),
+                modifier = Modifier.weight(1f),
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            StatCard(
+                label = "Time in App",
+                value = formatDuration(appTimeMillis),
+                modifier = Modifier.weight(1f),
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+            )
+            Spacer(modifier = Modifier.weight(1f))
         }
     }
 }
 
+// =============================================================================
+// Collapsible Penalty Distributions Section
+// =============================================================================
+
+private data class PenaltyDistributionData(
+    val dnfCount: Int,
+    val plusTwoCount: Int,
+    val dnfPercent: Int,
+    val plusTwoPercent: Int,
+    val cleanCount: Int,
+    val cleanPercent: Int
+)
+
 @Composable
-private fun PenaltyStatsSection(solves: List<SolveTime>) {
-    val (dnfCount, plusTwoCount, dnfPercent, plusTwoPercent) = remember(solves) {
-        val dnfCount = solves.count { it.penalty == Penalty.DNF }
-        val plusTwoCount = solves.count { it.penalty == Penalty.PLUS_TWO }
-        val totalCount = solves.size.toFloat()
-        val dnfPercent = if (totalCount > 0) (dnfCount / totalCount * 100).toInt() else 0
-        val plusTwoPercent = if (totalCount > 0) (plusTwoCount / totalCount * 100).toInt() else 0
-        PenaltySummary(dnfCount, plusTwoCount, dnfPercent, plusTwoPercent)
+private fun PenaltyStatsSection(
+    solves: List<SolveTime>,
+    modifier: Modifier = Modifier
+) {
+    var isExpanded by rememberSaveable { mutableStateOf(false) }
+
+    val (dnfCount, plusTwoCount, dnfPercent, plusTwoPercent, cleanCount, cleanPercent) = remember(solves) {
+        val dnf = solves.count { it.penalty == Penalty.DNF }
+        val plusTwo = solves.count { it.penalty == Penalty.PLUS_TWO }
+        val total = solves.size.toFloat()
+        val dnfPct = if (total > 0) (dnf / total * 100).toInt() else 0
+        val plusTwoPct = if (total > 0) (plusTwo / total * 100).toInt() else 0
+        val clean = solves.size - dnf - plusTwo
+        val cleanPct = if (total > 0) (clean / total * 100).toInt() else 100
+        PenaltyDistributionData(dnf, plusTwo, dnfPct, plusTwoPct, clean, cleanPct)
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    val badgeText = remember(dnfCount, plusTwoCount, cleanPercent) {
+        if (dnfCount + plusTwoCount == 0) "100% clean (0 penalties)"
+        else "DNF: $dnfCount ($dnfPercent%) • +2: $plusTwoCount ($plusTwoPercent%)"
+    }
+
+    CollapsibleSectionCard(
+        title = "Penalty Distribution",
+        subtitle = "DNF and +2 penalties ($cleanCount clean solves)",
+        badgeText = badgeText,
+        isExpanded = isExpanded,
+        onToggle = { isExpanded = !isExpanded },
+        modifier = modifier
     ) {
-        SectionHeader(title = "Penalties")
-        
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(StatCardSpacing)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             PenaltyCard(
                 label = "DNF",
@@ -1642,154 +1663,7 @@ private fun PenaltyCard(
     }
 }
 
-@Composable
-private fun SolveCard(
-    solve: SolveTime,
-    solveNumber: Int,
-    onDelete: () -> Unit,
-    onSetPenalty: (Penalty) -> Unit,
-    onHaptic: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    var menuExpanded by remember { mutableStateOf(false) }
 
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        tonalElevation = 0.dp
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 12.dp, top = 8.dp, end = 12.dp, bottom = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Solve #$solveNumber",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Box {
-                        IconButton(onClick = {
-                            onHaptic()
-                            menuExpanded = true
-                        }) {
-                            Icon(
-                                imageVector = Icons.Default.MoreVert,
-                                contentDescription = "Solve options",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        DropdownMenu(
-                            expanded = menuExpanded,
-                            onDismissRequest = { menuExpanded = false },
-                            tonalElevation = 6.dp,
-                            shadowElevation = 8.dp
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Delete") },
-                                onClick = {
-                                    onHaptic()
-                                    menuExpanded = false
-                                    onDelete()
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.Delete,
-                                        contentDescription = null
-                                    )
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Add DNF") },
-                                onClick = {
-                                    onHaptic()
-                                    menuExpanded = false
-                                    onSetPenalty(Penalty.DNF)
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Add +2") },
-                                onClick = {
-                                    onHaptic()
-                                    menuExpanded = false
-                                    onSetPenalty(Penalty.PLUS_TWO)
-                                }
-                            )
-                        }
-                    }
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text(
-                        text = formatTime(solve.displayTime),
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Bold,
-                        color = when (solve.penalty) {
-                            Penalty.DNF -> MaterialTheme.colorScheme.error
-                            Penalty.PLUS_TWO -> MaterialTheme.colorScheme.tertiary
-                            Penalty.NONE -> MaterialTheme.colorScheme.onSurface
-                        }
-                    )
-                    if (solve.penalty != Penalty.NONE) {
-                        Surface(
-                            color = when (solve.penalty) {
-                                Penalty.DNF -> MaterialTheme.colorScheme.errorContainer
-                                Penalty.PLUS_TWO -> MaterialTheme.colorScheme.tertiaryContainer
-                                else -> Color.Transparent
-                            },
-                            shape = RoundedCornerShape(16.dp)
-                        ) {
-                            Text(
-                                text = when (solve.penalty) {
-                                    Penalty.DNF -> "DNF"
-                                    Penalty.PLUS_TWO -> "+2"
-                                    else -> ""
-                                },
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                color = when (solve.penalty) {
-                                    Penalty.DNF -> MaterialTheme.colorScheme.onErrorContainer
-                                    Penalty.PLUS_TWO -> MaterialTheme.colorScheme.onTertiaryContainer
-                                    else -> Color.Unspecified
-                                }
-                            )
-                        }
-                    }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = formatTimestamp(solve.timestamp),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                if (solve.scramble.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = solve.scramble,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = FontFamily.Monospace,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        lineHeight = 18.sp
-                    )
-                }
-            }
-        }
-    }
-}
 
 private val StatCardContentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
 private val StatCardSpacing = 10.dp
@@ -1928,33 +1802,7 @@ private fun calculateSessionStats(solves: List<SolveTime>): SessionStats? {
     )
 }
 
-private data class StatsSummary(
-    val last100BestTime: Long?,
-    val last100WorstTime: Long?,
-    val last100Ao100: Long?,
-    val last100MeanTime: Long,
-    val last100StandardDeviation: Double,
-    val allTimeBestTime: Long?,
-    val allTimeWorstTime: Long?,
-    val allTimeAverage: Long,
-    val allTimeMeanTime: Long,
-    val allTimeStandardDeviation: Double,
-    val totalSolvingTime: Long
-)
 
-private data class AveragesSummary(
-    val ao5Current: Long?,
-    val ao12Current: Long?,
-    val bestAo5: Long?,
-    val bestAo12: Long?
-)
-
-private data class PenaltySummary(
-    val dnfCount: Int,
-    val plusTwoCount: Int,
-    val dnfPercent: Int,
-    val plusTwoPercent: Int
-)
 
 private data class PersonalBestsData(
     val singlePBs: List<Pair<Int, Long>>,

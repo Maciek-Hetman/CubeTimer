@@ -40,11 +40,12 @@ object AverageCalculator {
     }
 
     fun averageWindow(window: List<SolveTime>): Long? {
-        if (window.size < 3) {
-            val validTimes = window
-                .filter { it.penalty != Penalty.DNF }
-                .map { it.displayTime }
-            return validTimes.takeIf { it.isNotEmpty() }?.average()?.toLong()
+        if (window.isEmpty()) return null
+
+        val trimCount = when {
+            window.size < 5 -> 0
+            window.size < 20 -> 1
+            else -> (window.size * 0.05).toInt()
         }
 
         val validTimes = window
@@ -53,13 +54,11 @@ object AverageCalculator {
             .sorted()
         val dnfCount = window.size - validTimes.size
 
-        if (dnfCount > 1 || validTimes.size < window.size - 1) return null
+        if (dnfCount > trimCount) return null
 
-        val trimmedTimes = if (dnfCount == 1) {
-            validTimes.drop(1)
-        } else {
-            validTimes.drop(1).dropLast(1)
-        }
+        val trimmedTimes = validTimes
+            .drop(trimCount)
+            .dropLast(trimCount - dnfCount)
 
         return trimmedTimes.takeIf { it.isNotEmpty() }?.average()?.toLong()
     }

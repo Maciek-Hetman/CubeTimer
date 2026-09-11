@@ -120,6 +120,187 @@ class SolvesRepository(
             .map { entities -> entities.map { it.toSolveTime() } }
     }
 
+    // --- Chunked Paged Queries (Returning Domain Models) ---
+
+    suspend fun getSolvesPagedByEvent(
+        mode: Mode,
+        ownerId: String = "guest",
+        limit: Int = 50,
+        offset: Int = 0
+    ): List<SolveTime> = withContext(ioDispatcher) {
+        solveDao.getSolvesPagedByEvent(
+            ownerId = ownerId,
+            event = mode.toEventString(),
+            limit = limit,
+            offset = offset
+        ).map { it.toSolveTime() }
+    }
+
+    suspend fun getSolvesPagedBySession(
+        sessionId: String,
+        ownerId: String = "guest",
+        limit: Int = 50,
+        offset: Int = 0
+    ): List<SolveTime> = withContext(ioDispatcher) {
+        solveDao.getSolvesPagedBySession(
+            ownerId = ownerId,
+            sessionId = sessionId,
+            limit = limit,
+            offset = offset
+        ).map { it.toSolveTime() }
+    }
+
+    suspend fun getAllSolvesPaged(
+        ownerId: String = "guest",
+        limit: Int = 50,
+        offset: Int = 0
+    ): List<SolveTime> = withContext(ioDispatcher) {
+        solveDao.getAllSolvesPaged(
+            ownerId = ownerId,
+            limit = limit,
+            offset = offset
+        ).map { it.toSolveTime() }
+    }
+
+    // --- Reactive Count Flows & Suspend Counts ---
+
+    fun observeSolveCountByEvent(
+        mode: Mode,
+        ownerId: String = "guest"
+    ): Flow<Int> = solveDao.observeSolveCountByEvent(
+        ownerId = ownerId,
+        event = mode.toEventString()
+    ).distinctUntilChanged()
+
+    fun observeSolveCountBySession(
+        sessionId: String,
+        ownerId: String = "guest"
+    ): Flow<Int> = solveDao.observeSolveCountBySession(
+        ownerId = ownerId,
+        sessionId = sessionId
+    ).distinctUntilChanged()
+
+    fun observeAllSolvesCount(
+        ownerId: String = "guest"
+    ): Flow<Int> = solveDao.observeAllSolvesCount(ownerId = ownerId).distinctUntilChanged()
+
+    suspend fun getSolveCountByEvent(
+        mode: Mode,
+        ownerId: String = "guest"
+    ): Int = withContext(ioDispatcher) {
+        solveDao.getSolveCountByEvent(ownerId, mode.toEventString())
+    }
+
+    suspend fun getSolveCountBySession(
+        sessionId: String,
+        ownerId: String = "guest"
+    ): Int = withContext(ioDispatcher) {
+        solveDao.getSolveCountBySession(ownerId, sessionId)
+    }
+
+    // --- Historical PB Lookup ---
+
+    suspend fun getPriorBestSolveDuration(
+        mode: Mode,
+        solvedAtEpochMillis: Long,
+        ownerId: String = "guest",
+        excludeSolveId: String? = null
+    ): Long? = withContext(ioDispatcher) {
+        val solvedAtIso = CubeTypeConverters.epochMillisToIso(solvedAtEpochMillis)
+        solveDao.getPriorBestSolveDuration(
+            ownerId = ownerId,
+            event = mode.toEventString(),
+            solvedAt = solvedAtIso,
+            excludeSolveId = excludeSolveId
+        )
+    }
+
+    suspend fun getPriorBestSolveDuration(
+        mode: Mode,
+        solvedAtIso: String,
+        ownerId: String = "guest",
+        excludeSolveId: String? = null
+    ): Long? = withContext(ioDispatcher) {
+        solveDao.getPriorBestSolveDuration(
+            ownerId = ownerId,
+            event = mode.toEventString(),
+            solvedAt = solvedAtIso,
+            excludeSolveId = excludeSolveId
+        )
+    }
+
+    // --- Session / Event Batch Deletion ---
+
+    suspend fun clearSolvesBySession(
+        sessionId: String,
+        ownerId: String = "guest"
+    ) = withContext(ioDispatcher) {
+        val nowIso = Instant.now().toString()
+        val existing = solveDao.getSolvesBySession(ownerId, sessionId)
+        if (existing.isNotEmpty()) {
+            val ids = existing.map { it.id }
+            if (database != null) {
+                database.withTransaction {
+                    solveDao.softDeleteAll(ids, deletedAt = nowIso, updatedAt = nowIso)
+                }
+            } else {
+                solveDao.softDeleteAll(ids, deletedAt = nowIso, updatedAt = nowIso)
+            }
+            if (ownerId != "guest") {
+                for (item in existing) {
+                    val mutation = SyncOutboxEntity(
+                        id = UUID.randomUUID().toString(),
+                        ownerId = ownerId,
+                        entityType = "solve",
+                        entityId = item.id,
+                        action = "delete",
+                        baseVersion = item.version,
+                        payloadJson = null,
+                        clientTime = nowIso,
+                        status = "pending"
+                    )
+                    syncOutboxDao.enqueue(mutation)
+                }
+            }
+        }
+        syncTrigger?.invoke()
+    }
+
+    suspend fun clearSolvesByEvent(
+        mode: Mode,
+        ownerId: String = "guest"
+    ) = withContext(ioDispatcher) {
+        val nowIso = Instant.now().toString()
+        val existing = solveDao.getSolvesByEvent(ownerId, mode.toEventString())
+        if (existing.isNotEmpty()) {
+            val ids = existing.map { it.id }
+            if (database != null) {
+                database.withTransaction {
+                    solveDao.softDeleteAll(ids, deletedAt = nowIso, updatedAt = nowIso)
+                }
+            } else {
+                solveDao.softDeleteAll(ids, deletedAt = nowIso, updatedAt = nowIso)
+            }
+            if (ownerId != "guest") {
+                for (item in existing) {
+                    val mutation = SyncOutboxEntity(
+                        id = UUID.randomUUID().toString(),
+                        ownerId = ownerId,
+                        entityType = "solve",
+                        entityId = item.id,
+                        action = "delete",
+                        baseVersion = item.version,
+                        payloadJson = null,
+                        clientTime = nowIso,
+                        status = "pending"
+                    )
+                    syncOutboxDao.enqueue(mutation)
+                }
+            }
+        }
+        syncTrigger?.invoke()
+    }
+
     /**
      * Save a single solve with session association and transactional outbox mutation dispatch.
      */
@@ -168,9 +349,17 @@ class SolvesRepository(
         if (solves.isEmpty()) return@withContext
         val nowIso = Instant.now().toString()
         val ids = solves.map { it.id }
-        solveDao.softDeleteAll(ids, deletedAt = nowIso, updatedAt = nowIso)
+        val existing = if (ownerId != "guest") solveDao.getSolvesByIds(ids) else emptyList()
+        if (database != null) {
+            database.withTransaction {
+                solveDao.softDeleteAll(ids, deletedAt = nowIso, updatedAt = nowIso)
+            }
+        } else {
+            solveDao.softDeleteAll(ids, deletedAt = nowIso, updatedAt = nowIso)
+        }
 
         if (ownerId != "guest") {
+            val versionMap = existing.associate { it.id to it.version }
             for (solve in solves) {
                 val mutation = SyncOutboxEntity(
                     id = UUID.randomUUID().toString(),
@@ -178,7 +367,7 @@ class SolvesRepository(
                     entityType = "solve",
                     entityId = solve.id,
                     action = "delete",
-                    baseVersion = 0L,
+                    baseVersion = versionMap[solve.id] ?: 0L,
                     payloadJson = null,
                     clientTime = nowIso,
                     status = "pending"

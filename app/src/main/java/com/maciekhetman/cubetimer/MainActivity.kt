@@ -36,18 +36,21 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import kotlin.math.roundToInt
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -84,6 +87,7 @@ import com.maciekhetman.cubetimer.ui.auth.AuthDialog
 import com.maciekhetman.cubetimer.ui.auth.AuthDialogType
 import com.maciekhetman.cubetimer.ui.screens.AdminDashboardScreen
 import com.maciekhetman.cubetimer.ui.screens.SettingsScreen
+import com.maciekhetman.cubetimer.ui.screens.HistoryScreen
 import com.maciekhetman.cubetimer.ui.screens.StatsScreen
 import com.maciekhetman.cubetimer.ui.screens.TimerScreen
 import com.maciekhetman.cubetimer.ui.session.CreateSessionDialog
@@ -94,6 +98,7 @@ import com.maciekhetman.cubetimer.ui.sync.SyncStatusDialog
 import com.maciekhetman.cubetimer.ui.theme.CubeTimerTheme
 import com.maciekhetman.cubetimer.viewmodel.AdminViewModel
 import com.maciekhetman.cubetimer.viewmodel.AuthViewModel
+import com.maciekhetman.cubetimer.viewmodel.HistoryViewModel
 import com.maciekhetman.cubetimer.viewmodel.SessionViewModel
 import com.maciekhetman.cubetimer.viewmodel.TimerViewModel
 
@@ -102,6 +107,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var sessionViewModel: SessionViewModel
     private lateinit var authViewModel: AuthViewModel
     private lateinit var adminViewModel: AdminViewModel
+    private lateinit var historyViewModel: HistoryViewModel
     private lateinit var syncStateManager: SyncStateManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -142,6 +148,15 @@ class MainActivity : ComponentActivity() {
                             adminRepository = app.adminRepository
                         ) as T
                     }
+                    modelClass.isAssignableFrom(HistoryViewModel::class.java) -> {
+                        HistoryViewModel(
+                            application = app,
+                            repository = app.solvesRepository,
+                            sessionManager = app.sessionManager,
+                            sessionRepository = app.sessionRepository,
+                            authManager = app.authManager
+                        ) as T
+                    }
                     else -> super.create(modelClass)
                 }
             }
@@ -150,6 +165,7 @@ class MainActivity : ComponentActivity() {
         sessionViewModel = ViewModelProvider(this, factory)[SessionViewModel::class.java]
         authViewModel = ViewModelProvider(this, factory)[AuthViewModel::class.java]
         adminViewModel = ViewModelProvider(this, factory)[AdminViewModel::class.java]
+        historyViewModel = ViewModelProvider(this, factory)[HistoryViewModel::class.java]
         syncStateManager = app.syncStateManager
 
         // Keep screen on while app is open
@@ -169,6 +185,7 @@ class MainActivity : ComponentActivity() {
                         sessionViewModel = sessionViewModel,
                         authViewModel = authViewModel,
                         adminViewModel = adminViewModel,
+                        historyViewModel = historyViewModel,
                         syncStateManager = syncStateManager
                     )
                 }
@@ -211,6 +228,7 @@ fun CubeTimerApp(
     sessionViewModel: SessionViewModel = viewModel(),
     authViewModel: AuthViewModel = viewModel(),
     adminViewModel: AdminViewModel = viewModel(),
+    historyViewModel: HistoryViewModel = viewModel(),
     syncStateManager: SyncStateManager = (LocalContext.current.applicationContext as? CubeTimerApplication)?.syncStateManager ?: SyncStateManager()
 ) {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.TIMER) }
@@ -243,16 +261,17 @@ fun CubeTimerApp(
 
     // Predictive back navigation support
     BackHandler(enabled = currentDestination != AppDestinations.TIMER && !isTimerRunning) {
-        if (currentDestination == AppDestinations.ADMIN) {
-            currentDestination = AppDestinations.SETTINGS
-        } else {
-            currentDestination = AppDestinations.TIMER
+        when (currentDestination) {
+            AppDestinations.ADMIN -> currentDestination = AppDestinations.SETTINGS
+            AppDestinations.HISTORY -> currentDestination = AppDestinations.TIMER
+            else -> currentDestination = AppDestinations.TIMER
         }
     }
 
     val onModeSelected: (com.maciekhetman.cubetimer.model.Mode) -> Unit = { mode ->
         viewModel.setMode(mode)
         sessionViewModel.setMode(mode)
+        historyViewModel.setMode(mode)
     }
 
     val onAuthClick: () -> Unit = {
@@ -324,6 +343,28 @@ fun CubeTimerApp(
                         onSyncClick = { showSyncDialog = true },
                         authState = authState,
                         onAuthClick = onAuthClick,
+                        modifier = contentModifier
+                    )
+                }
+                AppDestinations.HISTORY -> {
+                    HistoryScreen(
+                        viewModel = historyViewModel,
+                        currentMode = currentMode,
+                        onModeSelected = onModeSelected,
+                        activeSession = activeSession,
+                        isAutomaticMode = isAutomaticMode,
+                        onSwitchToAutomatic = { sessionViewModel.switchToAutomaticSession() },
+                        sessions = sessionsList,
+                        onSessionSelected = { session -> sessionViewModel.switchSession(session.id) },
+                        onCreateSessionClick = { showCreateSessionDialog = true },
+                        onManageSessionsClick = { showSessionManagementSheet = true },
+                        syncUiState = syncUiState,
+                        onSyncClick = { showSyncDialog = true },
+                        authState = authState,
+                        onAuthClick = onAuthClick,
+                        onSolveClick = { solve, solveNumber ->
+                            // Hook for M4 ShareableSolveCardDialog
+                        },
                         modifier = contentModifier
                     )
                 }
@@ -469,7 +510,12 @@ fun FloatingNavigationBar(
 ) {
     val haptic = LocalHapticFeedback.current
     val density = LocalDensity.current
-    val visibleDestinations = listOf(AppDestinations.TIMER, AppDestinations.STATS, AppDestinations.SETTINGS)
+    val visibleDestinations = listOf(
+        AppDestinations.TIMER,
+        AppDestinations.STATS,
+        AppDestinations.HISTORY,
+        AppDestinations.SETTINGS
+    )
     val selectedIndex = visibleDestinations.indexOf(currentDestination).let { if (it >= 0) it else 0 }
 
     var previousIndex by remember { mutableIntStateOf(selectedIndex) }
@@ -504,6 +550,7 @@ fun FloatingNavigationBar(
         modifier = modifier
             .navigationBarsPadding()
             .padding(bottom = 16.dp)
+            .width(284.dp)
     ) {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
             Box(
@@ -618,7 +665,8 @@ enum class AppDestinations(
     val icon: ImageVector,
 ) {
     TIMER("Timer", Icons.Default.Home),
-    STATS("Stats", Icons.AutoMirrored.Filled.List),
+    STATS("Stats", Icons.Default.BarChart),
+    HISTORY("History", Icons.Default.History),
     SETTINGS("Settings", Icons.Default.Settings),
     ADMIN("Admin", Icons.Default.AdminPanelSettings),
 }

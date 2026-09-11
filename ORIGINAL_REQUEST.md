@@ -118,3 +118,67 @@ Apply the unified design system across every screen and modal in the application
 - [ ] `./gradlew assembleDebug` compiles cleanly with 0 build errors.
 
 </USER_REQUEST>
+
+## 2026-09-05T13:33:44Z
+
+<USER_REQUEST>
+Split the current unified Statistics screen into two dedicated screens: a condensed, hierarchically organized Stats screen and a dedicated, high-performance History screen for past solves. Tapping a solve in History opens an interactive pop-up with a shareable card displaying time, scramble, 2D scramble preview for all puzzles, timing device placeholder, and historical PB difference when applicable.
+
+Working directory: /Users/maciek/AndroidStudioProjects/CubeTimer
+Integrity mode: development
+
+## Requirements
+
+### R1. App Navigation & Destination Expansion
+Add a dedicated `History` destination alongside `Timer`, `Stats`, and `Settings` in the app's floating bottom navigation bar (`FloatingNavigationBar` in `MainActivity.kt`). Update the animated pill indicator geometry, icon mapping, and predictive back navigation to seamlessly route between all four primary destinations.
+
+### R2. Condensed & Hierarchical Stats Dashboard
+Rework `StatsScreen.kt` to present a clean, high-hierarchy overview:
+- Top hero card highlighting the all-time Personal Best single and current session averages (Ao5, Ao12).
+- Compact summary grid displaying standard averages (Ao5, Ao12, Ao50, Ao100).
+- Expandable / collapsible sections for large averages (Ao500, Ao1000, Ao2000), session metrics, and penalty distributions (DNF, +2).
+- Retain the session filter chips bar (`SessionFilterBar`), activity heatmap tracker, and interactive performance charts.
+- Remove the past solve history list from this screen so it focuses purely on aggregated statistics and insights.
+
+### R3. Dedicated High-Performance History Screen
+Create `HistoryScreen.kt` specifically optimized for browsing, filtering, and managing past solves:
+- Offline-first architecture reading directly from Room local persistence with chunked / infinite-scroll pagination (batches of 50–100 solves) to guarantee 60fps scrolling performance even with hundreds or thousands of solves.
+- Non-blocking architecture ensuring background server synchronization (`CubeSyncApiClient` / `SyncEngine`) never stalls local UI reads or list interactions.
+- Session filtering matching the selected session filter (active session, all solves, or specific custom sessions).
+- Direct solve actions: penalty adjustment (DNF, +2, None), solve deletion with undo snackbar, and session/history clear dialog.
+
+### R4. Interactive Shareable Solve Card Pop-up
+Tapping any solve card in the history list launches a modal dialog displaying a styled, shareable solve card:
+- Large formatted solve duration with appropriate penalty badge and solve date/timestamp.
+- Full scramble string accompanied by an accurate 2D scramble preview supporting all puzzle modes (3x3, 2x2, 4x4, 5x5, Pyraminx, Megaminx) rendered via TNoodle SVG/canvas.
+- Timing device metadata chip/row displaying `Timer: Screen / Touch` (designed for future Bluetooth/Stackmat timer expansion).
+- Historical PB indicator: checks whether the solve was a Personal Best single at the time it occurred (compared to the fastest solve prior to its timestamp) and displays the delta (e.g. `PB (-0.85s vs 12.40s)`).
+- Share action: invokes the Android system share sheet with a bitmap snapshot of the card alongside formatted solve text details.
+
+## Acceptance Criteria
+
+### Navigation & Routing
+- [ ] Bottom navigation bar displays 4 items (`Timer`, `Stats`, `History`, `Settings`) with fluid pill animation and touch targets.
+- [ ] Navigating back from History routes predictably to Timer without backstack loops.
+
+### Stats Screen Hierarchy
+- [ ] Stats screen displays hero PB & current averages, compact standard averages grid, and collapsible sections for large averages and penalties.
+- [ ] Past solve list is completely removed from Stats screen, and no layout clipping or unbounded height errors occur.
+
+### History Screen Performance & Data
+- [ ] History screen loads solves incrementally using infinite scrolling / chunked pagination from local Room DB.
+- [ ] Fast scrolling through hundreds of solves produces no noticeable frame drops or memory bloat.
+- [ ] Background network sync operates independently without blocking or freezing history list updates.
+- [ ] Penalties and deletions applied in History persist to Room and enqueue sync outbox records correctly.
+
+### Shareable Solve Card & 2D Preview
+- [ ] Tapping any solve opens the modal detail card.
+- [ ] 2D scramble visualization renders valid unfolded state nets for 3x3, 2x2, 4x4, 5x5, Pyraminx, and Megaminx.
+- [ ] Timing device indicator chip `Timer: Screen / Touch` is clearly visible.
+- [ ] Historical PB delta correctly identifies if a solve was a PB when performed and displays the time difference from the previous best.
+- [ ] Share button triggers Android system share sheet with an image snapshot of the card and textual details.
+
+### Verification & Quality
+- [ ] `./gradlew testDebugUnitTest` compiles and passes all unit and Robolectric tests cleanly.
+</USER_REQUEST>
+

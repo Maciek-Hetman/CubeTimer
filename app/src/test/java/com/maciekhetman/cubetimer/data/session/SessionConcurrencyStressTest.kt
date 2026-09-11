@@ -43,8 +43,9 @@ class SessionConcurrencyStressTest {
     private lateinit var sessionManager: SessionManagerImpl
 
     @Before
-    fun setup() {
+    fun setup() = runTest {
         context = ApplicationProvider.getApplicationContext()
+        context.settingsDataStore.edit { it.clear() }
         database = CubeDatabase.createInMemory(context)
         sessionRepository = SessionRepositoryImpl(
             database = database,

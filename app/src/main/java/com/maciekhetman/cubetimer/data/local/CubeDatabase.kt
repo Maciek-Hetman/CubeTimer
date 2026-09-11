@@ -56,6 +56,7 @@ abstract class CubeDatabase : RoomDatabase() {
                 CubeDatabase::class.java,
                 DATABASE_NAME
             )
+                .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
                 .addCallback(object : Callback() {
                     override fun onOpen(db: SupportSQLiteDatabase) {
                         super.onOpen(db)
