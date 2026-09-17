@@ -204,6 +204,49 @@ class TokenAuthenticatorTest {
     }
 
     @Test
+    fun `refresh failing with HTTP 500 preserves credentials and does NOT trigger onSessionExpired`() {
+        fakeTokenStorage.storedAccessToken = "expired-token"
+        fakeTokenStorage.storedRefreshToken = "valid-refresh-token"
+
+        mockWebServer.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":{"code":"unauthorized"}}"""))
+        mockWebServer.enqueue(MockResponse().setResponseCode(500).setBody("""{"error":{"code":"internal_error"}}"""))
+
+        val request = Request.Builder()
+            .url(mockWebServer.url("/v1/sync"))
+            .get()
+            .build()
+
+        val response = okHttpClient.newCall(request).execute()
+        response.close()
+
+        assertEquals(401, response.code)
+        assertFalse("Session expiration must NOT trigger on a transient 5xx refresh failure", sessionExpiredCalled.get())
+        assertEquals("valid-refresh-token", fakeTokenStorage.storedRefreshToken)
+        assertEquals("expired-token", fakeTokenStorage.storedAccessToken)
+    }
+
+    @Test
+    fun `refresh failing with HTTP 429 preserves credentials and does NOT trigger onSessionExpired`() {
+        fakeTokenStorage.storedAccessToken = "expired-token"
+        fakeTokenStorage.storedRefreshToken = "valid-refresh-token"
+
+        mockWebServer.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":{"code":"unauthorized"}}"""))
+        mockWebServer.enqueue(MockResponse().setResponseCode(429).setBody("""{"error":{"code":"rate_limited"}}"""))
+
+        val request = Request.Builder()
+            .url(mockWebServer.url("/v1/sync"))
+            .get()
+            .build()
+
+        val response = okHttpClient.newCall(request).execute()
+        response.close()
+
+        assertEquals(401, response.code)
+        assertFalse("Session expiration must NOT trigger on a transient 429 refresh failure", sessionExpiredCalled.get())
+        assertEquals("valid-refresh-token", fakeTokenStorage.storedRefreshToken)
+    }
+
+    @Test
     fun `skips refresh when 401 occurs on auth endpoint directly`() {
         mockWebServer.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":{"code":"invalid_credentials"}}"""))
 

@@ -14,6 +14,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -135,5 +136,101 @@ class SolvesRepositoryTest {
         repository.saveAppTime(Mode.CUBE_3x3, 45000L)
         val appTime = repository.getAppTimeFlow(Mode.CUBE_3x3).first()
         assertEquals(45000L, appTime)
+    }
+
+    @Test
+    fun testDeleteSolvesByIdsAndUndoRestore() = runTest {
+        val s1 = SolveTime(id = "s-id-1", timeInMillis = 10000L, mode = Mode.CUBE_3x3)
+        val s2 = SolveTime(id = "s-id-2", timeInMillis = 12000L, mode = Mode.CUBE_3x3)
+        val s3 = SolveTime(id = "s-id-3", timeInMillis = 14000L, mode = Mode.CUBE_3x3)
+        repository.saveSolves(listOf(s1, s2, s3))
+
+        val deletedList = repository.deleteSolvesByIds(listOf("s-id-1", "s-id-2"), "guest")
+        assertEquals(2, deletedList.size)
+        assertTrue(deletedList.any { it.id == "s-id-1" })
+        assertTrue(deletedList.any { it.id == "s-id-2" })
+
+        val remaining = repository.solvesFlow.first()
+        assertEquals(1, remaining.size)
+        assertEquals("s-id-3", remaining[0].id)
+
+        // Undo restoration
+        repository.restoreSolves(deletedList, "guest")
+        val restored = repository.solvesFlow.first()
+        assertEquals(3, restored.size)
+    }
+
+    @Test
+    fun testDeleteSolvesByIds_handlesNonExistentAndAlreadyDeletedIdsGracefully() = runTest {
+        val s1 = SolveTime(id = "s-exist", timeInMillis = 10000L, mode = Mode.CUBE_3x3)
+        repository.saveSolve(s1)
+
+        val deleted = repository.deleteSolvesByIds(listOf("s-exist", "non-existent-id"), ownerId = "guest")
+        assertEquals(1, deleted.size)
+        assertEquals("s-exist", deleted[0].id)
+
+        val deletedAgain = repository.deleteSolvesByIds(listOf("s-exist"), ownerId = "guest")
+        assertTrue(deletedAgain.isEmpty())
+
+        val emptyResult = repository.deleteSolvesByIds(emptyList(), ownerId = "guest")
+        assertTrue(emptyResult.isEmpty())
+    }
+
+    @Test
+    fun testClearAllSolvesInScope() = runTest {
+        val s1 = SolveTime(id = "s-3x3-1", timeInMillis = 10000L, mode = Mode.CUBE_3x3)
+        val s2 = SolveTime(id = "s-3x3-2", timeInMillis = 11000L, mode = Mode.CUBE_3x3)
+        val s3 = SolveTime(id = "s-2x2-1", timeInMillis = 4000L, mode = Mode.CUBE_2x2)
+        repository.saveSolves(listOf(s1, s2, s3))
+
+        // Clear only 3x3 scope
+        val cleared3x3 = repository.clearAllSolvesInScope(Mode.CUBE_3x3, "guest")
+        assertEquals(2, cleared3x3.size)
+
+        // Verify 2x2 remains intact
+        val remaining = repository.getAllActiveSolves("guest")
+        assertEquals(1, remaining.size)
+        assertEquals("s-2x2-1", remaining[0].id)
+
+        // Clear all remaining (mode = null)
+        val clearedAll = repository.clearAllSolvesInScope(null, "guest")
+        assertEquals(1, clearedAll.size)
+        assertEquals(0, repository.getAllActiveSolves("guest").size)
+    }
+
+    @Test
+    fun testAuthenticatedBatchDeleteAndScopeClear_enqueuesDeleteMutations() = runTest {
+        val userId = "user-batch-del"
+        val s1 = SolveTime(id = "s-auth-1", timeInMillis = 9000L, mode = Mode.CUBE_3x3)
+        val s2 = SolveTime(id = "s-auth-2", timeInMillis = 9500L, mode = Mode.CUBE_3x3)
+        repository.saveSolve(s1, ownerId = userId)
+        repository.saveSolve(s2, ownerId = userId)
+        database.syncOutboxDao().clearOutbox(userId)
+
+        val deleted = repository.deleteSolvesByIds(listOf("s-auth-1"), ownerId = userId)
+        assertEquals(1, deleted.size)
+
+        val pending = database.syncOutboxDao().getPendingMutations(userId)
+        assertEquals(1, pending.size)
+        assertEquals("delete", pending[0].action)
+        assertEquals("solve", pending[0].entityType)
+        assertEquals("s-auth-1", pending[0].entityId)
+        assertNull(pending[0].payloadJson)
+
+        database.syncOutboxDao().clearOutbox(userId)
+        val cleared = repository.clearAllSolvesInScope(Mode.CUBE_3x3, ownerId = userId)
+        assertEquals(1, cleared.size)
+        assertEquals("s-auth-2", cleared[0].id)
+
+        val pendingClear = database.syncOutboxDao().getPendingMutations(userId)
+        assertEquals(1, pendingClear.size)
+        assertEquals("delete", pendingClear[0].action)
+        assertEquals("s-auth-2", pendingClear[0].entityId)
+
+        database.syncOutboxDao().clearOutbox(userId)
+        repository.restoreSolves(listOf(s1, s2), ownerId = userId)
+        val pendingRestore = database.syncOutboxDao().getPendingMutations(userId)
+        assertEquals(2, pendingRestore.size)
+        assertTrue(pendingRestore.all { it.action == "upsert" && it.entityType == "solve" })
     }
 }

@@ -4,12 +4,8 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.maciekhetman.cubetimer.data.auth.AuthManager
-import com.maciekhetman.cubetimer.data.auth.AuthManagerImpl
-import com.maciekhetman.cubetimer.data.local.CubeDatabase
 import com.maciekhetman.cubetimer.data.session.SessionManager
-import com.maciekhetman.cubetimer.data.session.SessionManagerImpl
 import com.maciekhetman.cubetimer.data.session.SessionRepository
-import com.maciekhetman.cubetimer.data.session.SessionRepositoryImpl
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Session
 import com.maciekhetman.cubetimer.model.SessionKind
@@ -33,27 +29,11 @@ class SessionViewModel(
     private val authManager: AuthManager
 ) : AndroidViewModel(application) {
 
-    // Secondary constructor for Android ViewModelProvider default instantiation
-    constructor(application: Application) : this(
-        application = application,
-        sessionManager = SessionManagerImpl(
-            context = application,
-            sessionRepository = SessionRepositoryImpl(CubeDatabase.getInstance(application)),
-            solveDao = CubeDatabase.getInstance(application).solveDao(),
-            authManager = AuthManagerImpl.getInstance(application)
-        ),
-        sessionRepository = SessionRepositoryImpl(CubeDatabase.getInstance(application)),
-        authManager = AuthManagerImpl.getInstance(application)
-    )
-
     private val _currentMode = MutableStateFlow(Mode.CUBE_3x3)
     val currentMode: StateFlow<Mode> = _currentMode.asStateFlow()
 
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
-
-    private val _isOperationInProgress = MutableStateFlow(false)
-    val isOperationInProgress: StateFlow<Boolean> = _isOperationInProgress.asStateFlow()
 
     /**
      * Active session for the currently selected Mode.
@@ -102,13 +82,10 @@ class SessionViewModel(
      */
     fun switchSession(sessionId: String): Job = viewModelScope.launch {
         try {
-            _isOperationInProgress.value = true
             val ownerId = authManager.currentOwnerId
             sessionManager.setActiveSession(ownerId, _currentMode.value, sessionId)
         } catch (e: Exception) {
             _errorMessage.value = "Failed to switch session: ${e.message}"
-        } finally {
-            _isOperationInProgress.value = false
         }
     }
 
@@ -117,12 +94,9 @@ class SessionViewModel(
      */
     fun setAutomaticMode(enabled: Boolean): Job = viewModelScope.launch {
         try {
-            _isOperationInProgress.value = true
             sessionManager.setAutomaticMode(_currentMode.value, enabled)
         } catch (e: Exception) {
             _errorMessage.value = "Failed to update session mode: ${e.message}"
-        } finally {
-            _isOperationInProgress.value = false
         }
     }
 
@@ -131,13 +105,10 @@ class SessionViewModel(
      */
     fun switchToAutomaticSession(): Job = viewModelScope.launch {
         try {
-            _isOperationInProgress.value = true
             val ownerId = authManager.currentOwnerId
             sessionManager.clearManualSessionOverride(ownerId, _currentMode.value)
         } catch (e: Exception) {
             _errorMessage.value = "Failed to switch to automatic session: ${e.message}"
-        } finally {
-            _isOperationInProgress.value = false
         }
     }
 
@@ -152,25 +123,18 @@ class SessionViewModel(
         }
 
         try {
-            _isOperationInProgress.value = true
             val ownerId = authManager.currentOwnerId
-            val created = sessionManager.createManualSession(
+            // sessionManager.createManualSession already activates the newly created session, so no
+            // separate setActiveSession call is needed here.
+            sessionManager.createManualSession(
                 name = trimmedName,
                 mode = _currentMode.value,
                 ownerId = ownerId
             )
-            sessionManager.setActiveSession(ownerId, _currentMode.value, created.id)
         } catch (e: Exception) {
             _errorMessage.value = "Failed to create session: ${e.message}"
-        } finally {
-            _isOperationInProgress.value = false
         }
     }
-
-    /**
-     * Alias for createManualSession.
-     */
-    fun createSession(name: String): Job = createManualSession(name)
 
     /**
      * Rename an existing session.
@@ -183,13 +147,10 @@ class SessionViewModel(
         }
 
         try {
-            _isOperationInProgress.value = true
             val ownerId = authManager.currentOwnerId
             sessionManager.renameSession(sessionId, trimmedName, ownerId)
         } catch (e: Exception) {
             _errorMessage.value = "Failed to rename session: ${e.message}"
-        } finally {
-            _isOperationInProgress.value = false
         }
     }
 
@@ -198,13 +159,10 @@ class SessionViewModel(
      */
     fun archiveSession(sessionId: String): Job = viewModelScope.launch {
         try {
-            _isOperationInProgress.value = true
             val ownerId = authManager.currentOwnerId
             sessionManager.archiveSession(sessionId, _currentMode.value, ownerId)
         } catch (e: Exception) {
             _errorMessage.value = "Failed to archive session: ${e.message}"
-        } finally {
-            _isOperationInProgress.value = false
         }
     }
 
@@ -213,13 +171,10 @@ class SessionViewModel(
      */
     fun unarchiveSession(sessionId: String): Job = viewModelScope.launch {
         try {
-            _isOperationInProgress.value = true
             val ownerId = authManager.currentOwnerId
             sessionManager.unarchiveSession(sessionId, ownerId)
         } catch (e: Exception) {
             _errorMessage.value = "Failed to unarchive session: ${e.message}"
-        } finally {
-            _isOperationInProgress.value = false
         }
     }
 
@@ -228,13 +183,10 @@ class SessionViewModel(
      */
     fun deleteSession(sessionId: String): Job = viewModelScope.launch {
         try {
-            _isOperationInProgress.value = true
             val ownerId = authManager.currentOwnerId
             sessionManager.deleteSession(sessionId, _currentMode.value, ownerId)
         } catch (e: Exception) {
             _errorMessage.value = "Failed to delete session: ${e.message}"
-        } finally {
-            _isOperationInProgress.value = false
         }
     }
 }

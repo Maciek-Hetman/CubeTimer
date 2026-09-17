@@ -113,7 +113,8 @@ class SessionAndStatsFilterStressTest {
             repository = solvesRepository,
             settingsRepository = settingsRepository,
             sessionManager = fakeSessionManager,
-            authManager = fakeAuthManager
+            authManager = fakeAuthManager,
+            defaultDispatcher = testDispatcher
         )
     }
 

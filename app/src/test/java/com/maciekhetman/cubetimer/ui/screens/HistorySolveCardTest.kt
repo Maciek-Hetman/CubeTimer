@@ -6,6 +6,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
@@ -289,7 +290,30 @@ class HistorySolveCardTest {
     }
 
     @Test
-    fun testClickableIndicatorDisplayedAndScrambleRemoved() {
+    fun testSelectionMode_hidesRowActions_andShowsPenaltyLabel() {
+        val solve = createSolve(penalty = Penalty.DNF)
+
+        composeTestRule.setContent {
+            MaterialTheme {
+                HistorySolveCard(
+                    solve = solve,
+                    solveNumber = 7,
+                    onTogglePlusTwo = {},
+                    onToggleDnf = {},
+                    onDelete = {},
+                    isSelectionMode = true
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag("history_action_plus_two").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("history_action_dnf").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("history_action_delete").assertDoesNotExist()
+        composeTestRule.onNodeWithText("DNF").assertIsDisplayed()
+    }
+
+    @Test
+    fun testSolveRowIsClickable_andScrambleRemoved() {
         val solve = createSolve(scramble = "D2 R2 F2 U2 R' B2")
 
         composeTestRule.setContent {
@@ -304,8 +328,8 @@ class HistorySolveCardTest {
             }
         }
 
-        // Verify clickable indicator icon is displayed
-        composeTestRule.onNodeWithContentDescription("View solve details").assertIsDisplayed()
+        // The whole row opens the solve details
+        composeTestRule.onNodeWithText("12.34").assertHasClickAction()
 
         // Verify scramble is not shown on the compact card
         composeTestRule.onNodeWithText("D2 R2 F2 U2 R' B2").assertDoesNotExist()

@@ -10,8 +10,9 @@ import com.maciekhetman.cubetimer.data.local.dao.SyncOutboxDao
 import com.maciekhetman.cubetimer.data.local.entity.ConflictEntity
 import com.maciekhetman.cubetimer.data.local.entity.SessionEntity
 import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
-import com.maciekhetman.cubetimer.data.local.entity.SyncOutboxEntity
-import com.maciekhetman.cubetimer.data.local.mapper.toSyncPayload
+import com.maciekhetman.cubetimer.data.local.mapper.sessionDeleteMutation
+import com.maciekhetman.cubetimer.data.local.mapper.solveDeleteMutation
+import com.maciekhetman.cubetimer.data.local.mapper.toUpsertMutation
 import com.maciekhetman.cubetimer.data.remote.NetworkModule
 import com.maciekhetman.cubetimer.data.remote.dto.SessionSnapshotDto
 import com.maciekhetman.cubetimer.data.remote.dto.SessionSyncPayload
@@ -58,7 +59,7 @@ class ConflictResolverImpl(
         serverPayloadJson: String?,
         errorMessage: String
     ): ConflictEntity = withContext(ioDispatcher) {
-        val nowIso = Instant.now().toString()
+        val nowIso = CubeTypeConverters.nowIso()
         val conflict = ConflictEntity(
             conflictId = UUID.randomUUID().toString(),
             ownerId = ownerId,
@@ -154,7 +155,7 @@ class ConflictResolverImpl(
     }
 
     private suspend fun applyServerWins(conflict: ConflictEntity): Boolean = database.withTransaction {
-        val nowIso = Instant.now().toString()
+        val nowIso = CubeTypeConverters.nowIso()
         val serverUpdated = conflict.serverUpdatedAt ?: nowIso
 
         if (conflict.entityType == "session") {
@@ -234,67 +235,45 @@ class ConflictResolverImpl(
     }
 
     private suspend fun applyLocalWins(conflict: ConflictEntity): Boolean = database.withTransaction {
-        val nowIso = Instant.now().toString()
+        val nowIso = CubeTypeConverters.nowIso()
 
         if (conflict.entityType == "session") {
             val localSession = sessionDao.getSessionById(conflict.entityId)
             if (localSession != null && localSession.deletedAt == null) {
-                val payload = localSession.toSyncPayload()
-                val mutation = SyncOutboxEntity(
-                    id = UUID.randomUUID().toString(),
-                    ownerId = conflict.ownerId,
-                    entityType = "session",
-                    entityId = localSession.id,
-                    action = "upsert",
-                    baseVersion = conflict.serverVersion,
-                    payloadJson = json.encodeToString(SessionSyncPayload.serializer(), payload),
-                    clientTime = nowIso,
-                    status = "pending"
+                // baseVersion targets the server version recorded on the conflict (not the local
+                // row's own version) so the retried push lands against what the server last saw.
+                syncOutboxDao.enqueue(
+                    localSession.copy(version = conflict.serverVersion)
+                        .toUpsertMutation(ownerId = conflict.ownerId, clientTime = nowIso, json = json)
                 )
-                syncOutboxDao.enqueue(mutation)
             } else {
-                val mutation = SyncOutboxEntity(
-                    id = UUID.randomUUID().toString(),
-                    ownerId = conflict.ownerId,
-                    entityType = "session",
-                    entityId = conflict.entityId,
-                    action = "delete",
-                    baseVersion = conflict.serverVersion,
-                    payloadJson = null,
-                    clientTime = nowIso,
-                    status = "pending"
+                syncOutboxDao.enqueue(
+                    sessionDeleteMutation(
+                        entityId = conflict.entityId,
+                        ownerId = conflict.ownerId,
+                        baseVersion = conflict.serverVersion,
+                        clientTime = nowIso
+                    )
                 )
-                syncOutboxDao.enqueue(mutation)
             }
         } else if (conflict.entityType == "solve") {
             val localSolve = solveDao.getSolveById(conflict.entityId)
             if (localSolve != null && localSolve.deletedAt == null) {
-                val payload = localSolve.toSyncPayload()
-                val mutation = SyncOutboxEntity(
-                    id = UUID.randomUUID().toString(),
-                    ownerId = conflict.ownerId,
-                    entityType = "solve",
-                    entityId = localSolve.id,
-                    action = "upsert",
-                    baseVersion = conflict.serverVersion,
-                    payloadJson = json.encodeToString(SolveSyncPayload.serializer(), payload),
-                    clientTime = nowIso,
-                    status = "pending"
+                // baseVersion targets the server version recorded on the conflict (not the local
+                // row's own version) so the retried push lands against what the server last saw.
+                syncOutboxDao.enqueue(
+                    localSolve.copy(version = conflict.serverVersion)
+                        .toUpsertMutation(ownerId = conflict.ownerId, clientTime = nowIso, json = json)
                 )
-                syncOutboxDao.enqueue(mutation)
             } else {
-                val mutation = SyncOutboxEntity(
-                    id = UUID.randomUUID().toString(),
-                    ownerId = conflict.ownerId,
-                    entityType = "solve",
-                    entityId = conflict.entityId,
-                    action = "delete",
-                    baseVersion = conflict.serverVersion,
-                    payloadJson = null,
-                    clientTime = nowIso,
-                    status = "pending"
+                syncOutboxDao.enqueue(
+                    solveDeleteMutation(
+                        entityId = conflict.entityId,
+                        ownerId = conflict.ownerId,
+                        baseVersion = conflict.serverVersion,
+                        clientTime = nowIso
+                    )
                 )
-                syncOutboxDao.enqueue(mutation)
             }
         }
 

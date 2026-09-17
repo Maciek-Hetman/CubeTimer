@@ -4,7 +4,6 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
-import androidx.room.Upsert
 import com.maciekhetman.cubetimer.data.local.entity.SyncMetadataEntity
 import kotlinx.coroutines.flow.Flow
 
@@ -18,21 +17,19 @@ interface SyncMetadataDao {
     fun observeMetadata(ownerId: String): Flow<SyncMetadataEntity?>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsertMetadata(metadata: SyncMetadataEntity): Long
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(metadata: SyncMetadataEntity): Long
 
     @Query("""
-        UPDATE sync_metadata 
-        SET cursor = :cursor, last_sync_time = :lastSyncTime, last_error = NULL 
+        UPDATE sync_metadata
+        SET cursor = :cursor, last_sync_time = :lastSyncTime, last_error = NULL
         WHERE owner_id = :ownerId
     """)
     suspend fun updateCursor(ownerId: String, cursor: Long, lastSyncTime: String): Int
 
+    /** Updates the last successful sync time and clears any sticky [SyncMetadataEntity.lastError]. */
     @Query("""
-        UPDATE sync_metadata 
-        SET last_sync_time = :lastSyncTime 
+        UPDATE sync_metadata
+        SET last_sync_time = :lastSyncTime, last_error = NULL
         WHERE owner_id = :ownerId
     """)
     suspend fun updateLastSyncTime(ownerId: String, lastSyncTime: String): Int

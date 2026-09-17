@@ -15,6 +15,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.maciekhetman.cubetimer.model.SolveTime
+import java.time.Instant
+import java.time.ZoneId
 import java.util.*
 
 private data class ActivityTile(
@@ -35,16 +37,17 @@ fun ActivityTracker(
     val weeks = 12 // Show last 12 weeks
     
     val activityData = remember(solves) {
-        val calendar = Calendar.getInstance()
-        
-        // Group solves by date (ignoring time)
+        val zone = ZoneId.systemDefault()
+
+        // Group solves by date (ignoring time). Using java.time here avoids mutating a single
+        // shared Calendar instance from within the groupBy lambda.
         val solvesByDate = solves.groupBy { solve ->
-            calendar.timeInMillis = solve.timestamp
-            calendar.set(Calendar.HOUR_OF_DAY, 0)
-            calendar.set(Calendar.MINUTE, 0)
-            calendar.set(Calendar.SECOND, 0)
-            calendar.set(Calendar.MILLISECOND, 0)
-            calendar.timeInMillis
+            Instant.ofEpochMilli(solve.timestamp)
+                .atZone(zone)
+                .toLocalDate()
+                .atStartOfDay(zone)
+                .toInstant()
+                .toEpochMilli()
         }
         
         val maxSolves = solvesByDate.values.maxOfOrNull { it.size } ?: 1

@@ -7,6 +7,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import androidx.room.Upsert
+import com.maciekhetman.cubetimer.data.local.dto.SessionWithStats
 import com.maciekhetman.cubetimer.data.local.entity.SessionEntity
 import kotlinx.coroutines.flow.Flow
 
@@ -16,15 +17,38 @@ interface SessionDao {
     // --- Reactive Flow Queries ---
 
     @Query("""
-        SELECT * FROM sessions 
-        WHERE owner_id = :ownerId AND event = :event AND deleted_at IS NULL AND archived = 0 
-        ORDER BY started_at DESC
+        SELECT 
+            sessions.*,
+            COUNT(solves.id) AS solve_count,
+            MIN(CASE 
+                WHEN solves.penalty = 'dnf' THEN NULL 
+                WHEN solves.penalty = 'plus_two' THEN solves.duration_ms + 2000 
+                ELSE solves.duration_ms 
+            END) AS best_duration_ms,
+            CAST(ROUND(AVG(CASE 
+                WHEN solves.penalty = 'dnf' THEN NULL 
+                WHEN solves.penalty = 'plus_two' THEN solves.duration_ms + 2000 
+                ELSE solves.duration_ms 
+            END)) AS INTEGER) AS avg_duration_ms
+        FROM sessions
+        LEFT JOIN solves ON solves.session_id = sessions.id AND solves.deleted_at IS NULL
+        WHERE sessions.owner_id = :ownerId 
+          AND sessions.deleted_at IS NULL
+          AND (:event IS NULL OR sessions.event = :event)
+          AND (:kind IS NULL OR sessions.kind = :kind)
+        GROUP BY sessions.id
+        ORDER BY sessions.started_at DESC
     """)
-    fun observeSessionsByEvent(ownerId: String, event: String): Flow<List<SessionEntity>>
+    fun observeSessionsWithStats(
+        ownerId: String,
+        event: String? = null,
+        kind: String? = null
+    ): Flow<List<SessionWithStats>>
+
 
     @Query("""
-        SELECT * FROM sessions 
-        WHERE owner_id = :ownerId AND event = :event AND deleted_at IS NULL AND archived = 0 
+        SELECT * FROM sessions
+        WHERE owner_id = :ownerId AND event = :event AND deleted_at IS NULL AND archived = 0
         ORDER BY started_at DESC
     """)
     fun observeActiveSessionsByEvent(ownerId: String, event: String): Flow<List<SessionEntity>>
@@ -62,14 +86,6 @@ interface SessionDao {
         LIMIT 1
     """)
     suspend fun getOpenAutomaticSession(ownerId: String, event: String): SessionEntity?
-
-    @Query("""
-        SELECT * FROM sessions 
-        WHERE owner_id = :ownerId AND event = :event AND deleted_at IS NULL AND archived = 0 
-        ORDER BY started_at DESC 
-        LIMIT 1
-    """)
-    suspend fun getActiveSession(ownerId: String, event: String): SessionEntity?
 
     @Query("""
         SELECT * FROM sessions 
@@ -140,9 +156,6 @@ interface SessionDao {
 
     @Query("DELETE FROM sessions WHERE id = :id")
     suspend fun deleteById(id: String): Int
-
-    @Query("DELETE FROM sessions WHERE owner_id = :ownerId")
-    suspend fun deleteSessionsForOwner(ownerId: String): Int
 
     // --- Guest Adoption ---
 

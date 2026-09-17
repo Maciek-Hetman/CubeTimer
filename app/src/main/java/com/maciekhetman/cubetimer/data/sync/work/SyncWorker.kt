@@ -23,7 +23,7 @@ class SyncWorker(
 
         val engine = injectedSyncEngine
             ?: (applicationContext as? CubeTimerApplication)?.syncEngine
-            ?: CubeTimerApplication.getSyncEngineInstance(applicationContext)
+            ?: return Result.failure()
 
         return try {
             val result = engine.sync()

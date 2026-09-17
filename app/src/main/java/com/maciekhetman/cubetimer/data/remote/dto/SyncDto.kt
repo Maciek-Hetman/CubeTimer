@@ -165,23 +165,3 @@ data class SnapshotResponse(
     @SerialName("next_after_id")
     val nextAfterId: String? = null
 )
-
-@Serializable
-data class DeleteStubDto(
-    @SerialName("id")
-    val id: String,
-    @SerialName("version")
-    val version: Long = 0L,
-    @SerialName("deleted_at")
-    val deletedAt: String? = null
-)
-
-@Serializable
-data class ConflictStubDto(
-    @SerialName("id")
-    val id: String,
-    @SerialName("version")
-    val version: Long = 0L,
-    @SerialName("updated_at")
-    val updatedAt: String? = null
-)

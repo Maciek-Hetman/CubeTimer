@@ -230,4 +230,96 @@ Integrity mode: development
 - [ ] Scramble size in `SettingsScreen` is controlled via a slider ranging from 70% to 140% in 5% increments.
 </USER_REQUEST>
 
+## 2026-09-11T16:28:42Z
 
+<USER_REQUEST>
+Requested team: Full team (coordinates across database, domain CSV logic, ViewModel, and Material 3 UI)
+
+Rework the speedcubing History screen to display expandable session groups with granular export/delete, batch multi-selection, CSV import/export, and advanced filtering and sorting for both sessions and solves, following Material 3 Expressive guidelines.
+
+Working directory: /Users/maciek/AndroidStudioProjects/CubeTimer
+Integrity mode: development
+
+## Requirements
+
+### R1. Hierarchical Session-First View & Solve List
+- Display speedcubing sessions as the primary expandable list items, scoped by default to the active puzzle mode with an option to display all puzzles.
+- Session items must display session metadata (name, solve count, date/time, best/average) and include action controls to delete and export that specific session.
+- Deleting a session must delete both the session and its associated solves, accompanied by an explicit confirmation dialog and an undo snackbar.
+- Expanding a session header reveals its solves in compact, descriptive list items displaying solve number, formatted duration, penalty badge (+2/DNF), and solve timestamp.
+- Preserve existing solve interactions: clicking a solve opens the solve detail card, and dedicated controls allow toggling +2, toggling DNF, or deleting a single solve with undo.
+
+### R2. Global Data Management & CSV Import/Export
+- Provide global controls in a TopAppBar overflow menu (`MoreVert` icon) providing:
+  - Export All Solves: exports all solves in current scope to CSV via Android's file picker (`CreateDocument` contract).
+  - Import Solves: opens the system document picker (`OpenDocument` contract) to select and import a CSV file.
+  - Delete All Solves: destructive action requiring an explicit confirmation dialog and offering an undo snackbar.
+- Exporting a session or multi-selected solves must also use the system file picker to save the targeted solves to CSV.
+- CSV format specifications:
+  - Line 1: `# Source: CubeTimer`
+  - Line 2 (Header): `solve_id,session_id,session_name,puzzle,timestamp,time,penalty,scramble`
+  - Data rows: `solve_id` (UUID string), `session_id` (UUID string), `session_name` (string), `puzzle` (event name, e.g. "3x3"), `timestamp` (epoch millis Long), `time` (raw duration in milliseconds Long), `penalty` ("none", "+2", or "dnf"), `scramble` (string).
+- CSV import specifications:
+  - Parse CSV files with header validation and fault tolerance for malformed rows.
+  - Automatically recreate any sessions referenced by `session_id` / `session_name` that do not exist locally.
+  - Deduplicate against existing database records: if a `solve_id` already exists, skip it without corrupting existing data.
+  - Display an import summary snackbar or dialog indicating the number of solves imported and duplicate solves skipped.
+
+### R3. Multi-Select Batch Actions
+- Support long-pressing any solve item to activate contextual multi-selection mode across expanded sessions.
+- In selection mode, replace the top bar with a Material 3 Contextual TopAppBar displaying:
+  - Selection count badge/title.
+  - Select All toggle.
+  - Export Selected action (triggers CSV export for selected items).
+  - Delete Selected action (prompts confirmation, deletes selected solves, and offers undo snackbar).
+  - Dismiss / cancel selection button.
+- Solve items in selection mode show check indicators / checkboxes for rapid toggling.
+
+### R4. Advanced Filtering & Decoupled Sorting System
+- Provide a 'Filter & Sort' entry point opening a unified Material 3 Expressive ModalBottomSheet featuring two distinct tabs: 'Sessions' and 'Solves', complete with active filter count badges and a 'Reset All' button.
+- Session Tab Controls:
+  - Sorting: Most recent (default), Oldest, Name (A-Z / Z-A), Most solves.
+  - Filtering: Active Puzzle mode vs All Puzzles, Session kind (All / Manual / Automatic).
+- Solve Tab Controls:
+  - Sorting: Lowest time (fastest), Highest time (slowest), Most recent, Oldest.
+  - Filtering:
+    - Time range filter: min and max duration bounds (e.g., 15.00s to 25.00s).
+    - Penalty filter: All, Clean only, +2 only, DNF only.
+    - Date range filter: All time, Today, Last 7 days, Last 30 days, or Custom date range.
+- Material 3 Expressive design: tonal surface elevation, smooth expand/collapse animations, expressive rounded shapes, and clear typography hierarchy.
+
+## Acceptance Criteria
+
+### Session Hierarchy & Solve List
+- [ ] Sessions are rendered as expandable cards; tapping expands/collapses the solves list with smooth animation.
+- [ ] Each session card displays its name, solve count, and options to export and delete the session.
+- [ ] Deleting a session prompts a confirmation dialog; confirming removes the session and its solves from the UI and database, and triggers an undo snackbar that restores them on click.
+- [ ] Solves inside an expanded session display solve number, formatted duration, penalty tag, and timestamp.
+- [ ] Clicking a solve opens the solve detail dialog; inline +2, DNF, and delete buttons correctly mutate the solve and its penalty.
+
+### CSV Import and Export
+- [ ] Exporting all solves, a session, or selected solves produces a CSV file matching the required comment `# Source: CubeTimer` and header columns `solve_id,session_id,session_name,puzzle,timestamp,time,penalty,scramble`.
+- [ ] Solves with special characters or commas in scramble strings are properly quoted and escaped according to RFC 4180 CSV rules.
+- [ ] Importing a valid exported CSV creates any missing sessions and inserts all solves with exact durations, penalties, timestamps, and scrambles.
+- [ ] Importing a CSV containing duplicate `solve_id`s skips those duplicates and imports only new solves, reporting the count accurately.
+- [ ] Importing a malformed or corrupted CSV file displays a friendly error snackbar without crashing or writing corrupt records.
+
+### Multi-Selection
+- [ ] Long-pressing a solve enters selection mode and selects that solve.
+- [ ] Contextual top app bar appears showing the number of selected solves.
+- [ ] Tapping other solves in any expanded session toggles their selection state.
+- [ ] Tapping 'Select All' selects all currently visible/filtered solves; tapping again deselects all.
+- [ ] 'Delete Selected' prompts confirmation, deletes all selected solves, and displays an undo snackbar that restores them.
+- [ ] 'Export Selected' prompts the document picker and exports only the selected solves to CSV.
+
+### Filtering and Sorting
+- [ ] Opening the Filter & Sort bottom sheet displays two tabs: 'Sessions' and 'Solves'.
+- [ ] Session sorting correctly reorders sessions by Most Recent, Oldest, Name (A-Z, Z-A), and Solve Count.
+- [ ] Solve sorting correctly orders solves inside sessions by Lowest time, Highest time, Most recent, and Oldest.
+- [ ] Solve duration range filter (e.g., 15s to 25s) excludes solves outside that range.
+- [ ] Solve penalty filter correctly filters for Clean only, +2 only, or DNF only.
+- [ ] Tapping 'Reset' restores default sorting and clears all active filters.
+
+### Automated Verification
+- [ ] `./gradlew testDebugUnitTest` runs cleanly and all new and existing unit tests pass.
+</USER_REQUEST>

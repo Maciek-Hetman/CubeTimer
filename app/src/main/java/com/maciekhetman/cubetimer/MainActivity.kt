@@ -49,6 +49,8 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -80,8 +82,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.maciekhetman.cubetimer.data.SettingsRepository
 import com.maciekhetman.cubetimer.data.sync.SyncStateManager
 import com.maciekhetman.cubetimer.model.AuthState
+import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Session
 import com.maciekhetman.cubetimer.ui.auth.AuthDialog
 import com.maciekhetman.cubetimer.ui.auth.AuthDialogType
@@ -106,8 +110,6 @@ class MainActivity : ComponentActivity() {
     private lateinit var timerViewModel: TimerViewModel
     private lateinit var sessionViewModel: SessionViewModel
     private lateinit var authViewModel: AuthViewModel
-    private lateinit var adminViewModel: AdminViewModel
-    private lateinit var historyViewModel: HistoryViewModel
     private lateinit var syncStateManager: SyncStateManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -123,7 +125,7 @@ class MainActivity : ComponentActivity() {
                         TimerViewModel(
                             application = app,
                             repository = app.solvesRepository,
-                            settingsRepository = com.maciekhetman.cubetimer.data.SettingsRepository(app),
+                            settingsRepository = SettingsRepository(app),
                             sessionManager = app.sessionManager,
                             authManager = app.authManager
                         ) as T
@@ -142,21 +144,6 @@ class MainActivity : ComponentActivity() {
                             authManager = app.authManager
                         ) as T
                     }
-                    modelClass.isAssignableFrom(AdminViewModel::class.java) -> {
-                        AdminViewModel(
-                            application = app,
-                            adminRepository = app.adminRepository
-                        ) as T
-                    }
-                    modelClass.isAssignableFrom(HistoryViewModel::class.java) -> {
-                        HistoryViewModel(
-                            application = app,
-                            repository = app.solvesRepository,
-                            sessionManager = app.sessionManager,
-                            sessionRepository = app.sessionRepository,
-                            authManager = app.authManager
-                        ) as T
-                    }
                     else -> super.create(modelClass)
                 }
             }
@@ -164,8 +151,6 @@ class MainActivity : ComponentActivity() {
         timerViewModel = ViewModelProvider(this, factory)[TimerViewModel::class.java]
         sessionViewModel = ViewModelProvider(this, factory)[SessionViewModel::class.java]
         authViewModel = ViewModelProvider(this, factory)[AuthViewModel::class.java]
-        adminViewModel = ViewModelProvider(this, factory)[AdminViewModel::class.java]
-        historyViewModel = ViewModelProvider(this, factory)[HistoryViewModel::class.java]
         syncStateManager = app.syncStateManager
 
         // Keep screen on while app is open
@@ -184,8 +169,6 @@ class MainActivity : ComponentActivity() {
                         viewModel = timerViewModel,
                         sessionViewModel = sessionViewModel,
                         authViewModel = authViewModel,
-                        adminViewModel = adminViewModel,
-                        historyViewModel = historyViewModel,
                         syncStateManager = syncStateManager
                     )
                 }
@@ -227,8 +210,11 @@ fun CubeTimerApp(
     viewModel: TimerViewModel,
     sessionViewModel: SessionViewModel = viewModel(),
     authViewModel: AuthViewModel = viewModel(),
-    adminViewModel: AdminViewModel = viewModel(),
-    historyViewModel: HistoryViewModel = viewModel(),
+    // HistoryViewModel and AdminViewModel are expensive to create (eager DB queries / network calls), so
+    // they are left null here and only looked up (lazily, via viewModel()) inside the branch of AppContent
+    // that actually shows that destination. Passing an explicit instance (e.g. from a test) still works.
+    adminViewModel: AdminViewModel? = null,
+    historyViewModel: HistoryViewModel? = null,
     syncStateManager: SyncStateManager = (LocalContext.current.applicationContext as? CubeTimerApplication)?.syncStateManager ?: SyncStateManager()
 ) {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.TIMER) }
@@ -257,8 +243,26 @@ fun CubeTimerApp(
     var showDeleteSessionDialog by rememberSaveable { mutableStateOf(false) }
     var sessionToDelete by remember { mutableStateOf<Session?>(null) }
     var showSessionManagementSheet by rememberSaveable { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
 
     ApplyStatusBarColor()
+
+    // TimerViewModel applies the persisted default mode on its own at startup, and it is also the target
+    // of onModeSelected below; keep every other mode-scoped ViewModel (session list/top bar, history)
+    // in sync with it rather than only updating them from the mode picker's click handler.
+    LaunchedEffect(currentMode) {
+        sessionViewModel.setMode(currentMode)
+    }
+
+    // Surface session errors (e.g. "Session name cannot be empty") that were previously swallowed.
+    val sessionErrorMessage by sessionViewModel.errorMessage.collectAsStateWithLifecycle()
+    LaunchedEffect(sessionErrorMessage) {
+        val message = sessionErrorMessage
+        if (message != null) {
+            snackbarHostState.showSnackbar(message)
+            sessionViewModel.clearError()
+        }
+    }
 
     // Predictive back navigation support
     BackHandler(enabled = currentDestination != AppDestinations.TIMER && !isTimerRunning) {
@@ -269,10 +273,8 @@ fun CubeTimerApp(
         }
     }
 
-    val onModeSelected: (com.maciekhetman.cubetimer.model.Mode) -> Unit = { mode ->
+    val onModeSelected: (Mode) -> Unit = { mode ->
         viewModel.setMode(mode)
-        sessionViewModel.setMode(mode)
-        historyViewModel.setMode(mode)
     }
 
     val onAuthClick: () -> Unit = {
@@ -350,8 +352,13 @@ fun CubeTimerApp(
                     )
                 }
                 AppDestinations.HISTORY -> {
+                    // Created lazily on first visit to this destination (heavy: eager DB queries).
+                    val resolvedHistoryViewModel = historyViewModel ?: viewModel()
+                    LaunchedEffect(resolvedHistoryViewModel, currentMode) {
+                        resolvedHistoryViewModel.setMode(currentMode)
+                    }
                     HistoryScreen(
-                        viewModel = historyViewModel,
+                        viewModel = resolvedHistoryViewModel,
                         currentMode = currentMode,
                         onModeSelected = onModeSelected,
                         activeSession = activeSession,
@@ -365,9 +372,6 @@ fun CubeTimerApp(
                         onSyncClick = { showSyncDialog = true },
                         authState = authState,
                         onAuthClick = onAuthClick,
-                        onSolveClick = { solve, solveNumber ->
-                            // Hook for M4 ShareableSolveCardDialog
-                        },
                         hideSessionMenu = hideSessionMenuInTopBar,
                         modifier = contentModifier
                     )
@@ -394,8 +398,10 @@ fun CubeTimerApp(
                     )
                 }
                 AppDestinations.ADMIN -> {
+                    // Created lazily on first visit to this destination (issues network calls on init).
+                    val resolvedAdminViewModel = adminViewModel ?: viewModel()
                     AdminDashboardScreen(
-                        viewModel = adminViewModel,
+                        viewModel = resolvedAdminViewModel,
                         authState = authState,
                         onNavigateBack = { currentDestination = AppDestinations.SETTINGS },
                         modifier = contentModifier
@@ -406,7 +412,8 @@ fun CubeTimerApp(
     }
 
     Scaffold(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier.fillMaxSize(),
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { innerPadding ->
         Box(modifier = Modifier.fillMaxSize()) {
             AppContent(innerPadding)

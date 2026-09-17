@@ -405,7 +405,7 @@ class RoomPersistenceStressTest {
         val observedEmissions = Collections.synchronizedList(mutableListOf<Int>())
 
         val job = launch(Dispatchers.Default) {
-            solveDao.observeSolveCount("flow-user", "3x3").collect { count ->
+            solveDao.observeSolveCountByEvent("flow-user", "3x3").collect { count ->
                 observedEmissions.add(count)
             }
         }
@@ -519,14 +519,17 @@ class RoomPersistenceStressTest {
         assertEquals(com.maciekhetman.cubetimer.model.Mode.PYRAMINX, CubeTypeConverters.toMode("pyraminx"))
 
         // Timestamp converter
+        // Fixed millisecond precision is used (rather than Instant.toString(), which omits the
+        // fractional part when millis == 0) so solved_at strings sort correctly lexicographically.
         val epochIso = CubeTypeConverters.epochMillisToIso(0L)
-        assertEquals("1970-01-01T00:00:00Z", epochIso)
+        assertEquals("1970-01-01T00:00:00.000Z", epochIso)
 
         val parsedZero = CubeTypeConverters.isoToEpochMillis("1970-01-01T00:00:00Z")
         assertEquals(0L, parsedZero)
 
-        // Invalid ISO timestamp fallback
+        // Invalid ISO timestamp fallback: a stable value (0L), not "now" - a corrupted timestamp
+        // must not silently become "now" (which would also drift and re-persist on every save).
         val invalidIso = CubeTypeConverters.isoToEpochMillis("not-a-date")
-        assertTrue("Fallback for invalid ISO string should return a non-negative timestamp", invalidIso >= 0L)
+        assertEquals("Fallback for invalid ISO string should be a stable value, not \"now\"", 0L, invalidIso)
     }
 }

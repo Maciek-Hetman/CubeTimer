@@ -1,6 +1,23 @@
 package com.maciekhetman.cubetimer.ui.screens
 
-import androidx.compose.foundation.clickable
+import android.text.format.DateFormat
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,23 +31,26 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DeleteSweep
-import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.DeleteSweep
+import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.FileUpload
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -47,28 +67,22 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
-import com.maciekhetman.cubetimer.ui.components.SessionFilterBar
-import com.maciekhetman.cubetimer.ui.dialogs.ShareableSolveCardDialog
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.maciekhetman.cubetimer.domain.TimeFormatter
 import com.maciekhetman.cubetimer.model.AuthState
@@ -76,16 +90,28 @@ import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Penalty
 import com.maciekhetman.cubetimer.model.Session
 import com.maciekhetman.cubetimer.model.SolveTime
-import com.maciekhetman.cubetimer.model.StatsFilter
 import com.maciekhetman.cubetimer.model.SyncUiState
 import com.maciekhetman.cubetimer.ui.components.CollapsingTopBar
+import com.maciekhetman.cubetimer.ui.components.GroupInnerCorner
+import com.maciekhetman.cubetimer.ui.components.GroupSegmentGap
+import com.maciekhetman.cubetimer.ui.components.HistoryContextualTopAppBar
+import com.maciekhetman.cubetimer.ui.components.SessionCardActions
+import com.maciekhetman.cubetimer.ui.components.SessionCardEmptyOrLoadingMessage
+import com.maciekhetman.cubetimer.ui.components.SessionCardHeader
+import com.maciekhetman.cubetimer.ui.components.SessionCardSolveRow
+import com.maciekhetman.cubetimer.ui.dialogs.HistoryFilterSortBottomSheet
+import com.maciekhetman.cubetimer.ui.dialogs.ShareableSolveCardDialog
 import com.maciekhetman.cubetimer.viewmodel.HistoryUiEffect
 import com.maciekhetman.cubetimer.viewmodel.HistoryViewModel
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+/** Export target of an in-flight CreateDocument request, saveable across configuration changes. */
+private const val EXPORT_ALL = "all"
+private const val EXPORT_SELECTED = "selected"
+private const val EXPORT_SESSION_PREFIX = "session:"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -111,56 +137,66 @@ fun HistoryScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
     val snackbarHostState = remember { SnackbarHostState() }
-    val coroutineScope = rememberCoroutineScope()
-    val haptic = LocalHapticFeedback.current
+    val context = LocalContext.current
 
-    var showClearConfirmDialog by rememberSaveable { mutableStateOf(false) }
+    var sessionIdToDelete by rememberSaveable { mutableStateOf<String?>(null) }
+    var showDeleteSelectedDialog by rememberSaveable { mutableStateOf(false) }
+    var showDeleteAllDialog by rememberSaveable { mutableStateOf(false) }
+    var showOverflowMenu by remember { mutableStateOf(false) }
+    var pendingExport by rememberSaveable { mutableStateOf<String?>(null) }
 
-    val listState = rememberLazyListState()
-
-    // 60fps Infinite Scroll Threshold Detection using derivedStateOf
-    val shouldLoadMore by remember {
-        derivedStateOf {
-            if (!uiState.hasMore || uiState.isLoadingMore || uiState.isLoading) {
-                false
-            } else {
-                val layoutInfo = listState.layoutInfo
-                val totalItems = layoutInfo.totalItemsCount
-                if (totalItems == 0) false
-                else {
-                    val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-                    lastVisibleIndex >= totalItems - 10
-                }
+    val createDocumentLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri ->
+        val target = pendingExport
+        pendingExport = null
+        if (uri == null || target == null) return@rememberLauncherForActivityResult
+        when {
+            target == EXPORT_ALL -> viewModel.exportAllSolves(context, uri)
+            target == EXPORT_SELECTED -> viewModel.exportSelectedSolves(context, uri)
+            target.startsWith(EXPORT_SESSION_PREFIX) -> {
+                val sessionId = target.removePrefix(EXPORT_SESSION_PREFIX)
+                uiState.sessionGroups.firstOrNull { it.session.id == sessionId }
+                    ?.let { viewModel.exportSession(context, it.session, uri) }
             }
         }
     }
-
-    LaunchedEffect(shouldLoadMore) {
-        if (shouldLoadMore) {
-            viewModel.loadNextPage()
-        }
+    fun launchExport(target: String, fileName: String) {
+        pendingExport = target
+        createDocumentLauncher.launch(fileName)
     }
 
-    // Observe one-shot effects from ViewModel
-    LaunchedEffect(Unit) {
+    val openDocumentLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) viewModel.importSolvesFromUri(context, uri)
+    }
+
+    BackHandler(enabled = uiState.isSelectionMode) {
+        viewModel.clearSelection()
+    }
+
+    LaunchedEffect(viewModel) {
         viewModel.effects.collectLatest { effect ->
+            suspend fun showUndo(message: String, onUndo: () -> Unit) {
+                val result = snackbarHostState.showSnackbar(
+                    message = message,
+                    actionLabel = "Undo",
+                    duration = SnackbarDuration.Short
+                )
+                if (result == SnackbarResult.ActionPerformed) onUndo()
+            }
             when (effect) {
-                is HistoryUiEffect.ShowUndoSnackbar -> {
-                    val result = snackbarHostState.showSnackbar(
-                        message = effect.message,
-                        actionLabel = "Undo",
-                        duration = SnackbarDuration.Short
-                    )
-                    if (result == SnackbarResult.ActionPerformed) {
-                        viewModel.restoreSolve(effect.solve)
-                    }
-                }
-                is HistoryUiEffect.ShowMessage -> {
-                    snackbarHostState.showSnackbar(
-                        message = effect.message,
-                        duration = SnackbarDuration.Short
-                    )
-                }
+                is HistoryUiEffect.ShowUndoSnackbar ->
+                    showUndo(effect.message) { viewModel.restoreSolve(effect.solve) }
+                is HistoryUiEffect.ShowUndoSessionDelete ->
+                    showUndo("Deleted \"${effect.sessionName}\"") { viewModel.restoreSession(effect.snapshot) }
+                is HistoryUiEffect.ShowUndoBatchDelete ->
+                    showUndo(effect.message) { viewModel.undoDeleteBatch(effect.deletedSolves) }
+                is HistoryUiEffect.ShowUndoClearAll ->
+                    showUndo(effect.message) { viewModel.undoDeleteAllSolves(effect.deletedSolves) }
+                is HistoryUiEffect.ShowMessage ->
+                    snackbarHostState.showSnackbar(effect.message, duration = SnackbarDuration.Short)
             }
         }
     }
@@ -172,183 +208,209 @@ fun HistoryScreen(
         snackbarHost = {
             SnackbarHost(
                 hostState = snackbarHostState,
+                // Lift above the floating navbar
                 modifier = Modifier
                     .navigationBarsPadding()
-                    .padding(bottom = 80.dp) // Lift above floating navbar
+                    .padding(bottom = 80.dp)
             )
         },
         topBar = {
-            CollapsingTopBar(
-                title = "History",
-                currentMode = currentMode,
-                onModeSelected = onModeSelected,
-                scrollBehavior = scrollBehavior,
-                activeSession = activeSession,
-                isAutomaticMode = isAutomaticMode,
-                onSwitchToAutomatic = onSwitchToAutomatic,
-                sessions = sessions,
-                onSessionSelected = onSessionSelected,
-                onCreateSessionClick = onCreateSessionClick,
-                onManageSessionsClick = onManageSessionsClick,
-                syncUiState = syncUiState,
-                onSyncClick = onSyncClick,
-                authState = authState,
-                onAuthClick = onAuthClick,
-                titleBadgeText = if (uiState.totalCount > 0) "${uiState.totalCount}" else null,
-                hideSessionMenu = hideSessionMenu,
-                extraActions = {
-                    IconButton(
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            showClearConfirmDialog = true
+            AnimatedContent(
+                targetState = uiState.isSelectionMode,
+                transitionSpec = { fadeIn() togetherWith fadeOut() },
+                label = "history_top_bar"
+            ) { selectionMode ->
+                if (selectionMode) {
+                    val visibleSolveIds = uiState.sessionGroups
+                        .filter { it.isExpanded }
+                        .flatMap { group -> group.solves.map { it.id } }
+                    HistoryContextualTopAppBar(
+                        selectedCount = uiState.selectedSolveIds.size,
+                        isAllSelected = visibleSolveIds.isNotEmpty() &&
+                            uiState.selectedSolveIds.containsAll(visibleSolveIds),
+                        onDismiss = viewModel::clearSelection,
+                        onSelectAllToggle = viewModel::selectAllSolves,
+                        onExportSelected = {
+                            launchExport(EXPORT_SELECTED, "cubetimer_selected_${System.currentTimeMillis()}.csv")
                         },
-                        enabled = uiState.solves.isNotEmpty()
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.DeleteSweep,
-                            contentDescription = "Clear History",
-                            tint = if (uiState.solves.isNotEmpty()) {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                        onDeleteSelected = { showDeleteSelectedDialog = true }
+                    )
+                } else {
+                    CollapsingTopBar(
+                        title = "History",
+                        currentMode = currentMode,
+                        onModeSelected = onModeSelected,
+                        scrollBehavior = scrollBehavior,
+                        activeSession = activeSession,
+                        isAutomaticMode = isAutomaticMode,
+                        onSwitchToAutomatic = onSwitchToAutomatic,
+                        sessions = sessions,
+                        onSessionSelected = onSessionSelected,
+                        onCreateSessionClick = onCreateSessionClick,
+                        onManageSessionsClick = onManageSessionsClick,
+                        syncUiState = syncUiState,
+                        onSyncClick = onSyncClick,
+                        authState = authState,
+                        onAuthClick = onAuthClick,
+                        hideSessionMenu = hideSessionMenu,
+                        extraActions = {
+                            IconButton(onClick = { viewModel.openFilterSheet() }) {
+                                BadgedBox(
+                                    badge = {
+                                        if (uiState.totalActiveFilterCount > 0) {
+                                            Badge { Text("${uiState.totalActiveFilterCount}") }
+                                        }
+                                    }
+                                ) {
+                                    Icon(Icons.Default.FilterList, contentDescription = "Filter & Sort")
+                                }
                             }
-                        )
-                    }
+                            Box {
+                                IconButton(onClick = { showOverflowMenu = true }) {
+                                    Icon(Icons.Default.MoreVert, contentDescription = "More options")
+                                }
+                                DropdownMenu(
+                                    expanded = showOverflowMenu,
+                                    onDismissRequest = { showOverflowMenu = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Export all solves") },
+                                        leadingIcon = { Icon(Icons.Outlined.FileDownload, contentDescription = null) },
+                                        onClick = {
+                                            showOverflowMenu = false
+                                            launchExport(EXPORT_ALL, "cubetimer_all_solves_${System.currentTimeMillis()}.csv")
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Import solves") },
+                                        leadingIcon = { Icon(Icons.Outlined.FileUpload, contentDescription = null) },
+                                        onClick = {
+                                            showOverflowMenu = false
+                                            openDocumentLauncher.launch(
+                                                arrayOf("text/csv", "text/comma-separated-values", "application/csv", "text/*", "*/*")
+                                            )
+                                        }
+                                    )
+                                    HorizontalDivider()
+                                    DropdownMenuItem(
+                                        text = { Text("Delete all solves", color = MaterialTheme.colorScheme.error) },
+                                        leadingIcon = {
+                                            Icon(
+                                                Icons.Outlined.DeleteSweep,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.error
+                                            )
+                                        },
+                                        onClick = {
+                                            showOverflowMenu = false
+                                            showDeleteAllDialog = true
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    )
                 }
-            )
+            }
         }
     ) { paddingValues ->
-        val topPadding = paddingValues.calculateTopPadding()
-        val bottomPadding = paddingValues.calculateBottomPadding()
+        // 104dp keeps the last item clear of the floating bottom navbar.
+        val bottomInset = paddingValues.calculateBottomPadding() + 104.dp
+        val contentModifier = Modifier
+            .fillMaxSize()
+            .padding(top = paddingValues.calculateTopPadding())
 
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = topPadding)
-        ) {
-            if (uiState.isLoading && uiState.solves.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(48.dp),
-                        strokeWidth = 3.dp
-                    )
-                }
-            } else if (!uiState.isLoading && uiState.solves.isEmpty()) {
-                // Empty state with session filter still accessible
-                Column(modifier = Modifier.fillMaxSize()) {
-                    SessionFilterBar(
-                        currentFilter = uiState.currentFilter,
-                        onFilterSelected = { filter -> viewModel.setFilter(filter) },
-                        activeSession = activeSession,
-                        activeSessionSolvesCount = uiState.activeSessionCount,
-                        allSolvesCount = uiState.allSolvesCount,
-                        sessions = sessions
-                    )
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(bottom = bottomPadding + 104.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center,
-                            modifier = Modifier.padding(horizontal = 32.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.History,
-                                contentDescription = null,
-                                modifier = Modifier.size(64.dp),
-                                tint = MaterialTheme.colorScheme.outlineVariant
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                text = "No solves yet",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "Complete solves on the Timer screen to build your session history.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                    }
-                }
-            } else {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        start = 16.dp,
-                        top = 8.dp,
-                        end = 16.dp,
-                        bottom = bottomPadding + 104.dp // 104dp accounts for floating bottom navbar
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    // Session filter chips bar
-                    item(key = "session_filter_bar") {
-                        SessionFilterBar(
-                            currentFilter = uiState.currentFilter,
-                            onFilterSelected = { filter -> viewModel.setFilter(filter) },
-                            activeSession = activeSession,
-                            activeSessionSolvesCount = uiState.activeSessionCount,
-                            allSolvesCount = uiState.allSolvesCount,
-                            sessions = sessions
+        when {
+            uiState.isLoading && uiState.sessionGroups.isEmpty() -> Box(
+                modifier = contentModifier,
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
+
+            uiState.sessionGroups.isEmpty() -> HistoryEmptyState(
+                hasActiveFilters = uiState.totalActiveFilterCount > 0,
+                onResetFilters = viewModel::resetAllFilters,
+                modifier = contentModifier.padding(bottom = bottomInset)
+            )
+
+            else -> LazyColumn(
+                modifier = contentModifier,
+                contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = bottomInset),
+                // Small gap within a session's own segments; the larger 16dp gap between sessions
+                // is applied as extra top padding on each header below (see headerTopPadding).
+                verticalArrangement = Arrangement.spacedBy(GroupSegmentGap)
+            ) {
+                uiState.sessionGroups.forEachIndexed { groupIndex, group ->
+                    val headerTopPadding = if (groupIndex == 0) 0.dp else (16.dp - GroupSegmentGap)
+
+                    // Emitting the header, each visible solve row, and the footer as separate
+                    // LazyColumn items (instead of one item per session rendering every solve via
+                    // forEachIndexed) keeps large expanded sessions from composing hundreds of
+                    // off-screen rows at once.
+                    item(key = "${group.session.id}_header") {
+                        SessionCardHeader(
+                            sessionGroup = group,
+                            expanded = group.isExpanded,
+                            onClick = { viewModel.toggleSessionExpanded(group.session.id) },
+                            modifier = Modifier
+                                .animateItem()
+                                .padding(top = headerTopPadding)
                         )
                     }
 
-                    // Keyed solve card items for 60fps smooth scrolling & animations
-                    items(
-                        items = uiState.solves,
-                        key = { it.id }
-                    ) { solve ->
-                        val solveIndex = uiState.solves.indexOf(solve)
-                        val solveNumber = (uiState.totalCount - solveIndex).coerceAtLeast(1)
-
-                        HistorySolveCard(
-                            solve = solve,
-                            solveNumber = solveNumber,
-                            onClick = {
-                                viewModel.selectSolveForDetail(solve)
-                                onSolveClick(solve, solveNumber)
-                            },
-                            onDelete = {
-                                viewModel.deleteSolve(solve)
-                            },
-                            onTogglePlusTwo = {
-                                val newPenalty = if (solve.penalty == Penalty.PLUS_TWO) Penalty.NONE else Penalty.PLUS_TWO
-                                viewModel.updateSolvePenalty(solve, newPenalty)
-                            },
-                            onToggleDnf = {
-                                val newPenalty = if (solve.penalty == Penalty.DNF) Penalty.NONE else Penalty.DNF
-                                viewModel.updateSolvePenalty(solve, newPenalty)
-                            },
-                            onHaptic = { haptic.performHapticFeedback(HapticFeedbackType.LongPress) }
-                        )
-                    }
-
-                    // Infinite scroll loading spinner item
-                    if (uiState.isLoadingMore) {
-                        item(key = "loading_more_footer") {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 16.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(24.dp),
-                                    strokeWidth = 2.dp
+                    if (group.isExpanded) {
+                        if (group.solves.isEmpty()) {
+                            item(key = "${group.session.id}_empty") {
+                                SessionCardEmptyOrLoadingMessage(
+                                    sessionGroup = group,
+                                    modifier = Modifier.animateItem()
                                 )
                             }
+                        } else {
+                            itemsIndexed(
+                                items = group.solves,
+                                key = { _, solve -> "${group.session.id}_solve_${solve.id}" }
+                            ) { index, solve ->
+                                SessionCardSolveRow(
+                                    sessionGroup = group,
+                                    solve = solve,
+                                    index = index,
+                                    isSelectionMode = uiState.isSelectionMode,
+                                    selectedSolveIds = uiState.selectedSolveIds,
+                                    onSolveClick = { s, solveNumber ->
+                                        viewModel.selectSolveForDetail(s, solveNumber)
+                                        onSolveClick(s, solveNumber)
+                                    },
+                                    onSolveLongClick = { s -> viewModel.startSelection(s.id) },
+                                    onToggleSolveSelection = viewModel::toggleSolveSelection,
+                                    onTogglePlusTwo = { s ->
+                                        viewModel.updateSolvePenalty(
+                                            s,
+                                            if (s.penalty == Penalty.PLUS_TWO) Penalty.NONE else Penalty.PLUS_TWO
+                                        )
+                                    },
+                                    onToggleDnf = { s ->
+                                        viewModel.updateSolvePenalty(
+                                            s,
+                                            if (s.penalty == Penalty.DNF) Penalty.NONE else Penalty.DNF
+                                        )
+                                    },
+                                    onDeleteSolve = viewModel::deleteSolve,
+                                    modifier = Modifier.animateItem()
+                                )
+                            }
+                        }
+
+                        item(key = "${group.session.id}_actions") {
+                            SessionCardActions(
+                                onExport = {
+                                    val fileName = group.session.name.replace(Regex("[^a-zA-Z0-9_\\-]"), "_")
+                                    launchExport(EXPORT_SESSION_PREFIX + group.session.id, "cubetimer_session_$fileName.csv")
+                                },
+                                onDelete = { sessionIdToDelete = group.session.id },
+                                modifier = Modifier.animateItem()
+                            )
                         }
                     }
                 }
@@ -356,66 +418,147 @@ fun HistoryScreen(
         }
     }
 
-    // Confirmation dialog for clearing session history
-    if (showClearConfirmDialog) {
-        val countToClear = uiState.solves.size
-        AlertDialog(
-            onDismissRequest = { showClearConfirmDialog = false },
-            title = {
-                Text(
-                    text = "Clear History?",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            text = {
-                Text(
-                    text = "Are you sure you want to clear all $countToClear solves in this session? You can undo this action immediately after clearing.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showClearConfirmDialog = false
-                        viewModel.clearCurrentFilterHistory()
-                        coroutineScope.launch {
-                            val result = snackbarHostState.showSnackbar(
-                                message = "Cleared $countToClear solves",
-                                actionLabel = "Undo",
-                                duration = SnackbarDuration.Short
-                            )
-                            if (result == SnackbarResult.ActionPerformed) {
-                                viewModel.undoClearHistory()
-                            }
-                        }
-                    },
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
-                    )
-                ) {
-                    Text("Clear All", fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showClearConfirmDialog = false }) {
-                    Text("Cancel")
-                }
-            },
-            shape = RoundedCornerShape(24.dp),
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+    uiState.sessionGroups.firstOrNull { it.session.id == sessionIdToDelete }?.let { group ->
+        ConfirmDeleteDialog(
+            title = "Delete session?",
+            message = "\"${group.session.name}\" and all of its solves will be deleted.",
+            onConfirm = { viewModel.deleteSession(group.session) },
+            onDismiss = { sessionIdToDelete = null }
         )
     }
 
-    // Shareable Solve Card Modal Dialog (M4)
+    if (showDeleteSelectedDialog) {
+        val count = uiState.selectedSolveIds.size
+        ConfirmDeleteDialog(
+            title = "Delete $count ${if (count == 1) "solve" else "solves"}?",
+            message = "The selected solves will be deleted.",
+            onConfirm = viewModel::deleteSelectedSolves,
+            onDismiss = { showDeleteSelectedDialog = false }
+        )
+    }
+
+    if (showDeleteAllDialog) {
+        ConfirmDeleteDialog(
+            title = "Delete all solves?",
+            message = "Every solve in the current puzzle scope will be deleted.",
+            confirmLabel = "Delete all",
+            onConfirm = viewModel::deleteAllSolves,
+            onDismiss = { showDeleteAllDialog = false }
+        )
+    }
+
+    if (uiState.isFilterSheetOpen) {
+        HistoryFilterSortBottomSheet(
+            uiState = uiState,
+            onDismissRequest = viewModel::closeFilterSheet,
+            onSelectTab = viewModel::setActiveFilterSheetTab,
+            onSessionSortChange = viewModel::setSessionSort,
+            onPuzzleScopeChange = viewModel::setPuzzleScope,
+            onSessionKindFilterChange = viewModel::setSessionKindFilter,
+            onSolveSortChange = viewModel::setSolveSort,
+            onPenaltyFilterChange = viewModel::setPenaltyFilter,
+            onTimeRangeFilterChange = { viewModel.setTimeRangeFilter(it) },
+            onDateRangeFilterChange = { viewModel.setDateRangeFilter(it) },
+            onResetAll = viewModel::resetAllFilters
+        )
+    }
+
     uiState.selectedSolve?.let { detail ->
         ShareableSolveCardDialog(
             detail = detail,
-            onDismiss = { viewModel.dismissSolveDetail() }
+            onDismiss = viewModel::dismissSolveDetail
         )
     }
 }
 
+@Composable
+private fun HistoryEmptyState(
+    hasActiveFilters: Boolean,
+    onResetFilters: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.padding(horizontal = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.History,
+                contentDescription = null,
+                modifier = Modifier
+                    .padding(20.dp)
+                    .size(40.dp)
+            )
+        }
+        Spacer(modifier = Modifier.height(20.dp))
+        Text(
+            text = if (hasActiveFilters) "No matching sessions" else "No solves yet",
+            style = MaterialTheme.typography.titleLarge,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = if (hasActiveFilters) {
+                "Try adjusting or resetting your filters."
+            } else {
+                "Your sessions and solves will show up here."
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+        if (hasActiveFilters) {
+            Spacer(modifier = Modifier.height(20.dp))
+            FilledTonalButton(onClick = onResetFilters) {
+                Text("Reset filters")
+            }
+        }
+    }
+}
+
+@Composable
+private fun ConfirmDeleteDialog(
+    title: String,
+    message: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    confirmLabel: String = "Delete"
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Outlined.Delete, contentDescription = null) },
+        title = { Text(title, textAlign = TextAlign.Center) },
+        text = { Text("$message You can undo this right after.") },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onConfirm()
+                    onDismiss()
+                },
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+            ) {
+                Text(confirmLabel)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+/**
+ * A single solve row inside an expanded session group.
+ *
+ * Shows the time and "#number · date"; +2 / DNF toggles and delete sit on the right and are
+ * swapped for a checkbox (and a read-only penalty label) while multi-selection is active.
+ * Test tags: "history_action_plus_two", "history_action_dnf", "history_action_delete".
+ */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun HistorySolveCard(
     solve: SolveTime,
@@ -424,48 +567,54 @@ internal fun HistorySolveCard(
     onDelete: () -> Unit,
     onTogglePlusTwo: () -> Unit,
     onToggleDnf: () -> Unit,
-    onHaptic: () -> Unit = {},
+    isSelected: Boolean = false,
+    isSelectionMode: Boolean = false,
+    onLongClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    // Selected rows round out, a small shape morph on top of the color change.
+    val corner by animateDpAsState(
+        targetValue = if (isSelected) 20.dp else GroupInnerCorner,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "solve_row_corner"
+    )
+    val containerColor by animateColorAsState(
+        targetValue = if (isSelected) {
+            MaterialTheme.colorScheme.secondaryContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceContainer
+        },
+        label = "solve_row_color"
+    )
+    val shape = RoundedCornerShape(corner)
+
     Surface(
+        shape = shape,
+        color = containerColor,
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        tonalElevation = 0.dp
+            .clip(shape)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = if (isSelectionMode) null else onLongClick
+            )
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, top = 14.dp, end = 14.dp, bottom = 12.dp)
+        Row(
+            modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Header: Solve number and timestamp on the right
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            AnimatedVisibility(
+                visible = isSelectionMode,
+                enter = fadeIn() + expandHorizontally(),
+                exit = fadeOut() + shrinkHorizontally()
             ) {
-                Text(
-                    text = "Solve #$solveNumber",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = formatTimestamp(solve.timestamp),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Checkbox(checked = isSelected, onCheckedChange = { onClick() })
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // Primary row: Duration and penalty badge on the left, clickable indicator on the right
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(vertical = 4.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -475,130 +624,113 @@ internal fun HistorySolveCard(
                         text = TimeFormatter.formatTime(solve.displayTime),
                         style = MaterialTheme.typography.titleLarge,
                         fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Bold,
-                        color = when (solve.penalty) {
-                            Penalty.DNF -> MaterialTheme.colorScheme.error
-                            Penalty.PLUS_TWO -> MaterialTheme.colorScheme.tertiary
-                            Penalty.NONE -> MaterialTheme.colorScheme.onSurface
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (solve.penalty == Penalty.DNF) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
                         }
                     )
-
-                    if (solve.penalty != Penalty.NONE) {
-                        Surface(
-                            color = when (solve.penalty) {
-                                Penalty.DNF -> MaterialTheme.colorScheme.errorContainer
-                                Penalty.PLUS_TWO -> MaterialTheme.colorScheme.tertiaryContainer
-                                else -> Color.Transparent
-                            },
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text(
-                                text = when (solve.penalty) {
-                                    Penalty.DNF -> "DNF"
-                                    Penalty.PLUS_TWO -> "+2"
-                                    else -> ""
-                                },
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                                color = when (solve.penalty) {
-                                    Penalty.DNF -> MaterialTheme.colorScheme.onErrorContainer
-                                    Penalty.PLUS_TWO -> MaterialTheme.colorScheme.onTertiaryContainer
-                                    else -> Color.Unspecified
-                                }
-                            )
-                        }
+                    if (isSelectionMode && solve.penalty != Penalty.NONE) {
+                        Text(
+                            text = if (solve.penalty == Penalty.DNF) "DNF" else "+2",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = if (solve.penalty == Penalty.DNF) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.tertiary
+                            }
+                        )
                     }
                 }
-
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = "View solve details",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                    modifier = Modifier.size(20.dp)
+                Text(
+                    text = "#$solveNumber · ${formatTimestamp(solve.timestamp)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Dedicated Action Row: +2 and DNF chips, and Delete icon button
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            AnimatedVisibility(
+                visible = !isSelectionMode,
+                enter = fadeIn() + expandHorizontally(),
+                exit = fadeOut() + shrinkHorizontally()
             ) {
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    FilterChip(
+                    PenaltyToggle(
+                        label = "+2",
                         selected = solve.penalty == Penalty.PLUS_TWO,
-                        onClick = {
-                            onHaptic()
-                            onTogglePlusTwo()
-                        },
-                        label = {
-                            Text(
-                                text = "+2",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                        },
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.testTag("history_action_plus_two"),
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
-                        )
+                        onClick = onTogglePlusTwo,
+                        selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                        selectedContentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                        modifier = Modifier.testTag("history_action_plus_two")
                     )
-
-                    FilterChip(
+                    PenaltyToggle(
+                        label = "DNF",
                         selected = solve.penalty == Penalty.DNF,
-                        onClick = {
-                            onHaptic()
-                            onToggleDnf()
-                        },
-                        label = {
-                            Text(
-                                text = "DNF",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                        },
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.testTag("history_action_dnf"),
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.errorContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.onErrorContainer
+                        onClick = onToggleDnf,
+                        selectedContainerColor = MaterialTheme.colorScheme.errorContainer,
+                        selectedContentColor = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.testTag("history_action_dnf")
+                    )
+                    IconButton(
+                        onClick = onDelete,
+                        modifier = Modifier.testTag("history_action_delete")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Delete,
+                            contentDescription = "Delete",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    )
-                }
-
-                IconButton(
-                    onClick = {
-                        onHaptic()
-                        onDelete()
-                    },
-                    modifier = Modifier
-                        .size(32.dp)
-                        .testTag("history_action_delete")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "Delete",
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(18.dp)
-                    )
+                    }
                 }
             }
         }
     }
 }
 
-private val timestampFormat by lazy {
-    SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
+/** Pill toggle that squares off when selected. */
+@Composable
+private fun PenaltyToggle(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    selectedContainerColor: Color,
+    selectedContentColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val corner by animateDpAsState(
+        targetValue = if (selected) 10.dp else 18.dp,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "penalty_toggle_corner"
+    )
+    val containerColor by animateColorAsState(
+        targetValue = if (selected) selectedContainerColor else Color.Transparent,
+        label = "penalty_toggle_color"
+    )
+
+    Surface(
+        selected = selected,
+        onClick = onClick,
+        shape = RoundedCornerShape(corner),
+        color = containerColor,
+        contentColor = if (selected) selectedContentColor else MaterialTheme.colorScheme.onSurfaceVariant,
+        border = if (selected) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = modifier
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+        )
+    }
 }
 
-private fun formatTimestamp(timestamp: Long): String {
-    return timestampFormat.format(Date(timestamp))
+private val timestampFormat by lazy {
+    val locale = Locale.getDefault()
+    SimpleDateFormat(DateFormat.getBestDateTimePattern(locale, "yMMMdjm"), locale)
 }
+
+private fun formatTimestamp(timestamp: Long): String = timestampFormat.format(Date(timestamp))

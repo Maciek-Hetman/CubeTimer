@@ -409,7 +409,7 @@ class SyncEngineStressTest {
         }
 
         // Set initial stale cursor
-        syncMetadataDao.upsertMetadata(
+        syncMetadataDao.upsert(
             com.maciekhetman.cubetimer.data.local.entity.SyncMetadataEntity(
                 ownerId = testUserId,
                 cursor = 100L,

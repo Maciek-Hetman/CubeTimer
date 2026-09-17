@@ -4,6 +4,8 @@ import androidx.room.TypeConverter
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Penalty
 import java.time.Instant
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 
 class CubeTypeConverters {
@@ -76,25 +78,49 @@ class CubeTypeConverters {
     }
 
     companion object {
+        /** Duration added to a solve's raw time when it carries a "+2" penalty. */
+        const val PLUS_TWO_PENALTY_MS: Long = 2000L
+
+        // Single shared instance backing the static helpers below so they don't allocate a new
+        // CubeTypeConverters() on every call (these are invoked per-row from the mappers).
+        private val instance = CubeTypeConverters()
+
+        private val ISO_MILLIS_FORMATTER: DateTimeFormatter =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC)
+
+        /**
+         * Fixed millisecond-precision ISO-8601 UTC string (e.g. "2026-08-30T10:00:00.000Z").
+         * Instant.toString() omits the fractional part when millis == 0, which breaks
+         * lexicographic ordering of `solved_at` strings used by `ORDER BY solved_at` and
+         * `solved_at < :solvedAt` queries; this always emits ".SSS".
+         */
         fun epochMillisToIso(epochMillis: Long): String {
-            return Instant.ofEpochMilli(epochMillis).toString()
+            return ISO_MILLIS_FORMATTER.format(Instant.ofEpochMilli(epochMillis))
         }
 
+        /**
+         * Parses an ISO-8601 timestamp to epoch millis. Returns 0L (rather than "now") for a
+         * blank or unparsable string so a corrupted timestamp doesn't silently become "now" on
+         * every read (which would also re-persist a drifting value on next save).
+         */
+        /** Current time as a fixed millisecond-precision ISO-8601 UTC string. */
+        fun nowIso(): String = epochMillisToIso(System.currentTimeMillis())
+
         fun isoToEpochMillis(isoString: String?): Long {
-            if (isoString.isNullOrBlank()) return System.currentTimeMillis()
+            if (isoString.isNullOrBlank()) return 0L
             return try {
                 Instant.parse(isoString).toEpochMilli()
             } catch (e: Exception) {
-                System.currentTimeMillis()
+                0L
             }
         }
 
         // Static helpers for non-Room callers
-        fun fromMode(mode: Mode?): String = CubeTypeConverters().fromMode(mode)
-        fun toMode(value: String?): Mode = CubeTypeConverters().toMode(value)
-        fun fromPenalty(penalty: Penalty?): String = CubeTypeConverters().fromPenalty(penalty)
-        fun toPenalty(value: String?): Penalty = CubeTypeConverters().toPenalty(value)
-        fun instantToString(instant: Instant?): String? = CubeTypeConverters().instantToString(instant)
-        fun stringToInstant(value: String?): Instant? = CubeTypeConverters().stringToInstant(value)
+        fun fromMode(mode: Mode?): String = instance.fromMode(mode)
+        fun toMode(value: String?): Mode = instance.toMode(value)
+        fun fromPenalty(penalty: Penalty?): String = instance.fromPenalty(penalty)
+        fun toPenalty(value: String?): Penalty = instance.toPenalty(value)
+        fun instantToString(instant: Instant?): String? = instance.instantToString(instant)
+        fun stringToInstant(value: String?): Instant? = instance.stringToInstant(value)
     }
 }

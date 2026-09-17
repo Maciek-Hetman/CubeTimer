@@ -62,14 +62,6 @@ data class SolveEntity(
     val deletedAt: String? = null
 )
 
-val SolveEntity.displayDurationMs: Long
-    get() = when (penalty) {
-        "none" -> durationMs
-        "plus_two" -> durationMs + 2000L
-        "dnf" -> durationMs
-        else -> durationMs
-    }
-
 val SolveEntity.isDnf: Boolean
     get() = penalty == "dnf"
 

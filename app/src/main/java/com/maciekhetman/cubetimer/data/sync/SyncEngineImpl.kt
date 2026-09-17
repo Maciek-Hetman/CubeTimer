@@ -1,5 +1,6 @@
 package com.maciekhetman.cubetimer.data.sync
 
+import com.maciekhetman.cubetimer.data.local.converter.CubeTypeConverters
 import androidx.room.withTransaction
 import com.maciekhetman.cubetimer.data.auth.AuthManager
 import com.maciekhetman.cubetimer.data.auth.TokenStorage
@@ -12,6 +13,7 @@ import com.maciekhetman.cubetimer.data.local.dao.SyncOutboxDao
 import com.maciekhetman.cubetimer.data.local.entity.ConflictEntity
 import com.maciekhetman.cubetimer.data.local.entity.SessionEntity
 import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
+import com.maciekhetman.cubetimer.data.local.entity.SyncMetadataEntity
 import com.maciekhetman.cubetimer.data.local.entity.SyncOutboxEntity
 import com.maciekhetman.cubetimer.data.remote.CubeSyncApiClient
 import com.maciekhetman.cubetimer.data.remote.NetworkModule
@@ -80,6 +82,13 @@ class SyncEngineImpl(
         val resolvedOwnerId = ownerId ?: (currentAuth as? AuthState.Authenticated)?.user?.id
             ?: (currentAuth as? AuthState.Admin)?.user?.id
 
+        // Ordering is intentional: a "guest" (or missing) resolved owner is always a silent NoOp -
+        // this is the common case, hit whenever ownerId is null and currentAuth isn't
+        // Authenticated/Admin (including plain Guest), or when a caller explicitly passes
+        // ownerId = "guest". The AuthState.Guest -> AuthError branch below only fires for the
+        // narrower, defensive case of a caller passing an explicit non-guest ownerId while the
+        // actual auth state has (or raced back to) Guest - a real mismatch worth surfacing as an
+        // error rather than swallowing.
         if (resolvedOwnerId == null || resolvedOwnerId == "guest" || resolvedOwnerId.isBlank()) {
             stateManager.setUnauthenticated()
             return@withContext SyncResult.NoOp
@@ -158,7 +167,7 @@ class SyncEngineImpl(
                         if (pendingIds.isNotEmpty()) {
                             syncOutboxDao.resetInFlight(pendingIds)
                         }
-                        updateCursor(resolvedOwnerId, 0L, Instant.now().toString())
+                        updateCursor(resolvedOwnerId, 0L, CubeTypeConverters.nowIso())
                         runSnapshotBootstrap(resolvedOwnerId)
                         continue
                     } catch (e: AuthException.ApiError) {
@@ -166,7 +175,7 @@ class SyncEngineImpl(
                             if (pendingIds.isNotEmpty()) {
                                 syncOutboxDao.resetInFlight(pendingIds)
                             }
-                            updateCursor(resolvedOwnerId, 0L, Instant.now().toString())
+                            updateCursor(resolvedOwnerId, 0L, CubeTypeConverters.nowIso())
                             runSnapshotBootstrap(resolvedOwnerId)
                             continue
                         }
@@ -200,7 +209,7 @@ class SyncEngineImpl(
                 }
 
                 val nowEpoch = System.currentTimeMillis()
-                val nowIso = Instant.now().toString()
+                val nowIso = CubeTypeConverters.nowIso()
                 setSyncing(resolvedOwnerId, false)
                 updateLastSyncTime(resolvedOwnerId, nowIso)
                 stateManager.setSynced(nowEpoch)
@@ -238,69 +247,37 @@ class SyncEngineImpl(
         }
     }
 
-    private suspend fun updateCursor(ownerId: String, cursor: Long, time: String) {
-        val existing = syncMetadataDao.getMetadata(ownerId)
-        if (existing == null) {
-            syncMetadataDao.upsertMetadata(
-                com.maciekhetman.cubetimer.data.local.entity.SyncMetadataEntity(
+    /** Ensures a [SyncMetadataEntity] row exists for [ownerId], inserting a blank one if missing. */
+    private suspend fun ensureMetadata(ownerId: String) {
+        if (syncMetadataDao.getMetadata(ownerId) == null) {
+            syncMetadataDao.upsert(
+                SyncMetadataEntity(
                     ownerId = ownerId,
-                    cursor = cursor,
-                    lastSyncTime = time,
                     deviceId = tokenStorage.getDeviceId(),
                     isSyncing = false
                 )
             )
-        } else {
-            syncMetadataDao.updateCursor(ownerId, cursor, time)
         }
+    }
+
+    private suspend fun updateCursor(ownerId: String, cursor: Long, time: String) {
+        ensureMetadata(ownerId)
+        syncMetadataDao.updateCursor(ownerId, cursor, time)
     }
 
     private suspend fun setSyncing(ownerId: String, syncing: Boolean) {
-        val existing = syncMetadataDao.getMetadata(ownerId)
-        if (existing == null) {
-            syncMetadataDao.upsertMetadata(
-                com.maciekhetman.cubetimer.data.local.entity.SyncMetadataEntity(
-                    ownerId = ownerId,
-                    cursor = 0L,
-                    deviceId = tokenStorage.getDeviceId(),
-                    isSyncing = syncing
-                )
-            )
-        } else {
-            syncMetadataDao.setSyncing(ownerId, syncing)
-        }
+        ensureMetadata(ownerId)
+        syncMetadataDao.setSyncing(ownerId, syncing)
     }
 
     private suspend fun updateLastSyncTime(ownerId: String, time: String) {
-        val existing = syncMetadataDao.getMetadata(ownerId)
-        if (existing == null) {
-            syncMetadataDao.upsertMetadata(
-                com.maciekhetman.cubetimer.data.local.entity.SyncMetadataEntity(
-                    ownerId = ownerId,
-                    lastSyncTime = time,
-                    deviceId = tokenStorage.getDeviceId(),
-                    isSyncing = false
-                )
-            )
-        } else {
-            syncMetadataDao.updateLastSyncTime(ownerId, time)
-        }
+        ensureMetadata(ownerId)
+        syncMetadataDao.updateLastSyncTime(ownerId, time)
     }
 
     private suspend fun setSyncError(ownerId: String, error: String?) {
-        val existing = syncMetadataDao.getMetadata(ownerId)
-        if (existing == null) {
-            syncMetadataDao.upsertMetadata(
-                com.maciekhetman.cubetimer.data.local.entity.SyncMetadataEntity(
-                    ownerId = ownerId,
-                    lastError = error,
-                    deviceId = tokenStorage.getDeviceId(),
-                    isSyncing = false
-                )
-            )
-        } else {
-            syncMetadataDao.setSyncError(ownerId, error)
-        }
+        ensureMetadata(ownerId)
+        syncMetadataDao.setSyncError(ownerId, error)
     }
 
     private data class BatchResult(
@@ -406,9 +383,10 @@ class SyncEngineImpl(
             }
 
             if (change.operation == "delete") {
-                val deleteTime = change.changedAt ?: Instant.now().toString()
-                sessionDao.softDelete(change.entityId, deletedAt = deleteTime, updatedAt = deleteTime)
+                val deleteTime = change.changedAt ?: CubeTypeConverters.nowIso()
                 if (localSession != null) {
+                    // Single write: update() already covers deletedAt/updatedAt, so there is no
+                    // need for a separate softDelete() call first.
                     sessionDao.update(
                         localSession.copy(
                             version = change.version,
@@ -416,6 +394,8 @@ class SyncEngineImpl(
                             updatedAt = deleteTime
                         )
                     )
+                } else {
+                    sessionDao.softDelete(change.entityId, deletedAt = deleteTime, updatedAt = deleteTime)
                 }
                 changesApplied++
             } else {
@@ -460,9 +440,10 @@ class SyncEngineImpl(
             }
 
             if (change.operation == "delete") {
-                val deleteTime = change.changedAt ?: Instant.now().toString()
-                solveDao.softDelete(change.entityId, deletedAt = deleteTime, updatedAt = deleteTime)
+                val deleteTime = change.changedAt ?: CubeTypeConverters.nowIso()
                 if (localSolve != null) {
+                    // Single write: update() already covers deletedAt/updatedAt, so there is no
+                    // need for a separate softDelete() call first.
                     solveDao.update(
                         localSolve.copy(
                             version = change.version,
@@ -470,6 +451,8 @@ class SyncEngineImpl(
                             updatedAt = deleteTime
                         )
                     )
+                } else {
+                    solveDao.softDelete(change.entityId, deletedAt = deleteTime, updatedAt = deleteTime)
                 }
                 changesApplied++
             } else {
@@ -513,7 +496,7 @@ class SyncEngineImpl(
 
         // Step C: Advance watermark cursor strictly within transaction
         if (response.nextCursor > 0L) {
-            val nowIso = Instant.now().toString()
+            val nowIso = CubeTypeConverters.nowIso()
             updateCursor(ownerId, response.nextCursor, nowIso)
         }
 
@@ -551,7 +534,12 @@ class SyncEngineImpl(
 
             database.withTransaction {
                 response.sessions?.let { sessions ->
-                    val entities = sessions.map { dto ->
+                    // Same protection as the incremental sync path (see applyBatch): don't let a
+                    // snapshot row clobber a local edit that hasn't reached the server yet.
+                    val entities = sessions.mapNotNull { dto ->
+                        if (syncOutboxDao.countPendingForEntity(ownerId, dto.id) > 0) {
+                            return@mapNotNull null
+                        }
                         SessionEntity(
                             id = dto.id,
                             ownerId = ownerId,
@@ -566,11 +554,16 @@ class SyncEngineImpl(
                             deletedAt = dto.deletedAt
                         )
                     }
-                    sessionDao.upsertAll(entities)
+                    if (entities.isNotEmpty()) {
+                        sessionDao.upsertAll(entities)
+                    }
                 }
 
                 response.solves?.let { solves ->
-                    val entities = solves.map { dto ->
+                    val entities = solves.mapNotNull { dto ->
+                        if (syncOutboxDao.countPendingForEntity(ownerId, dto.id) > 0) {
+                            return@mapNotNull null
+                        }
                         SolveEntity(
                             id = dto.id,
                             ownerId = ownerId,
@@ -585,7 +578,9 @@ class SyncEngineImpl(
                             deletedAt = dto.deletedAt
                         )
                     }
-                    solveDao.upsertAll(entities)
+                    if (entities.isNotEmpty()) {
+                        solveDao.upsertAll(entities)
+                    }
                 }
             }
 
@@ -597,7 +592,7 @@ class SyncEngineImpl(
             }
         }
 
-        val nowIso = Instant.now().toString()
+        val nowIso = CubeTypeConverters.nowIso()
         updateCursor(ownerId, watermarkCursor, nowIso)
         watermarkCursor
     }

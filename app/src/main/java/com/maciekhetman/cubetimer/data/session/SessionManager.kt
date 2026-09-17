@@ -18,11 +18,6 @@ interface SessionManager {
     fun getActiveSessionFlow(mode: Mode): Flow<Session?>
 
     /**
-     * Alias for getActiveSessionFlow(mode).
-     */
-    fun activeSessionFlow(mode: Mode): Flow<Session?> = getActiveSessionFlow(mode)
-
-    /**
      * Observe the active session for a specific owner and mode.
      */
     fun getActiveSessionFlow(ownerId: String, mode: Mode): Flow<Session?>
@@ -122,9 +117,4 @@ interface SessionManager {
      * Clear manual session selection for a specific owner and mode.
      */
     suspend fun clearManualSessionOverride(ownerId: String, mode: Mode)
-
-    /**
-     * Switch back to automatic mode.
-     */
-    suspend fun switchToAutomatic(mode: Mode) = clearManualSessionOverride(mode)
 }

@@ -24,7 +24,10 @@ class EncryptedTokenStorage(
     private val _accessTokenFlow = MutableStateFlow<String?>(null)
     override val accessTokenFlow: StateFlow<String?> = _accessTokenFlow.asStateFlow()
 
-    private val prefs: SharedPreferences = createPreferences(context, prefFileName)
+    // Lazy (thread-safe by default) so constructing this class is cheap: building
+    // EncryptedSharedPreferences (MasterKey + Tink) only happens on first real access,
+    // which is AuthManagerImpl.initialize() running on the IO dispatcher, not the caller's thread.
+    private val prefs: SharedPreferences by lazy { createPreferences(context, prefFileName) }
 
     override fun getAccessToken(): String? = _accessTokenFlow.value
 

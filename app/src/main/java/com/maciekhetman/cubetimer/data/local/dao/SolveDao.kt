@@ -24,13 +24,6 @@ interface SolveDao {
 
     @Query("""
         SELECT * FROM solves 
-        WHERE owner_id = :ownerId AND event = :event AND deleted_at IS NULL 
-        ORDER BY solved_at DESC
-    """)
-    fun observeSolvesByEventDesc(ownerId: String, event: String): Flow<List<SolveEntity>>
-
-    @Query("""
-        SELECT * FROM solves 
         WHERE owner_id = :ownerId AND session_id = :sessionId AND deleted_at IS NULL 
         ORDER BY solved_at ASC
     """)
@@ -51,13 +44,7 @@ interface SolveDao {
     fun observeAllSolves(ownerId: String): Flow<List<SolveEntity>>
 
     @Query("""
-        SELECT COUNT(*) FROM solves 
-        WHERE owner_id = :ownerId AND event = :event AND deleted_at IS NULL
-    """)
-    fun observeSolveCount(ownerId: String, event: String): Flow<Int>
-
-    @Query("""
-        SELECT COUNT(*) FROM solves 
+        SELECT COUNT(*) FROM solves
         WHERE owner_id = :ownerId AND event = :event AND deleted_at IS NULL
     """)
     fun observeSolveCountByEvent(ownerId: String, event: String): Flow<Int>
@@ -165,6 +152,23 @@ interface SolveDao {
 
     // --- One-Shot Queries ---
 
+    @Query("SELECT id FROM solves WHERE id IN (:ids)")
+    suspend fun getExistingSolveIds(ids: List<String>): List<String>
+
+    @Query("""
+        SELECT * FROM solves 
+        WHERE owner_id = :ownerId 
+          AND (:sessionId IS NULL OR session_id = :sessionId) 
+          AND (:event IS NULL OR event = :event) 
+          AND deleted_at IS NULL 
+        ORDER BY solved_at ASC
+    """)
+    suspend fun getSolvesByScope(
+        ownerId: String,
+        sessionId: String? = null,
+        event: String? = null
+    ): List<SolveEntity>
+
     @Query("SELECT * FROM solves WHERE id = :id LIMIT 1")
     suspend fun getSolveById(id: String): SolveEntity?
 
@@ -244,16 +248,9 @@ interface SolveDao {
     // --- Guest Adoption & Bulk Updates ---
 
     @Query("""
-        UPDATE solves 
-        SET owner_id = :targetOwnerId, version = 0, updated_at = :updatedAt 
+        UPDATE solves
+        SET owner_id = :targetOwnerId, version = 0, updated_at = :updatedAt
         WHERE owner_id = :guestOwnerId
     """)
     suspend fun adoptGuestSolves(guestOwnerId: String, targetOwnerId: String, updatedAt: String): Int
-
-    @Query("""
-        UPDATE solves 
-        SET session_id = :newSessionId, updated_at = :updatedAt 
-        WHERE session_id = :oldSessionId AND owner_id = :ownerId
-    """)
-    suspend fun reassignSolvesSession(ownerId: String, oldSessionId: String, newSessionId: String, updatedAt: String): Int
 }

@@ -67,8 +67,6 @@ abstract class CubeDatabase : RoomDatabase() {
                 .build()
         }
 
-        fun inMemory(context: Context): CubeDatabase = createInMemory(context)
-
         fun createInMemory(
             context: Context,
             queryExecutor: java.util.concurrent.Executor? = null,

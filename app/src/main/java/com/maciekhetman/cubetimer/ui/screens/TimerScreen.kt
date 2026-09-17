@@ -2,6 +2,7 @@ package com.maciekhetman.cubetimer.ui.screens
 
 import android.content.Context
 import android.os.Build
+import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -15,7 +16,10 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
@@ -84,7 +88,14 @@ fun TimerScreen(
     hideSessionMenu: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    val timerState by viewModel.timerState.collectAsStateWithLifecycle()
+    // NOTE: `timerState` is intentionally kept as a State<TimerState> (not read with `by` here) so that
+    // reading it does not subscribe this whole screen to every tick (every 10ms while running, 16ms while
+    // holding). Only small child composables that actually need the live value (TimerContent) read
+    // `timerState.value`; everything else here derives cheap, rarely-changing booleans instead.
+    val timerState = viewModel.timerState.collectAsStateWithLifecycle()
+    val isTimerRunning by viewModel.isTimerRunning.collectAsStateWithLifecycle()
+    val isHolding by remember { derivedStateOf { timerState.value is TimerState.Holding } }
+    val isFinished by remember { derivedStateOf { timerState.value is TimerState.Finished } }
     val solves by viewModel.solves.collectAsStateWithLifecycle()
     val scramble by viewModel.currentScramble.collectAsStateWithLifecycle()
     val recordCelebration by viewModel.recordCelebration.collectAsStateWithLifecycle()
@@ -106,7 +117,7 @@ fun TimerScreen(
     val density = LocalDensity.current
     var topContentHeight by remember { mutableStateOf(0.dp) }
     var bottomContentHeight by remember { mutableStateOf(0.dp) }
-    val isSolving = timerState is TimerState.Running
+    val isSolving = isTimerRunning
     val focusModeActive = focusMode && isSolving
     val showTopBar = !focusModeActive
     val showScramble = !isSolving || (!hideScrambleDuringSolve && !focusModeActive)
@@ -115,11 +126,9 @@ fun TimerScreen(
         !hideLastResultsOnTimer &&
         (!isSolving || (!hideLastResultsDuringSolve && !focusModeActive))
     val showBottomContent = showAverages || showLastResults
-    
-    val latestTimerState by rememberUpdatedState(timerState)
 
-    LaunchedEffect((timerState is TimerState.Holding), timerStartDelayMillis, hapticsEnabled) {
-        if ((timerState is TimerState.Holding) && hapticsEnabled) {
+    LaunchedEffect(isHolding, timerStartDelayMillis, hapticsEnabled) {
+        if (isHolding && hapticsEnabled) {
             val holdDuration = timerStartDelayMillis.coerceAtLeast(200)
             val pulses = listOf(
                 0.14f to 22,
@@ -134,7 +143,7 @@ fun TimerScreen(
             pulses.forEach { (fraction, amplitude) ->
                 val targetDelay = (holdDuration * fraction).toLong()
                 delay((targetDelay - previousDelay).milliseconds)
-                if (latestTimerState !is TimerState.Holding) return@LaunchedEffect
+                if (timerState.value !is TimerState.Holding) return@LaunchedEffect
                 vibrateOneShot(context, durationMillis = 8L, amplitude = amplitude)
                 previousDelay = targetDelay
             }
@@ -142,8 +151,8 @@ fun TimerScreen(
     }
 
     // Trigger haptic feedback only once when timer starts
-    LaunchedEffect(timerState is TimerState.Running, hapticsEnabled) {
-        if (timerState is TimerState.Running && hapticsEnabled) {
+    LaunchedEffect(isTimerRunning, hapticsEnabled) {
+        if (isTimerRunning && hapticsEnabled) {
             val usedVibrator = vibrateOneShot(context, durationMillis = 14L, amplitude = 255)
             if (!usedVibrator) {
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -184,7 +193,7 @@ fun TimerScreen(
                 hideSessionMenu = hideSessionMenu || hideSessionMenuInTopBar
             )
         }
-        
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -206,77 +215,77 @@ fun TimerScreen(
                         onRefresh = { viewModel.generateNewScramble() },
                         showRefreshButton = showScrambleRefreshButton,
                         scale = scrambleScalePercent / 100f,
-                        enabled = timerState !is TimerState.Running && timerState !is TimerState.Holding
+                        enabled = !isTimerRunning && !isHolding
                     )
                 }
             }
-        
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .navigationBarsPadding()
-                .padding(
-                    top = if (showScramble) topContentHeight + 12.dp else 12.dp,
-                    bottom = if (showBottomContent) bottomContentHeight + 12.dp else 96.dp
-                )
-                .semantics {
-                    contentDescription = if (isSolving) "Tap to stop timer" else "Tap and hold to start timer"
-                }
-                .then(
-                    if (timerState !is TimerState.Finished && recordCelebration == null) {
-                        Modifier.pointerInput(Unit) {
-                            detectTapGestures(
-                            onPress = {
-                                val wasRunning = viewModel.timerState.value is TimerState.Running
-                                viewModel.onPressStart()
-                                tryAwaitRelease()
-                                viewModel.onPressRelease()
-                                if (wasRunning) {
-                                    // Timer stopped
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .navigationBarsPadding()
+                    .padding(
+                        top = if (showScramble) topContentHeight + 12.dp else 12.dp,
+                        bottom = if (showBottomContent) bottomContentHeight + 12.dp else 96.dp
+                    )
+                    .semantics {
+                        contentDescription = if (isSolving) "Tap to stop timer" else "Tap and hold to start timer"
+                    }
+                    .then(
+                        if (!isFinished && recordCelebration == null) {
+                            Modifier.pointerInput(Unit) {
+                                awaitEachGesture {
+                                    val down = awaitFirstDown()
+                                    val wasRunning = viewModel.timerState.value is TimerState.Running
+                                    viewModel.onPressStart(down.uptimeMillis)
+                                    val up = waitForUpOrCancellation()
+                                    viewModel.onPressRelease(up?.uptimeMillis ?: SystemClock.uptimeMillis())
+                                    if (wasRunning) {
+                                        // Timer stopped
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    }
                                 }
                             }
-                            )
+                        } else {
+                            Modifier
                         }
-                    } else {
-                        Modifier
-                    }
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            TimerContent(
-                timerState = timerState,
-                viewModel = viewModel,
-                runningTimerDisplay = runningTimerDisplay,
-                focusModeActive = focusModeActive,
-                hideStartHint = hideStartHint
-            )
-        }
-        
-        if (showBottomContent) {
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(horizontal = 12.dp)
-                    .padding(bottom = 88.dp, top = 8.dp)
-                    .onGloballyPositioned {
-                        bottomContentHeight = with(density) { it.size.height.toDp() }
-                    },
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ),
+                contentAlignment = Alignment.Center
             ) {
-                if (showAverages) {
-                    AveragesDisplay(
-                        solves = solves,
-                        enabledAverages = timerAverages
-                    )
-                }
-                if (showLastResults) {
-                    RecentSolvesDisplay(solves = solves)
+                TimerContent(
+                    timerState = timerState,
+                    viewModel = viewModel,
+                    runningTimerDisplay = runningTimerDisplay,
+                    focusModeActive = focusModeActive,
+                    hideStartHint = hideStartHint
+                )
+            }
+
+            if (showBottomContent) {
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .navigationBarsPadding()
+                        .padding(horizontal = 12.dp)
+                        .padding(bottom = 88.dp, top = 8.dp)
+                        .onGloballyPositioned {
+                            bottomContentHeight = with(density) { it.size.height.toDp() }
+                        },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    if (showAverages) {
+                        AveragesDisplay(
+                            solves = solves,
+                            enabledAverages = timerAverages
+                        )
+                    }
+                    if (showLastResults) {
+                        RecentSolvesDisplay(solves = solves)
+                    }
                 }
             }
-        }        
+
             // Record celebration overlay
             RecordCelebrationOverlay(
                 celebration = recordCelebration
@@ -318,13 +327,16 @@ private fun Context.defaultVibrator(): Vibrator? {
 
 @Composable
 private fun TimerContent(
-    timerState: TimerState,
+    timerState: State<TimerState>,
     viewModel: TimerViewModel,
     runningTimerDisplay: RunningTimerDisplay,
     focusModeActive: Boolean,
     hideStartHint: Boolean = false,
     modifier: Modifier = Modifier
 ) {
+    // Reading the fast-changing TimerState here (via `by`) is intentional and safe: this is the small
+    // leaf composable that is meant to recompose on every tick, isolated from the rest of TimerScreen.
+    val state = timerState.value
     val haptic = LocalHapticFeedback.current
     var showDiscardDialog by remember { mutableStateOf(false) }
     Column(
@@ -332,30 +344,30 @@ private fun TimerContent(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        val showTimerDisplay = (timerState !is TimerState.Running) ||
+        val showTimerDisplay = (state !is TimerState.Running) ||
             (!focusModeActive && runningTimerDisplay != RunningTimerDisplay.HIDDEN)
         if (showTimerDisplay) {
             TimerDisplay(
-                time = when (timerState) {
-                    is TimerState.Running -> timerState.elapsedTime
-                    is TimerState.Finished -> timerState.time
+                time = when (state) {
+                    is TimerState.Running -> state.elapsedTime
+                    is TimerState.Finished -> state.time
                     else -> 0
                 },
-                color = when (timerState) {
+                color = when (state) {
                     is TimerState.Holding -> MaterialTheme.colorScheme.error
                     is TimerState.Ready -> MaterialTheme.colorScheme.primary
                     is TimerState.Running -> MaterialTheme.colorScheme.primary
                     is TimerState.Finished -> MaterialTheme.colorScheme.primary
                     else -> MaterialTheme.colorScheme.onBackground
                 },
-                showDecimals = timerState !is TimerState.Running ||
+                showDecimals = state !is TimerState.Running ||
                     runningTimerDisplay == RunningTimerDisplay.FULL
             )
-            if (timerState !is TimerState.Idle || !hideStartHint) {
+            if (state !is TimerState.Idle || !hideStartHint) {
                 Spacer(modifier = Modifier.height(24.dp))
             }
         }
-        when (timerState) {
+        when (state) {
             is TimerState.Idle -> {
                 if (!hideStartHint) {
                     Text(
@@ -366,13 +378,13 @@ private fun TimerContent(
                 }
             }
             is TimerState.Holding -> {
-                val color = if (timerState.progress < 1f) {
+                val color = if (state.progress < 1f) {
                     MaterialTheme.colorScheme.error
                 } else {
                     MaterialTheme.colorScheme.tertiary
                 }
                 LinearProgressIndicator(
-                    progress = { timerState.progress },
+                    progress = { state.progress },
                     modifier = Modifier
                         .width(200.dp)
                         .height(4.dp),
@@ -560,15 +572,15 @@ private fun AveragesDisplay(
     enabledAverages: Set<Int>,
     modifier: Modifier = Modifier
 ) {
+    // AverageCalculator.averageOfN returns null both when there aren't enough solves yet AND when there
+    // are enough solves but too many DNFs to compute a real average. Only the first case should hide the
+    // average entirely; the second case is a legitimate "DNF" average and must still be shown.
     val averages = remember(solves, enabledAverages) {
         TimerAverageOptions
             .asSequence()
             .filter { it in enabledAverages }
-            .mapNotNull { count ->
-                AverageCalculator.averageOfN(solves, count)?.let { average ->
-                    count to average
-                }
-            }
+            .filter { count -> solves.size >= count }
+            .map { count -> count to AverageCalculator.averageOfN(solves, count) }
             .toList()
     }
 
@@ -603,7 +615,7 @@ private fun AveragesDisplay(
 @Composable
 private fun AverageStat(
     label: String,
-    time: Long
+    time: Long?
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
@@ -613,11 +625,11 @@ private fun AverageStat(
         )
         Spacer(modifier = Modifier.height(2.dp))
         Text(
-            text = formatDisplayTime(time),
+            text = time?.let { formatDisplayTime(it) } ?: "DNF",
             style = MaterialTheme.typography.titleSmall,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground
+            color = if (time == null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onBackground
         )
     }
 }

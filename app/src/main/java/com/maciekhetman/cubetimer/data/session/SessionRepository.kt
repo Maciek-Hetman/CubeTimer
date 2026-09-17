@@ -2,7 +2,17 @@ package com.maciekhetman.cubetimer.data.session
 
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Session
+import com.maciekhetman.cubetimer.model.SolveTime
 import kotlinx.coroutines.flow.Flow
+
+/**
+ * Snapshot of a soft-deleted session and its associated active solves,
+ * capturing full state for Undo/restore operations.
+ */
+data class DeletedSessionSnapshot(
+    val session: Session,
+    val solves: List<SolveTime>
+)
 
 /**
  * Repository interface for managing Session persistence, reactive streams,
@@ -84,4 +94,17 @@ interface SessionRepository {
      * Soft delete a session and enqueue delete mutation in outbox if authenticated.
      */
     suspend fun deleteSession(id: String, ownerId: String = "guest"): Boolean
+
+    /**
+     * Soft delete a session along with all its active solves in a single database transaction.
+     * Enqueues delete outbox mutations for the session and all deleted solves if ownerId is not "guest".
+     * Triggers sync and returns a [DeletedSessionSnapshot] for undo support, or null if session not found.
+     */
+    suspend fun deleteSessionWithSolves(sessionId: String, ownerId: String = "guest"): DeletedSessionSnapshot?
+
+    /**
+     * Restore a previously soft-deleted session and all its solves in a single database transaction.
+     * Sets deleted_at = null, enqueues upsert outbox mutations if ownerId is not "guest", and triggers sync.
+     */
+    suspend fun restoreSessionWithSolves(snapshot: DeletedSessionSnapshot, ownerId: String = "guest")
 }

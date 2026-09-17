@@ -1,5 +1,6 @@
 package com.maciekhetman.cubetimer.data.auth
 
+import com.maciekhetman.cubetimer.data.local.converter.CubeTypeConverters
 import androidx.room.withTransaction
 import com.maciekhetman.cubetimer.data.local.CubeDatabase
 import com.maciekhetman.cubetimer.data.local.entity.SyncOutboxEntity
@@ -66,6 +67,20 @@ class AuthManagerImpl(
             return@withContext
         }
 
+        // Offline-first: if we already have a cached identity for this refresh token, surface it
+        // immediately so solves/sessions saved while the refresh call is in flight (network calls
+        // can take up to the OkHttp timeout) are attributed to the right owner instead of "guest".
+        // The refresh below still runs to validate/rotate the token; on definitive rejection we
+        // fall back to Guest, and on a network error we simply keep the cached identity.
+        val cachedUser = tokenStorage.getCachedUser()
+        if (cachedUser != null) {
+            _authState.value = if (cachedUser.userRole == UserRole.ADMIN) {
+                AuthState.Admin(cachedUser)
+            } else {
+                AuthState.Authenticated(cachedUser)
+            }
+        }
+
         try {
             val response = apiClient.refreshToken(refreshToken)
             handleAuthSuccess(response, isNewLogin = false)
@@ -82,15 +97,8 @@ class AuthManagerImpl(
             tokenStorage.clearAuthData()
             _authState.value = AuthState.Guest
         } catch (_: Exception) {
-            // Fallback to cached user offline if token refresh failed due to network
-            val cachedUser = tokenStorage.getCachedUser()
-            if (cachedUser != null) {
-                _authState.value = if (cachedUser.userRole == UserRole.ADMIN) {
-                    AuthState.Admin(cachedUser)
-                } else {
-                    AuthState.Authenticated(cachedUser)
-                }
-            } else {
+            // Network error: keep the cached identity we already surfaced above, if any.
+            if (cachedUser == null) {
                 _authState.value = AuthState.Guest
             }
         }
@@ -203,7 +211,7 @@ class AuthManagerImpl(
 
         // 1. Close active automatic sessions for the outgoing user
         if (user != null) {
-            val nowIso = Instant.now().toString()
+            val nowIso = CubeTypeConverters.nowIso()
             val sessionDao = database.sessionDao()
             val openAutoSessions = sessionDao.getAllActiveSessionsForOwner(user.id)
                 .filter { it.kind == "automatic" && it.endedAt == null }
@@ -275,7 +283,7 @@ class AuthManagerImpl(
                 return@withTransaction
             }
 
-            val nowIso = Instant.now().toString()
+            val nowIso = CubeTypeConverters.nowIso()
 
             // 1. Reassign ownership in Room
             solveDao.adoptGuestSolves(guestOwnerId = "guest", targetOwnerId = userId, updatedAt = nowIso)
@@ -351,7 +359,7 @@ class AuthManagerImpl(
                 instance ?: AuthManagerImpl(
                     apiClient = NetworkModule.provideCubeSyncApiClient(
                         NetworkModule.provideAuthApiService(
-                            baseUrl = "https://cubesync.example.com",
+                            baseUrl = com.maciekhetman.cubetimer.CubeTimerApplication.BASE_URL,
                             okHttpClient = NetworkModule.provideOkHttpClient()
                         )
                     ),
@@ -359,10 +367,6 @@ class AuthManagerImpl(
                     database = CubeDatabase.getInstance(context.applicationContext)
                 ).also { instance = it }
             }
-        }
-
-        fun setInstanceForTesting(authManager: AuthManager?) {
-            instance = authManager
         }
     }
 }

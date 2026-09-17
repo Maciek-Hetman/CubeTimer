@@ -192,11 +192,6 @@ class SyncStateManager(
         _lastErrorMessage.value = null
     }
 
-    fun updateStatus(status: SyncStatus) {
-        _syncStatus.value = status
-        _isSyncing.value = (status == SyncStatus.SYNCING)
-    }
-
     fun setOnlineForTest(online: Boolean) {
         _isOnline.value = online
     }

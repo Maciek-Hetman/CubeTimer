@@ -4,21 +4,11 @@ import java.util.Locale
 
 object TimeFormatter {
     fun formatTime(millis: Long): String {
-        val totalSeconds = millis / 1000
-        val milliseconds = (millis % 1000) / 10
-
-        return if (totalSeconds >= 60) {
-            val minutes = totalSeconds / 60
-            val seconds = totalSeconds % 60
-            String.format(Locale.ROOT, "%d:%02d.%02d", minutes, seconds, milliseconds)
-        } else {
-            String.format(Locale.ROOT, "%d.%02d", totalSeconds, milliseconds)
-        }
+        val (whole, fraction) = splitTimerTime(millis)
+        return whole + fraction
     }
 
     fun splitTimerTime(millis: Long): Pair<String, String> {
-        if (millis == 0L) return "0" to ".00"
-
         val totalSeconds = millis / 1000
         val milliseconds = (millis % 1000) / 10
 

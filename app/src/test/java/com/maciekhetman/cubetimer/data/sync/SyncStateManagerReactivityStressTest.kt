@@ -154,7 +154,7 @@ class SyncStateManagerReactivityStressTest {
 
             // Delete 10 mutations
             val toDelete = outboxIds.take(10)
-            database.syncOutboxDao().deleteByIds(toDelete)
+            database.syncOutboxDao().deleteMutations(toDelete)
 
             while (latest.pendingCount > 5) {
                 latest = awaitItem()
@@ -163,7 +163,7 @@ class SyncStateManagerReactivityStressTest {
 
             // Delete remaining 5 mutations
             val remaining = outboxIds.drop(10)
-            database.syncOutboxDao().deleteByIds(remaining)
+            database.syncOutboxDao().deleteMutations(remaining)
 
             while (latest.pendingCount > 0) {
                 latest = awaitItem()

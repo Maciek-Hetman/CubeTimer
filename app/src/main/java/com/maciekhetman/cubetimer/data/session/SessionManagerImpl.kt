@@ -1,6 +1,7 @@
 package com.maciekhetman.cubetimer.data.session
 
 import android.content.Context
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -40,17 +41,35 @@ class SessionManagerImpl(
 
     private val HIDE_SESSION_MENU_KEY = booleanPreferencesKey("hide_session_menu_in_top_bar")
 
-    private fun sessionModeKey(mode: Mode) = stringPreferencesKey("session_mode_${mode.name}")
-    private fun activeManualSessionKey(mode: Mode) = stringPreferencesKey("active_manual_session_${mode.name}")
+    // Legacy, unscoped keys from before manual session selection was scoped per-owner. Only ever
+    // consulted as a fallback for the "guest" owner so pre-existing selections aren't lost.
+    private fun legacySessionModeKey(mode: Mode) = stringPreferencesKey("session_mode_${mode.name}")
+    private fun legacyActiveManualSessionKey(mode: Mode) = stringPreferencesKey("active_manual_session_${mode.name}")
+
+    private fun sessionModeKey(ownerId: String, mode: Mode) = stringPreferencesKey("session_mode_${ownerId}_${mode.name}")
+    private fun activeManualSessionKey(ownerId: String, mode: Mode) = stringPreferencesKey("active_manual_session_${ownerId}_${mode.name}")
+
+    private fun readSessionModeRaw(prefs: Preferences, ownerId: String, mode: Mode): String? {
+        val scoped = prefs[sessionModeKey(ownerId, mode)]
+        if (scoped != null) return scoped
+        return if (ownerId == "guest") prefs[legacySessionModeKey(mode)] else null
+    }
+
+    private fun readActiveManualSessionId(prefs: Preferences, ownerId: String, mode: Mode): String? {
+        val scoped = prefs[activeManualSessionKey(ownerId, mode)]
+        if (scoped != null) return scoped
+        return if (ownerId == "guest") prefs[legacyActiveManualSessionKey(mode)] else null
+    }
 
     override fun getSessionModeFlow(mode: Mode): Flow<SessionKind> {
-        return context.settingsDataStore.data.map { prefs ->
-            if (prefs[HIDE_SESSION_MENU_KEY] == true) {
-                SessionKind.AUTOMATIC
-            } else {
-                val raw = prefs[sessionModeKey(mode)]
-                SessionKind.fromString(raw)
-            }
+        return authManager.authState.map { authManager.currentOwnerId }.distinctUntilChanged().flatMapLatest { ownerId ->
+            context.settingsDataStore.data.map { prefs ->
+                if (prefs[HIDE_SESSION_MENU_KEY] == true) {
+                    SessionKind.AUTOMATIC
+                } else {
+                    SessionKind.fromString(readSessionModeRaw(prefs, ownerId, mode))
+                }
+            }.distinctUntilChanged()
         }.distinctUntilChanged()
     }
 
@@ -59,10 +78,11 @@ class SessionManagerImpl(
     }
 
     override suspend fun setSessionMode(mode: Mode, kind: SessionKind) {
+        val ownerId = authManager.currentOwnerId
         val isLocked = context.settingsDataStore.data.map { it[HIDE_SESSION_MENU_KEY] == true }.first()
         if (isLocked && kind != SessionKind.AUTOMATIC) return
         context.settingsDataStore.edit { prefs ->
-            prefs[sessionModeKey(mode)] = kind.value
+            prefs[sessionModeKey(ownerId, mode)] = kind.value
         }
     }
 
@@ -80,15 +100,26 @@ class SessionManagerImpl(
     }
 
     override fun getActiveSessionFlow(ownerId: String, mode: Mode): Flow<Session?> {
-        return context.settingsDataStore.data.flatMapLatest { prefs ->
-            val kind = if (prefs[HIDE_SESSION_MENU_KEY] == true) SessionKind.AUTOMATIC else SessionKind.fromString(prefs[sessionModeKey(mode)])
-            if (kind == SessionKind.AUTOMATIC) {
-                sessionRepository.observeActiveSessions(ownerId, mode).map { sessions ->
-                    sessions.firstOrNull { it.kind == SessionKind.AUTOMATIC && it.isOpen }
+        // Reduce to just the (kind, manualSessionId) pair relevant to this mode/owner and
+        // distinctUntilChanged BEFORE flatMapLatest, so unrelated settings changes (theme,
+        // haptics, ...) don't tear down and re-run the underlying Room session queries.
+        return context.settingsDataStore.data
+            .map { prefs ->
+                val kind = if (prefs[HIDE_SESSION_MENU_KEY] == true) {
+                    SessionKind.AUTOMATIC
+                } else {
+                    SessionKind.fromString(readSessionModeRaw(prefs, ownerId, mode))
                 }
-            } else {
-                val manualId = prefs[activeManualSessionKey(mode)]
-                if (manualId.isNullOrBlank()) {
+                val manualId = if (kind == SessionKind.MANUAL) readActiveManualSessionId(prefs, ownerId, mode) else null
+                kind to manualId
+            }
+            .distinctUntilChanged()
+            .flatMapLatest { (kind, manualId) ->
+                if (kind == SessionKind.AUTOMATIC) {
+                    sessionRepository.observeActiveSessions(ownerId, mode).map { sessions ->
+                        sessions.firstOrNull { it.kind == SessionKind.AUTOMATIC && it.isOpen }
+                    }
+                } else if (manualId.isNullOrBlank()) {
                     sessionRepository.observeActiveSessions(ownerId, mode).map { sessions ->
                         sessions.firstOrNull { it.kind == SessionKind.MANUAL && it.isOpen }
                     }
@@ -102,7 +133,7 @@ class SessionManagerImpl(
                     }
                 }
             }
-        }.distinctUntilChanged()
+            .distinctUntilChanged()
     }
 
     override suspend fun setActiveSession(mode: Mode, sessionId: String) {
@@ -114,8 +145,8 @@ class SessionManagerImpl(
         val isLocked = context.settingsDataStore.data.map { it[HIDE_SESSION_MENU_KEY] == true }.first()
         if (isLocked) return
         context.settingsDataStore.edit { prefs ->
-            prefs[sessionModeKey(mode)] = SessionKind.MANUAL.value
-            prefs[activeManualSessionKey(mode)] = sessionId
+            prefs[sessionModeKey(ownerId, mode)] = SessionKind.MANUAL.value
+            prefs[activeManualSessionKey(ownerId, mode)] = sessionId
         }
     }
 
@@ -126,13 +157,13 @@ class SessionManagerImpl(
     ): Session = sessionMutex.withLock {
         withContext(ioDispatcher) {
             val prefs = context.settingsDataStore.data.first()
-            val kind = if (prefs[HIDE_SESSION_MENU_KEY] == true) SessionKind.AUTOMATIC else SessionKind.fromString(prefs[sessionModeKey(mode)])
+            val kind = if (prefs[HIDE_SESSION_MENU_KEY] == true) SessionKind.AUTOMATIC else SessionKind.fromString(readSessionModeRaw(prefs, ownerId, mode))
             val nowEpochMs = solveTimestamp ?: System.currentTimeMillis()
 
             if (kind == SessionKind.AUTOMATIC) {
                 resolveAutomaticSession(ownerId, mode, nowEpochMs)
             } else {
-                resolveManualSession(ownerId, mode, prefs[activeManualSessionKey(mode)], nowEpochMs)
+                resolveManualSession(ownerId, mode, readActiveManualSessionId(prefs, ownerId, mode), nowEpochMs)
             }
         }
     }
@@ -146,13 +177,17 @@ class SessionManagerImpl(
 
         if (openSession != null) {
             val lastSolve = solveDao.getLastSolveForSession(ownerId, openSession.id)
-            val lastActivityMs = lastSolve?.let { CubeTypeConverters.isoToEpochMillis(it.solvedAt) }
-                ?: CubeTypeConverters.isoToEpochMillis(openSession.startedAt)
+            val lastSolveTimestampMs = lastSolve?.let { CubeTypeConverters.isoToEpochMillis(it.solvedAt) }
 
-            val elapsedMs = currentTimestampMs - lastActivityMs
-
-            // Check 60-minute inactivity gap reuse rule
-            if (elapsedMs in 0..AutomaticSessionHelper.DEFAULT_INACTIVITY_GAP_MILLIS) {
+            // Reuse the same 60-minute inactivity gap rule as AutomaticSessionHelper (falls back
+            // to session.startedAt when there is no last solve) instead of re-implementing it here.
+            if (AutomaticSessionHelper.shouldReuseAutomaticSession(
+                    session = openSession,
+                    lastSolveTimestampMs = lastSolveTimestampMs,
+                    nowMs = currentTimestampMs,
+                    mode = mode
+                )
+            ) {
                 return openSession
             }
 
@@ -255,7 +290,7 @@ class SessionManagerImpl(
 
         if (mode != null) {
             val prefs = context.settingsDataStore.data.first()
-            val currentManualId = prefs[activeManualSessionKey(mode)]
+            val currentManualId = readActiveManualSessionId(prefs, targetOwner, mode)
             if (currentManualId == id) {
                 clearManualSessionOverride(targetOwner, mode)
             }
@@ -277,11 +312,14 @@ class SessionManagerImpl(
         ownerId: String?
     ): Boolean = withContext(ioDispatcher) {
         val targetOwner = ownerId ?: authManager.currentOwnerId
-        val deleted = sessionRepository.deleteSession(id, targetOwner)
+        // Cascade: deleteSession alone leaves the session's solves orphaned (owner_id pointing at
+        // a soft-deleted session). Use the cascading path, matching History's delete flow.
+        val snapshot = sessionRepository.deleteSessionWithSolves(id, targetOwner)
+        val deleted = snapshot != null
 
         if (deleted && mode != null) {
             val prefs = context.settingsDataStore.data.first()
-            val currentManualId = prefs[activeManualSessionKey(mode)]
+            val currentManualId = readActiveManualSessionId(prefs, targetOwner, mode)
             if (currentManualId == id) {
                 clearManualSessionOverride(targetOwner, mode)
             }
@@ -296,8 +334,13 @@ class SessionManagerImpl(
 
     override suspend fun clearManualSessionOverride(ownerId: String, mode: Mode) {
         context.settingsDataStore.edit { prefs ->
-            prefs[sessionModeKey(mode)] = SessionKind.AUTOMATIC.value
-            prefs.remove(activeManualSessionKey(mode))
+            prefs[sessionModeKey(ownerId, mode)] = SessionKind.AUTOMATIC.value
+            prefs.remove(activeManualSessionKey(ownerId, mode))
+            if (ownerId == "guest") {
+                // Also clear the legacy unscoped key, otherwise readActiveManualSessionId's
+                // guest fallback would resurrect the stale override we just cleared.
+                prefs.remove(legacyActiveManualSessionKey(mode))
+            }
         }
     }
 }

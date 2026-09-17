@@ -318,6 +318,10 @@ class Milestone3EmpiricalChallengeStressTest {
             sessionManager = sessionManager,
             sessionRepository = sessionRepository,
             authManager = fakeAuthManager,
+            database = database,
+            sessionDao = database.sessionDao(),
+            solveDao = database.solveDao(),
+            syncOutboxDao = database.syncOutboxDao(),
             defaultDispatcher = testDispatcher
         )
 
@@ -458,6 +462,10 @@ class Milestone3EmpiricalChallengeStressTest {
             sessionManager = sessionManager,
             sessionRepository = sessionRepository,
             authManager = fakeAuthManager,
+            database = database,
+            sessionDao = database.sessionDao(),
+            solveDao = database.solveDao(),
+            syncOutboxDao = database.syncOutboxDao(),
             defaultDispatcher = testDispatcher
         )
 
@@ -539,6 +547,10 @@ class Milestone3EmpiricalChallengeStressTest {
             sessionManager = sessionManager,
             sessionRepository = sessionRepository,
             authManager = fakeAuthManager,
+            database = database,
+            sessionDao = database.sessionDao(),
+            solveDao = database.solveDao(),
+            syncOutboxDao = database.syncOutboxDao(),
             defaultDispatcher = testDispatcher
         )
 

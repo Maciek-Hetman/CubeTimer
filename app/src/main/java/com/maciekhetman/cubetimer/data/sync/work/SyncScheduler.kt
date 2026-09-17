@@ -64,9 +64,12 @@ class WorkManagerSyncScheduler(
             .addTag(TAG_SYNC)
             .build()
 
+        // APPEND_OR_REPLACE (not REPLACE): REPLACE cancels a currently-running immediate sync
+        // every time a new local write enqueues one, so a busy app could starve sync forever.
+        // Appending queues the new request to run after the in-flight one finishes instead.
         workManager.enqueueUniqueWork(
             WORK_NAME_IMMEDIATE,
-            ExistingWorkPolicy.REPLACE,
+            ExistingWorkPolicy.APPEND_OR_REPLACE,
             immediateRequest
         )
     }

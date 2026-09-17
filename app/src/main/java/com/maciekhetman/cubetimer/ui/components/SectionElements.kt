@@ -1,7 +1,5 @@
 package com.maciekhetman.cubetimer.ui.components
 
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -26,12 +24,3 @@ fun SectionHeader(
     )
 }
 
-@Composable
-fun SectionDivider(
-    modifier: Modifier = Modifier,
-    verticalPadding: Dp = 8.dp
-) {
-    Spacer(
-        modifier = modifier.height(verticalPadding)
-    )
-}

@@ -4,9 +4,12 @@ import android.app.Application
 import android.content.Context
 import androidx.work.Configuration
 import androidx.work.ListenableWorker
+import androidx.work.WorkManager
 import androidx.work.WorkerFactory
 import androidx.work.WorkerParameters
 import com.maciekhetman.cubetimer.data.SolvesRepository
+import com.maciekhetman.cubetimer.data.admin.AdminRepository
+import com.maciekhetman.cubetimer.data.admin.AdminRepositoryImpl
 import com.maciekhetman.cubetimer.data.auth.AuthManager
 import com.maciekhetman.cubetimer.data.auth.AuthManagerImpl
 import com.maciekhetman.cubetimer.data.auth.EncryptedTokenStorage
@@ -25,9 +28,16 @@ import com.maciekhetman.cubetimer.data.sync.ConflictResolver
 import com.maciekhetman.cubetimer.data.sync.ConflictResolverImpl
 import com.maciekhetman.cubetimer.data.sync.SyncEngine
 import com.maciekhetman.cubetimer.data.sync.SyncEngineImpl
+import com.maciekhetman.cubetimer.data.sync.SyncStateManager
 import com.maciekhetman.cubetimer.data.sync.work.SyncScheduler
 import com.maciekhetman.cubetimer.data.sync.work.SyncWorker
 import com.maciekhetman.cubetimer.data.sync.work.WorkManagerSyncScheduler
+import com.maciekhetman.cubetimer.domain.AndroidSha1PrngProvider
+import com.maciekhetman.cubetimer.model.AuthState
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /**
  * Custom Application class initializing dependency singletons and WorkManager configuration.
@@ -77,10 +87,19 @@ class CubeTimerApplication : Application(), Configuration.Provider {
             apiClient = apiClient,
             tokenStorage = tokenStorage,
             database = database,
-            syncTrigger = { syncScheduler.scheduleImmediateSync() }
+            syncTrigger = { scheduleImmediateSyncIfAuthenticated() }
         ).also {
             tokenAuthenticator.sessionExpirationListener = it
         }
+    }
+
+    val syncStateManager: SyncStateManager by lazy {
+        SyncStateManager(
+            context = this,
+            database = database,
+            authManager = authManager,
+            onTriggerSync = { scheduleImmediateSyncIfAuthenticated() }
+        )
     }
 
     val syncEngine: SyncEngine by lazy {
@@ -89,14 +108,15 @@ class CubeTimerApplication : Application(), Configuration.Provider {
             tokenStorage = tokenStorage,
             database = database,
             authManager = authManager,
-            conflictResolver = conflictResolver
+            conflictResolver = conflictResolver,
+            stateManager = syncStateManager
         )
     }
 
     val sessionRepository: SessionRepository by lazy {
         SessionRepositoryImpl(
             database = database,
-            syncTrigger = { syncScheduler.scheduleImmediateSync() }
+            syncTrigger = { scheduleImmediateSyncIfAuthenticated() }
         )
     }
 
@@ -116,21 +136,75 @@ class CubeTimerApplication : Application(), Configuration.Provider {
             sessionDao = database.sessionDao(),
             syncOutboxDao = database.syncOutboxDao(),
             database = database,
-            syncTrigger = { syncScheduler.scheduleImmediateSync() }
+            syncTrigger = { scheduleImmediateSyncIfAuthenticated() }
         )
     }
 
-    val adminRepository: com.maciekhetman.cubetimer.data.admin.AdminRepository by lazy {
-        com.maciekhetman.cubetimer.data.admin.AdminRepositoryImpl(apiClient)
+    val adminRepository: AdminRepository by lazy {
+        AdminRepositoryImpl(apiClient)
     }
 
-    val syncStateManager: com.maciekhetman.cubetimer.data.sync.SyncStateManager by lazy {
-        com.maciekhetman.cubetimer.data.sync.SyncStateManager(
-            context = this,
-            database = database,
-            authManager = authManager,
-            onTriggerSync = { syncScheduler.scheduleImmediateSync() }
-        )
+    /**
+     * Background scope for app-wide singleton observers (e.g. periodic sync scheduling).
+     * Runs on [Dispatchers.Default] so accessing heavy lazy singletons (authManager, database,
+     * network client) never happens on the main thread.
+     */
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    /**
+     * Schedules an immediate sync only when there is a real (non-guest) owner. Used by every
+     * write-path syncTrigger so guest-mode writes never enqueue WorkManager work that the sync
+     * engine would just no-op on.
+     *
+     * Checks both [AuthManager.currentOwnerId] and [TokenStorage.getUserId] because
+     * [AuthManagerImpl] invokes its syncTrigger during guest-data adoption *before* it flips
+     * authState to Authenticated/Admin - tokenStorage's userId is already persisted by then.
+     */
+    private fun scheduleImmediateSyncIfAuthenticated() {
+        val hasNonGuestOwner = authManager.currentOwnerId != "guest" ||
+            !tokenStorage.getUserId().isNullOrBlank()
+        if (hasNonGuestOwner) {
+            syncScheduler.scheduleImmediateSync()
+        }
+    }
+
+    /**
+     * Observes [AuthManager.authState] and keeps the 15-minute periodic sync scheduled while an
+     * owner is signed in, cancelling it back to guest mode. Skips entirely when WorkManager isn't
+     * available (e.g. Robolectric tests that instantiate this Application without initializing
+     * WorkManager), and guards each scheduler call the same way in case availability changes
+     * mid-collection.
+     */
+    private fun observeAuthStateForPeriodicSync() {
+        val workManagerAvailable = try {
+            WorkManager.getInstance(this)
+            true
+        } catch (e: IllegalStateException) {
+            false
+        }
+        if (!workManagerAvailable) return
+
+        applicationScope.launch {
+            authManager.authState.collect { state ->
+                when (state) {
+                    is AuthState.Authenticated, is AuthState.Admin -> {
+                        try {
+                            syncScheduler.schedulePeriodicSync()
+                        } catch (e: IllegalStateException) {
+                            // WorkManager not available; nothing to do.
+                        }
+                    }
+                    is AuthState.Guest -> {
+                        try {
+                            syncScheduler.cancelPeriodicSync()
+                        } catch (e: IllegalStateException) {
+                            // WorkManager not available; nothing to do.
+                        }
+                    }
+                    is AuthState.Loading -> Unit
+                }
+            }
+        }
     }
 
     override val workManagerConfiguration: Configuration
@@ -153,7 +227,8 @@ class CubeTimerApplication : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         instance = this
-        com.maciekhetman.cubetimer.domain.AndroidSha1PrngProvider.install()
+        AndroidSha1PrngProvider.install()
+        observeAuthStateForPeriodicSync()
     }
 
     companion object {
@@ -164,32 +239,6 @@ class CubeTimerApplication : Application(), Configuration.Provider {
 
         fun getInstance(): CubeTimerApplication {
             return instance ?: throw IllegalStateException("CubeTimerApplication is not initialized")
-        }
-
-        fun getSyncEngineInstance(context: Context): SyncEngine {
-            val app = context.applicationContext as? CubeTimerApplication
-            return app?.syncEngine ?: run {
-                val db = CubeDatabase.getInstance(context)
-                val tokenStorage = EncryptedTokenStorage(context)
-                val authInterceptor = AuthInterceptor(tokenStorage)
-                val tokenAuthenticator = TokenAuthenticator(tokenStorage, baseUrl = BASE_URL)
-                val apiService = NetworkModule.provideAuthApiService(
-                    baseUrl = BASE_URL,
-                    okHttpClient = NetworkModule.provideOkHttpClient(
-                        authInterceptor = authInterceptor,
-                        authenticator = tokenAuthenticator
-                    )
-                )
-                val apiClient = NetworkModule.provideCubeSyncApiClient(apiService)
-                val authManager = AuthManagerImpl.getInstance(context)
-                SyncEngineImpl(
-                    apiClient = apiClient,
-                    tokenStorage = tokenStorage,
-                    database = db,
-                    authManager = authManager,
-                    conflictResolver = ConflictResolverImpl(db)
-                )
-            }
         }
     }
 }

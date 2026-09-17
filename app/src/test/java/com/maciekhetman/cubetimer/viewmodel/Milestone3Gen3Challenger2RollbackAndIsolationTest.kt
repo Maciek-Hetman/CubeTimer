@@ -117,6 +117,10 @@ class Milestone3Gen3Challenger2RollbackAndIsolationTest {
             sessionManager = sessionManager,
             sessionRepository = sessionRepository,
             authManager = fakeAuthManager,
+            database = database,
+            sessionDao = database.sessionDao(),
+            solveDao = database.solveDao(),
+            syncOutboxDao = database.syncOutboxDao(),
             defaultDispatcher = testDispatcher
         )
     }

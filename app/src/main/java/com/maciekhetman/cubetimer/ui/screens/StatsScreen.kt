@@ -49,6 +49,8 @@ import com.maciekhetman.cubetimer.ui.components.CollapsingTopBar
 import com.maciekhetman.cubetimer.ui.components.SessionFilterBar
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.maciekhetman.cubetimer.viewmodel.TimerViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -415,10 +417,10 @@ fun CompactSummaryGrid(
 ) {
     val items = remember(solves) {
         listOf(
-            StandardAverageData("Ao5", 5, calculateAverageOfN(solves, 5), findBestAverageOfN(solves, 5)),
-            StandardAverageData("Ao12", 12, calculateAverageOfN(solves, 12), findBestAverageOfN(solves, 12)),
-            StandardAverageData("Ao50", 50, calculateAverageOfN(solves, 50), findBestAverageOfN(solves, 50)),
-            StandardAverageData("Ao100", 100, calculateAverageOfN(solves, 100), findBestAverageOfN(solves, 100))
+            StandardAverageData("Ao5", 5, AverageCalculator.averageOfN(solves, 5), AverageCalculator.bestAverageOfN(solves, 5)),
+            StandardAverageData("Ao12", 12, AverageCalculator.averageOfN(solves, 12), AverageCalculator.bestAverageOfN(solves, 12)),
+            StandardAverageData("Ao50", 50, AverageCalculator.averageOfN(solves, 50), AverageCalculator.bestAverageOfN(solves, 50)),
+            StandardAverageData("Ao100", 100, AverageCalculator.averageOfN(solves, 100), AverageCalculator.bestAverageOfN(solves, 100))
         )
     }
 
@@ -645,14 +647,22 @@ private fun LargeAveragesSection(
 ) {
     var isExpanded by rememberSaveable { mutableStateOf(false) }
 
-    val averagesData = remember(solves) {
-        LargeAverages.associate { (count, _) ->
-            count to (calculateAverageOfN(solves, count) to findBestAverageOfN(solves, count))
+    // Ao500/Ao1000/Ao2000 involve a bestAverageOfN scan over the whole solve list; only compute
+    // them (and only off the main thread) once the section is actually expanded and visible.
+    val averagesData by produceState<Map<Int, Pair<Long?, Long?>>?>(initialValue = null, solves, isExpanded) {
+        value = if (isExpanded) {
+            withContext(Dispatchers.Default) {
+                LargeAverages.associate { (count, _) ->
+                    count to (AverageCalculator.averageOfN(solves, count) to AverageCalculator.bestAverageOfN(solves, count))
+                }
+            }
+        } else {
+            null
         }
     }
 
-    val badgeText = remember(solves, averagesData) {
-        val ao500 = averagesData[500]?.first
+    val badgeText = remember(averagesData) {
+        val ao500 = averagesData?.get(500)?.first
         if (ao500 != null) "Ao500: ${formatTime(ao500)}" else "Ao500 • Ao1000 • Ao2000"
     }
 
@@ -663,8 +673,20 @@ private fun LargeAveragesSection(
         onToggle = { isExpanded = !isExpanded },
         modifier = modifier
     ) {
+        val data = averagesData
+        if (data == null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(28.dp))
+            }
+            return@CollapsibleSectionCard
+        }
         LargeAverages.forEach { (count, label) ->
-            val (current, best) = averagesData.getValue(count)
+            val (current, best) = data.getValue(count)
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 color = MaterialTheme.colorScheme.surfaceContainerHighest,
@@ -722,6 +744,12 @@ private fun LargeAveragesSection(
 // Collapsible Session & Detailed Metrics Section
 // =============================================================================
 
+private data class SessionMetricsData(
+    val sessionStats: SessionStats?,
+    val allTimeMean: Long,
+    val allTimeStdDev: Double
+)
+
 @Composable
 private fun SessionMetricsSection(
     solves: List<SolveTime>,
@@ -730,14 +758,27 @@ private fun SessionMetricsSection(
 ) {
     var isExpanded by rememberSaveable { mutableStateOf(false) }
 
-    val sessionStats = remember(solves) { calculateSessionStats(solves) }
-    val allValidSolves = remember(solves) { solves.filter { it.penalty != Penalty.DNF } }
+    // Cheap enough to keep synchronous: needed for the badge even while collapsed.
     val totalSolvingTime = remember(solves) { solves.sumOf { it.timeInMillis } }
-    val allTimeMean = remember(allValidSolves) { calculateMean(allValidSolves) }
-    val allTimeStdDev = remember(allValidSolves) { calculateStandardDeviation(allValidSolves) }
-
     val badgeText = remember(solves, totalSolvingTime) {
-        "${solves.size} solves • ${formatDuration(totalSolvingTime)}"
+        "${solves.size} solves • ${TimeFormatter.formatDuration(totalSolvingTime)}"
+    }
+
+    // Session bucketing + mean/std-dev are only needed once the section is expanded; compute
+    // them off the main thread so opening this section never freezes the UI.
+    val metrics by produceState<SessionMetricsData?>(initialValue = null, solves, isExpanded) {
+        value = if (isExpanded) {
+            withContext(Dispatchers.Default) {
+                val allValidSolves = solves.filter { it.penalty != Penalty.DNF }
+                SessionMetricsData(
+                    sessionStats = calculateSessionStats(solves),
+                    allTimeMean = AverageCalculator.mean(allValidSolves),
+                    allTimeStdDev = AverageCalculator.standardDeviation(allValidSolves)
+                )
+            }
+        } else {
+            null
+        }
     }
 
     CollapsibleSectionCard(
@@ -747,6 +788,21 @@ private fun SessionMetricsSection(
         onToggle = { isExpanded = !isExpanded },
         modifier = modifier
     ) {
+        val data = metrics
+        if (data == null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(28.dp))
+            }
+            return@CollapsibleSectionCard
+        }
+        val sessionStats = data.sessionStats
+        val allTimeMean = data.allTimeMean
+        val allTimeStdDev = data.allTimeStdDev
         if (sessionStats != null) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -794,7 +850,7 @@ private fun SessionMetricsSection(
                 )
                 StatCard(
                     label = "Time Cubing",
-                    value = formatDuration(sessionStats.avgTimeCubingInSession),
+                    value = TimeFormatter.formatDuration(sessionStats.avgTimeCubingInSession),
                     modifier = Modifier.weight(1f),
                     containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                 )
@@ -830,7 +886,7 @@ private fun SessionMetricsSection(
             )
             StatCard(
                 label = "Time Solving",
-                value = formatDuration(totalSolvingTime),
+                value = TimeFormatter.formatDuration(totalSolvingTime),
                 modifier = Modifier.weight(1f),
                 containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
             )
@@ -841,7 +897,7 @@ private fun SessionMetricsSection(
         ) {
             StatCard(
                 label = "Time in App",
-                value = formatDuration(appTimeMillis),
+                value = TimeFormatter.formatDuration(appTimeMillis),
                 modifier = Modifier.weight(1f),
                 containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
             )
@@ -919,17 +975,18 @@ private fun PenaltyStatsSection(
 private fun PersonalBestsChart(solves: List<SolveTime>) {
     var selectedRange by remember { mutableStateOf("All") }
     val haptic = LocalHapticFeedback.current
-    val validSolves = solves.filter { it.penalty != Penalty.DNF }
-    
+    val validSolves = remember(solves) { solves.filter { it.penalty != Penalty.DNF } }
+
     if (validSolves.isEmpty()) {
         return
     }
-    
-    val pbData = remember(solves) { calculatePersonalBests(solves) }
-    val singlePBs = pbData.singlePBs
-    val ao5PBs = pbData.ao5PBs
-    val ao12PBs = pbData.ao12PBs
-    
+
+    // calculatePersonalBests walks every solve computing rolling Ao5/Ao12 windows; keep it off
+    // the main thread so this always-visible chart never blocks composition.
+    val pbData by produceState<PersonalBestsData?>(initialValue = null, solves) {
+        value = withContext(Dispatchers.Default) { calculatePersonalBests(solves) }
+    }
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -943,12 +1000,28 @@ private fun PersonalBestsChart(solves: List<SolveTime>) {
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             SectionHeader(title = "Personal Best Progress")
-            
+
+            val data = pbData
+            if (data == null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+                return@Column
+            }
+            val singlePBs = data.singlePBs
+            val ao5PBs = data.ao5PBs
+            val ao12PBs = data.ao12PBs
+
             val singleColor = MaterialTheme.colorScheme.primary
             val ao5Color = MaterialTheme.colorScheme.secondary
             val ao12Color = MaterialTheme.colorScheme.tertiary
             val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
-            
+
             val rangeStartIndex = rangeStartIndex(solves.size, selectedRange)
             val rangeEndIndex = (solves.size - 1).coerceAtLeast(0)
             fun rangePbs(pbs: List<Pair<Int, Long>>): List<Pair<Int, Long>> {
@@ -1241,21 +1314,13 @@ private fun SolveTimesChart(solves: List<SolveTime>) {
 private fun AveragesChart(solves: List<SolveTime>) {
     var selectedRange by remember { mutableStateOf("All") }
     val haptic = LocalHapticFeedback.current
-    
-    val (ao5List, ao12List) = remember(solves) { calculateRollingAverages(solves) }
-    
-    // Filter data based on selected range
-    val displayAo5List = when (selectedRange) {
-        "Last 50" -> ao5List.takeLast(50)
-        "Last 100" -> ao5List.takeLast(100)
-        else -> ao5List
+
+    // calculateRollingAverages computes a trimmed-mean window for every solve; keep it off the
+    // main thread so this always-visible chart never blocks composition.
+    val rollingAverages by produceState<RollingAveragesData?>(initialValue = null, solves) {
+        value = withContext(Dispatchers.Default) { calculateRollingAverages(solves) }
     }
-    val displayAo12List = when (selectedRange) {
-        "Last 50" -> ao12List.takeLast(50)
-        "Last 100" -> ao12List.takeLast(100)
-        else -> ao12List
-    }
-    
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -1269,15 +1334,42 @@ private fun AveragesChart(solves: List<SolveTime>) {
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             SectionHeader(title = "Progress Chart")
-        
+
+            val data = rollingAverages
+            if (data == null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+                return@Column
+            }
+            val ao5List = data.ao5List
+            val ao12List = data.ao12List
+
+            // Filter data based on selected range
+            val displayAo5List = when (selectedRange) {
+                "Last 50" -> ao5List.takeLast(50)
+                "Last 100" -> ao5List.takeLast(100)
+                else -> ao5List
+            }
+            val displayAo12List = when (selectedRange) {
+                "Last 50" -> ao12List.takeLast(50)
+                "Last 100" -> ao12List.takeLast(100)
+                else -> ao12List
+            }
+
         val ao5Color = MaterialTheme.colorScheme.primary
         val ao12Color = MaterialTheme.colorScheme.tertiary
         val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
-        
+
         val validAo5 = displayAo5List.filterNotNull()
         val validAo12 = displayAo12List.filterNotNull()
         val allValues = validAo5 + validAo12
-        
+
         if (allValues.isEmpty()) {
             Box(
                 modifier = Modifier
@@ -1464,49 +1556,6 @@ private fun rangeStartIndex(solveCount: Int, selectedRange: String): Int {
 }
 
 @Composable
-private fun FeaturedStatCard(
-    label: String,
-    value: String,
-    modifier: Modifier = Modifier,
-    containerColor: Color = MaterialTheme.colorScheme.primaryContainer,
-    contentColor: Color = contentColorFor(containerColor)
-) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(24.dp),
-        color = containerColor,
-        contentColor = contentColor,
-        tonalElevation = 0.dp
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.titleMedium,
-                color = contentColor,
-                fontWeight = FontWeight.SemiBold,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Text(
-                text = value,
-                style = MaterialTheme.typography.displaySmall,
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Bold,
-                color = contentColor,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-    }
-}
-
-@Composable
 private fun StatCard(
     label: String,
     value: String,
@@ -1545,60 +1594,6 @@ private fun StatCard(
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth()
             )
-        }
-    }
-}
-
-@Composable
-private fun AverageCard(
-    label: String,
-    value: String,
-    modifier: Modifier = Modifier,
-    containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
-    contentColor: Color = contentColorFor(containerColor)
-) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(24.dp),
-        color = containerColor,
-        contentColor = contentColor,
-        tonalElevation = 0.dp
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(StatCardContentPadding),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelLarge,
-                color = contentColor,
-                fontWeight = FontWeight.Medium,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
-            BoxWithConstraints(
-                modifier = Modifier.fillMaxWidth(),
-                contentAlignment = Alignment.Center
-            ) {
-                val fontSize = when {
-                    this.maxWidth < 120.dp -> 18.sp
-                    this.maxWidth < 150.dp -> 22.sp
-                    else -> 28.sp
-                }
-                Text(
-                    text = value,
-                    fontSize = fontSize,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold,
-                    color = contentColor,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    softWrap = false
-                )
-            }
         }
     }
 }
@@ -1656,15 +1651,10 @@ private fun PenaltyCard(
 
 
 private val StatCardContentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
-private val StatCardSpacing = 10.dp
 private val ChartRangeOptions = listOf("Last 50", "Last 100", "All")
 
 private fun formatTime(millis: Long): String {
     return TimeFormatter.formatTime(millis)
-}
-
-private fun formatOptionalTime(millis: Long?): String {
-    return if (millis != null) formatTime(millis) else "N/A"
 }
 
 private val timestampFormat by lazy {
@@ -1673,22 +1663,6 @@ private val timestampFormat by lazy {
 
 private fun formatTimestamp(timestamp: Long): String {
     return timestampFormat.format(Date(timestamp))
-}
-
-private fun formatDuration(millis: Long): String {
-    return TimeFormatter.formatDuration(millis)
-}
-
-private fun calculateAverageOfN(solves: List<SolveTime>, n: Int): Long? {
-    return AverageCalculator.averageOfN(solves, n)
-}
-
-private fun calculateAverage(solves: List<SolveTime>): Long {
-    return AverageCalculator.average(solves)
-}
-
-private fun findBestAverageOfN(solves: List<SolveTime>, n: Int): Long? {
-    return AverageCalculator.bestAverageOfN(solves, n)
 }
 
 // Session calculation: group solves with max 1 hour gap between consecutive solves
@@ -1743,14 +1717,6 @@ private fun calculateSessions(solves: List<SolveTime>): List<AutoCalculatedSessi
     return sessions
 }
 
-private fun calculateMean(solves: List<SolveTime>): Long {
-    return AverageCalculator.mean(solves)
-}
-
-private fun calculateStandardDeviation(solves: List<SolveTime>): Double {
-    return AverageCalculator.standardDeviation(solves)
-}
-
 private data class SessionStats(
     val bestSessionTime: Long,
     val worstSessionTime: Long,
@@ -1786,8 +1752,8 @@ private fun calculateSessionStats(solves: List<SolveTime>): SessionStats? {
         bestSessionTime = sessionAverages.minOrNull() ?: 0L,
         worstSessionTime = sessionAverages.maxOrNull() ?: 0L,
         sessionAverage = sessionAverages.average().toLong(),
-        meanSolveTime = calculateMean(allValidSolves),
-        standardDeviation = calculateStandardDeviation(allValidSolves),
+        meanSolveTime = AverageCalculator.mean(allValidSolves),
+        standardDeviation = AverageCalculator.standardDeviation(allValidSolves),
         avgTimeCubingInSession = avgTimeCubingInSession
     )
 }

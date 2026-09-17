@@ -149,21 +149,6 @@ data class AuthResponse(
 )
 
 /**
- * Token response representation for token-only operations.
- */
-@Serializable
-data class TokenResponse(
-    @SerialName("access_token")
-    val accessToken: String,
-    @SerialName("refresh_token")
-    val refreshToken: String,
-    @SerialName("token_type")
-    val tokenType: String = "Bearer",
-    @SerialName("expires_in")
-    val expiresIn: Long = 900L
-)
-
-/**
  * Generic status response returned by HTTP 202 endpoints (register, resend, forgot).
  */
 @Serializable

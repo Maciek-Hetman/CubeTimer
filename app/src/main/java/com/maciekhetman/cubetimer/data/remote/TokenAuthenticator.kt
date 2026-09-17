@@ -106,6 +106,14 @@ class TokenAuthenticator(
                         Log.e(TAG, "Network error during token refresh. Not clearing tokens.", refreshResult.exception)
                         null
                     }
+                    is RefreshResult.Transient -> {
+                        Log.w(
+                            TAG,
+                            "Transient server error (HTTP ${refreshResult.statusCode}) during token refresh. " +
+                                "Preserving session for retry."
+                        )
+                        null
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Unexpected error during token refresh.", e)
@@ -136,11 +144,17 @@ class TokenAuthenticator(
                         val authSession = json.decodeFromString(AuthResponse.serializer(), responseBody)
                         RefreshResult.Success(authSession)
                     }
-                    401, 403, 409 -> {
+                    // Definitive auth failures per the CubeSync refresh contract: the refresh
+                    // token is genuinely invalid, revoked, or reused. Only these should clear
+                    // stored credentials and force a logout.
+                    400, 401, 403, 409 -> {
                         RefreshResult.ExpiredOrInvalid(resp.code, responseBody)
                     }
+                    // Any other status (5xx, 429, unexpected codes) is a transient server-side
+                    // condition, not proof the refresh token is invalid. Keep the session so the
+                    // next request can retry instead of forcing an unnecessary logout.
                     else -> {
-                        RefreshResult.ExpiredOrInvalid(resp.code, responseBody)
+                        RefreshResult.Transient(resp.code, responseBody)
                     }
                 }
             }
@@ -179,5 +193,8 @@ class TokenAuthenticator(
         data class Success(val session: AuthResponse) : RefreshResult
         data class ExpiredOrInvalid(val statusCode: Int, val body: String) : RefreshResult
         data class NetworkError(val exception: IOException) : RefreshResult
+
+        /** Transient server-side failure (5xx, 429, unexpected code): keep the session. */
+        data class Transient(val statusCode: Int, val body: String) : RefreshResult
     }
 }

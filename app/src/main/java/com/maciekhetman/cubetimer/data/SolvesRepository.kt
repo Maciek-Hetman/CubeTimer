@@ -9,17 +9,14 @@ import com.maciekhetman.cubetimer.data.local.converter.CubeTypeConverters
 import com.maciekhetman.cubetimer.data.local.dao.SessionDao
 import com.maciekhetman.cubetimer.data.local.dao.SolveDao
 import com.maciekhetman.cubetimer.data.local.dao.SyncOutboxDao
-import com.maciekhetman.cubetimer.data.local.entity.SessionEntity
-import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
-import com.maciekhetman.cubetimer.data.local.entity.SyncOutboxEntity
 import com.maciekhetman.cubetimer.data.local.mapper.toDbString
+import com.maciekhetman.cubetimer.data.local.mapper.toDeleteMutation
 import com.maciekhetman.cubetimer.data.local.mapper.toEventString
 import com.maciekhetman.cubetimer.data.local.mapper.toSolveEntity
 import com.maciekhetman.cubetimer.data.local.mapper.toSolveTime
-import com.maciekhetman.cubetimer.data.local.mapper.toSyncPayload
+import com.maciekhetman.cubetimer.data.local.mapper.toUpsertMutation
 import com.maciekhetman.cubetimer.data.local.migration.DataStoreMigration
 import com.maciekhetman.cubetimer.data.remote.NetworkModule
-import com.maciekhetman.cubetimer.data.remote.dto.SolveSyncPayload
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Penalty
 import com.maciekhetman.cubetimer.model.SolveTime
@@ -29,13 +26,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import java.time.Instant
-import java.util.UUID
 
 class SolvesRepository(
     private val context: Context,
@@ -81,6 +76,15 @@ class SolvesRepository(
                 DataStoreMigration(context, db).migrateIfNeeded()
             }
         }
+    }
+
+    /**
+     * Runs [block] inside a Room transaction when a [database] reference is available, so the
+     * Room row write and its outbox mutation are committed atomically; falls back to running
+     * [block] directly (no transaction) for call sites/tests that only provide bare DAOs.
+     */
+    private suspend fun <T> runInTransaction(block: suspend () -> T): T {
+        return if (database != null) database.withTransaction { block() } else block()
     }
 
     /**
@@ -229,104 +233,40 @@ class SolvesRepository(
         )
     }
 
-    // --- Session / Event Batch Deletion ---
-
-    suspend fun clearSolvesBySession(
-        sessionId: String,
-        ownerId: String = "guest"
-    ) = withContext(ioDispatcher) {
-        val nowIso = Instant.now().toString()
-        val existing = solveDao.getSolvesBySession(ownerId, sessionId)
-        if (existing.isNotEmpty()) {
-            val ids = existing.map { it.id }
-            if (database != null) {
-                database.withTransaction {
-                    solveDao.softDeleteAll(ids, deletedAt = nowIso, updatedAt = nowIso)
-                }
-            } else {
-                solveDao.softDeleteAll(ids, deletedAt = nowIso, updatedAt = nowIso)
-            }
-            if (ownerId != "guest") {
-                for (item in existing) {
-                    val mutation = SyncOutboxEntity(
-                        id = UUID.randomUUID().toString(),
-                        ownerId = ownerId,
-                        entityType = "solve",
-                        entityId = item.id,
-                        action = "delete",
-                        baseVersion = item.version,
-                        payloadJson = null,
-                        clientTime = nowIso,
-                        status = "pending"
-                    )
-                    syncOutboxDao.enqueue(mutation)
-                }
-            }
-        }
-        syncTrigger?.invoke()
-    }
-
-    suspend fun clearSolvesByEvent(
-        mode: Mode,
-        ownerId: String = "guest"
-    ) = withContext(ioDispatcher) {
-        val nowIso = Instant.now().toString()
-        val existing = solveDao.getSolvesByEvent(ownerId, mode.toEventString())
-        if (existing.isNotEmpty()) {
-            val ids = existing.map { it.id }
-            if (database != null) {
-                database.withTransaction {
-                    solveDao.softDeleteAll(ids, deletedAt = nowIso, updatedAt = nowIso)
-                }
-            } else {
-                solveDao.softDeleteAll(ids, deletedAt = nowIso, updatedAt = nowIso)
-            }
-            if (ownerId != "guest") {
-                for (item in existing) {
-                    val mutation = SyncOutboxEntity(
-                        id = UUID.randomUUID().toString(),
-                        ownerId = ownerId,
-                        entityType = "solve",
-                        entityId = item.id,
-                        action = "delete",
-                        baseVersion = item.version,
-                        payloadJson = null,
-                        clientTime = nowIso,
-                        status = "pending"
-                    )
-                    syncOutboxDao.enqueue(mutation)
-                }
-            }
-        }
-        syncTrigger?.invoke()
-    }
-
     /**
      * Save a single solve with session association and transactional outbox mutation dispatch.
+     * If a row with this id already exists (e.g. re-adding a solve after an undo), its server
+     * [SolveEntity.version] is preserved instead of being reset to 0, so sync doesn't send a
+     * stale baseVersion and provoke a needless server conflict.
      */
     suspend fun saveSolve(
         solve: SolveTime,
         ownerId: String = "guest",
         sessionId: String? = solve.sessionId
     ) = withContext(ioDispatcher) {
-        val nowIso = Instant.now().toString()
-        val entity = solve.toSolveEntity(ownerId = ownerId, sessionId = sessionId ?: solve.sessionId)
-        solveDao.upsert(entity)
-
-        if (ownerId != "guest") {
-            val payload = entity.toSyncPayload()
-            val mutation = SyncOutboxEntity(
-                id = UUID.randomUUID().toString(),
+        val nowIso = CubeTypeConverters.nowIso()
+        val existing = solveDao.getSolveById(solve.id)
+        val entity = if (existing != null) {
+            existing.copy(
                 ownerId = ownerId,
-                entityType = "solve",
-                entityId = entity.id,
-                action = "upsert",
-                baseVersion = entity.version,
-                payloadJson = json.encodeToString(SolveSyncPayload.serializer(), payload),
-                clientTime = nowIso,
-                status = "pending"
+                sessionId = sessionId ?: solve.sessionId,
+                event = CubeTypeConverters.fromMode(solve.mode),
+                durationMs = solve.timeInMillis,
+                penalty = CubeTypeConverters.fromPenalty(solve.penalty),
+                solvedAt = CubeTypeConverters.epochMillisToIso(solve.timestamp),
+                scramble = solve.scramble,
+                deletedAt = null,
+                updatedAt = nowIso
             )
-            syncOutboxDao.enqueue(mutation)
+        } else {
+            solve.toSolveEntity(ownerId = ownerId, sessionId = sessionId ?: solve.sessionId)
+        }
+
+        runInTransaction {
+            solveDao.upsert(entity)
+            if (ownerId != "guest") {
+                syncOutboxDao.enqueue(entity.toUpsertMutation(ownerId = ownerId, clientTime = nowIso, json = json))
+            }
         }
         syncTrigger?.invoke()
     }
@@ -341,41 +281,43 @@ class SolvesRepository(
 
     /**
      * Batch delete multiple solves (soft delete with timestamp) and enqueue delete mutations if authenticated.
+     * Only rows actually owned by [ownerId] are touched, matching [deleteSolvesByIds].
      */
     suspend fun deleteSolves(
         solves: List<SolveTime>,
         ownerId: String = "guest"
     ) = withContext(ioDispatcher) {
         if (solves.isEmpty()) return@withContext
-        val nowIso = Instant.now().toString()
-        val ids = solves.map { it.id }
-        val existing = if (ownerId != "guest") solveDao.getSolvesByIds(ids) else emptyList()
-        if (database != null) {
-            database.withTransaction {
-                solveDao.softDeleteAll(ids, deletedAt = nowIso, updatedAt = nowIso)
+        deleteSolvesByIds(solves.map { it.id }, ownerId)
+        Unit
+    }
+
+    /**
+     * Batch soft-delete solves matching the provided IDs.
+     * Enqueues delete outbox mutations if ownerId != "guest", triggers sync,
+     * and returns the list of deleted [SolveTime]s for undo snapshotting.
+     */
+    suspend fun deleteSolvesByIds(
+        ids: List<String>,
+        ownerId: String = "guest"
+    ): List<SolveTime> = withContext(ioDispatcher) {
+        if (ids.isEmpty()) return@withContext emptyList()
+
+        val existing = solveDao.getSolvesByIds(ids).filter { it.deletedAt == null && it.ownerId == ownerId }
+        if (existing.isEmpty()) return@withContext emptyList()
+
+        val nowIso = CubeTypeConverters.nowIso()
+        val targetIds = existing.map { it.id }
+
+        runInTransaction {
+            solveDao.softDeleteAll(targetIds, deletedAt = nowIso, updatedAt = nowIso)
+            if (ownerId != "guest") {
+                syncOutboxDao.enqueueAll(existing.map { it.toDeleteMutation(ownerId = ownerId, clientTime = nowIso) })
             }
-        } else {
-            solveDao.softDeleteAll(ids, deletedAt = nowIso, updatedAt = nowIso)
         }
 
-        if (ownerId != "guest") {
-            val versionMap = existing.associate { it.id to it.version }
-            for (solve in solves) {
-                val mutation = SyncOutboxEntity(
-                    id = UUID.randomUUID().toString(),
-                    ownerId = ownerId,
-                    entityType = "solve",
-                    entityId = solve.id,
-                    action = "delete",
-                    baseVersion = versionMap[solve.id] ?: 0L,
-                    payloadJson = null,
-                    clientTime = nowIso,
-                    status = "pending"
-                )
-                syncOutboxDao.enqueue(mutation)
-            }
-        }
         syncTrigger?.invoke()
+        existing.map { it.toSolveTime() }
     }
 
     /**
@@ -387,7 +329,7 @@ class SolvesRepository(
         ownerId: String = "guest"
     ) = withContext(ioDispatcher) {
         val existing = solveDao.getSolveById(solve.id)
-        val nowIso = Instant.now().toString()
+        val nowIso = CubeTypeConverters.nowIso()
         val updated = if (existing != null) {
             existing.copy(
                 penalty = penalty.toDbString(),
@@ -396,22 +338,12 @@ class SolvesRepository(
         } else {
             solve.copy(penalty = penalty).toSolveEntity(ownerId = ownerId)
         }
-        solveDao.upsert(updated)
 
-        if (ownerId != "guest") {
-            val payload = updated.toSyncPayload()
-            val mutation = SyncOutboxEntity(
-                id = UUID.randomUUID().toString(),
-                ownerId = ownerId,
-                entityType = "solve",
-                entityId = updated.id,
-                action = "upsert",
-                baseVersion = existing?.version ?: 0L,
-                payloadJson = json.encodeToString(SolveSyncPayload.serializer(), payload),
-                clientTime = nowIso,
-                status = "pending"
-            )
-            syncOutboxDao.enqueue(mutation)
+        runInTransaction {
+            solveDao.upsert(updated)
+            if (ownerId != "guest") {
+                syncOutboxDao.enqueue(updated.toUpsertMutation(ownerId = ownerId, clientTime = nowIso, json = json))
+            }
         }
         syncTrigger?.invoke()
     }
@@ -423,25 +355,15 @@ class SolvesRepository(
         solves: List<SolveTime>,
         ownerId: String = "guest"
     ) = withContext(ioDispatcher) {
-        val nowIso = Instant.now().toString()
+        val nowIso = CubeTypeConverters.nowIso()
         if (solves.isEmpty()) {
             val existing = solveDao.getAllActiveSolvesForOwner(ownerId)
             if (existing.isNotEmpty()) {
-                solveDao.softDeleteAll(existing.map { it.id }, deletedAt = nowIso, updatedAt = nowIso)
-                if (ownerId != "guest") {
-                    for (item in existing) {
-                        val mutation = SyncOutboxEntity(
-                            id = UUID.randomUUID().toString(),
-                            ownerId = ownerId,
-                            entityType = "solve",
-                            entityId = item.id,
-                            action = "delete",
-                            baseVersion = item.version,
-                            payloadJson = null,
-                            clientTime = nowIso,
-                            status = "pending"
-                        )
-                        syncOutboxDao.enqueue(mutation)
+                val targetIds = existing.map { it.id }
+                runInTransaction {
+                    solveDao.softDeleteAll(targetIds, deletedAt = nowIso, updatedAt = nowIso)
+                    if (ownerId != "guest") {
+                        syncOutboxDao.enqueueAll(existing.map { it.toDeleteMutation(ownerId = ownerId, clientTime = nowIso) })
                     }
                 }
             }
@@ -454,121 +376,102 @@ class SolvesRepository(
         val newIds = solves.map { it.id }.toSet()
 
         val removedIds = currentIds - newIds
-        if (removedIds.isNotEmpty()) {
-            solveDao.softDeleteAll(removedIds.toList(), deletedAt = nowIso, updatedAt = nowIso)
-            if (ownerId != "guest") {
-                val removedEntities = currentSolves.filter { it.id in removedIds }
-                for (item in removedEntities) {
-                    val mutation = SyncOutboxEntity(
-                        id = UUID.randomUUID().toString(),
-                        ownerId = ownerId,
-                        entityType = "solve",
-                        entityId = item.id,
-                        action = "delete",
-                        baseVersion = item.version,
-                        payloadJson = null,
-                        clientTime = nowIso,
-                        status = "pending"
-                    )
-                    syncOutboxDao.enqueue(mutation)
+        val removedEntities = currentSolves.filter { it.id in removedIds }
+        val entities = solves.map { it.toSolveEntity(ownerId = ownerId) }
+
+        runInTransaction {
+            if (removedEntities.isNotEmpty()) {
+                solveDao.softDeleteAll(removedEntities.map { it.id }, deletedAt = nowIso, updatedAt = nowIso)
+                if (ownerId != "guest") {
+                    syncOutboxDao.enqueueAll(removedEntities.map { it.toDeleteMutation(ownerId = ownerId, clientTime = nowIso) })
                 }
             }
-        }
 
-        val entities = solves.map { it.toSolveEntity(ownerId = ownerId) }
-        if (database != null) {
-            database.withTransaction {
-                solveDao.upsertAll(entities)
-            }
-        } else {
             solveDao.upsertAll(entities)
-        }
-
-        if (ownerId != "guest") {
-            for (entity in entities) {
-                val payload = entity.toSyncPayload()
-                val mutation = SyncOutboxEntity(
-                    id = UUID.randomUUID().toString(),
-                    ownerId = ownerId,
-                    entityType = "solve",
-                    entityId = entity.id,
-                    action = "upsert",
-                    baseVersion = entity.version,
-                    payloadJson = json.encodeToString(SolveSyncPayload.serializer(), payload),
-                    clientTime = nowIso,
-                    status = "pending"
-                )
-                syncOutboxDao.enqueue(mutation)
+            if (ownerId != "guest") {
+                syncOutboxDao.enqueueAll(entities.map { it.toUpsertMutation(ownerId = ownerId, clientTime = nowIso, json = json) })
             }
         }
         syncTrigger?.invoke()
+    }
+
+    /**
+     * Clear all active solves within the given puzzle mode scope (or all modes if mode is null).
+     * Enqueues delete outbox mutations if ownerId != "guest", triggers sync,
+     * and returns the complete list of deleted [SolveTime]s for undo snapshotting.
+     */
+    suspend fun clearAllSolvesInScope(
+        mode: Mode?,
+        ownerId: String = "guest"
+    ): List<SolveTime> = withContext(ioDispatcher) {
+        val existing = if (mode != null) {
+            solveDao.getSolvesByEvent(ownerId = ownerId, event = mode.toEventString())
+        } else {
+            solveDao.getAllActiveSolvesForOwner(ownerId = ownerId)
+        }
+        if (existing.isEmpty()) return@withContext emptyList()
+
+        val nowIso = CubeTypeConverters.nowIso()
+        val targetIds = existing.map { it.id }
+
+        runInTransaction {
+            solveDao.softDeleteAll(targetIds, deletedAt = nowIso, updatedAt = nowIso)
+            if (ownerId != "guest") {
+                syncOutboxDao.enqueueAll(existing.map { it.toDeleteMutation(ownerId = ownerId, clientTime = nowIso) })
+            }
+        }
+
+        syncTrigger?.invoke()
+        existing.map { it.toSolveTime() }
     }
 
     /**
      * Clear all solves for owner.
      */
-    suspend fun clearAllSolves(ownerId: String = "guest") = withContext(ioDispatcher) {
-        val nowIso = Instant.now().toString()
-        val existing = solveDao.getAllActiveSolvesForOwner(ownerId)
-        if (existing.isNotEmpty()) {
-            if (database != null) {
-                database.withTransaction {
-                    solveDao.softDeleteAll(existing.map { it.id }, deletedAt = nowIso, updatedAt = nowIso)
-                }
-            } else {
-                solveDao.softDeleteAll(existing.map { it.id }, deletedAt = nowIso, updatedAt = nowIso)
-            }
-            if (ownerId != "guest") {
-                for (item in existing) {
-                    val mutation = SyncOutboxEntity(
-                        id = UUID.randomUUID().toString(),
-                        ownerId = ownerId,
-                        entityType = "solve",
-                        entityId = item.id,
-                        action = "delete",
-                        baseVersion = item.version,
-                        payloadJson = null,
-                        clientTime = nowIso,
-                        status = "pending"
-                    )
-                    syncOutboxDao.enqueue(mutation)
-                }
-            }
-        }
-        syncTrigger?.invoke()
+    suspend fun clearAllSolves(ownerId: String = "guest"): List<SolveTime> {
+        return clearAllSolvesInScope(mode = null, ownerId = ownerId)
     }
 
     /**
-     * Restore previous solves (e.g. Snackbar Undo action).
+     * Restore previously deleted solves (e.g. Snackbar Undo action). If a row with a given id
+     * still exists (soft-deleted), its server [SolveEntity.version] is preserved and only
+     * `deleted_at`/`updated_at`/content fields are refreshed, instead of resetting version to 0
+     * and provoking a needless server conflict on next sync.
      */
     suspend fun restoreSolves(
         solves: List<SolveTime>,
         ownerId: String = "guest"
     ) = withContext(ioDispatcher) {
-        val entities = solves.map { it.toSolveEntity(ownerId = ownerId, deletedAt = null) }
-        if (database != null) {
-            database.withTransaction {
-                solveDao.upsertAll(entities)
-            }
-        } else {
-            solveDao.upsertAll(entities)
+        if (solves.isEmpty()) {
+            syncTrigger?.invoke()
+            return@withContext
         }
-        if (ownerId != "guest") {
-            val nowIso = Instant.now().toString()
-            for (entity in entities) {
-                val payload = entity.toSyncPayload()
-                val mutation = SyncOutboxEntity(
-                    id = UUID.randomUUID().toString(),
+
+        val nowIso = CubeTypeConverters.nowIso()
+        val existingById = solveDao.getSolvesByIds(solves.map { it.id }).associateBy { it.id }
+        val entities = solves.map { solve ->
+            val existing = existingById[solve.id]
+            if (existing != null) {
+                existing.copy(
                     ownerId = ownerId,
-                    entityType = "solve",
-                    entityId = entity.id,
-                    action = "upsert",
-                    baseVersion = entity.version,
-                    payloadJson = json.encodeToString(SolveSyncPayload.serializer(), payload),
-                    clientTime = nowIso,
-                    status = "pending"
+                    sessionId = solve.sessionId,
+                    event = CubeTypeConverters.fromMode(solve.mode),
+                    durationMs = solve.timeInMillis,
+                    penalty = CubeTypeConverters.fromPenalty(solve.penalty),
+                    solvedAt = CubeTypeConverters.epochMillisToIso(solve.timestamp),
+                    scramble = solve.scramble,
+                    deletedAt = null,
+                    updatedAt = nowIso
                 )
-                syncOutboxDao.enqueue(mutation)
+            } else {
+                solve.toSolveEntity(ownerId = ownerId, deletedAt = null)
+            }
+        }
+
+        runInTransaction {
+            solveDao.upsertAll(entities)
+            if (ownerId != "guest") {
+                syncOutboxDao.enqueueAll(entities.map { it.toUpsertMutation(ownerId = ownerId, clientTime = nowIso, json = json) })
             }
         }
         syncTrigger?.invoke()
@@ -589,23 +492,5 @@ class SolvesRepository(
             val key = longPreferencesKey("app_time_${mode.name}")
             preferences[key] = timeMillis
         }
-    }
-
-    // Session Management Delegation
-    fun getSessionsFlow(ownerId: String = "guest", event: String): Flow<List<SessionEntity>> {
-        return sessionDao.observeActiveSessionsByEvent(ownerId, event)
-    }
-
-    suspend fun getOpenAutomaticSession(ownerId: String = "guest", event: String): SessionEntity? {
-        return sessionDao.getOpenAutomaticSession(ownerId, event)
-    }
-
-    suspend fun saveSession(session: SessionEntity) = withContext(ioDispatcher) {
-        sessionDao.insert(session)
-    }
-
-    suspend fun deleteSession(sessionId: String) = withContext(ioDispatcher) {
-        val nowIso = Instant.now().toString()
-        sessionDao.softDelete(sessionId, deletedAt = nowIso, updatedAt = nowIso)
     }
 }

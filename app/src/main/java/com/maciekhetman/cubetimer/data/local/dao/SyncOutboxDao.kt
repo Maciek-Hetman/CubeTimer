@@ -12,45 +12,47 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface SyncOutboxDao {
 
+    /**
+     * Mutations ready to send: everything except rows currently `in_flight`. This includes
+     * both `pending` rows and previously-`failed` rows, which are retried on the next sync.
+     *
+     * Ordered by `client_time` with a `rowid` tiebreak: mutations enqueued together in the same
+     * write transaction (e.g. a session create + its first solve) share the same client_time, so
+     * the tiebreak keeps them in enqueue order - which matters because sessions must reach the
+     * server before solves that reference them.
+     */
     @Query("""
-        SELECT * FROM sync_outbox 
-        WHERE owner_id = :ownerId AND status != 'in_flight' 
-        ORDER BY client_time ASC 
+        SELECT * FROM sync_outbox
+        WHERE owner_id = :ownerId AND status != 'in_flight'
+        ORDER BY client_time ASC, rowid ASC
         LIMIT :limit
     """)
     suspend fun getPendingMutations(ownerId: String, limit: Int): List<SyncOutboxEntity>
 
-    @Query("""
-        SELECT * FROM sync_outbox 
-        WHERE owner_id = :ownerId AND status != 'in_flight' 
-        ORDER BY client_time ASC 
-        LIMIT 500
-    """)
-    suspend fun getPendingMutations(ownerId: String): List<SyncOutboxEntity>
+    /** [getPendingMutations] with the sync protocol's default batch size (500). */
+    suspend fun getPendingMutations(ownerId: String): List<SyncOutboxEntity> =
+        getPendingMutations(ownerId, 500)
 
+    /** All outbox rows for an owner regardless of status (pending, in_flight, or failed). */
     @Query("""
-        SELECT * FROM sync_outbox 
-        WHERE owner_id = :ownerId 
-        ORDER BY client_time ASC 
+        SELECT * FROM sync_outbox
+        WHERE owner_id = :ownerId
+        ORDER BY client_time ASC, rowid ASC
         LIMIT :limit
     """)
     suspend fun getAllPendingForOwner(ownerId: String, limit: Int): List<SyncOutboxEntity>
 
-    @Query("""
-        SELECT * FROM sync_outbox 
-        WHERE owner_id = :ownerId 
-        ORDER BY client_time ASC 
-        LIMIT 500
-    """)
-    suspend fun getAllPendingForOwner(ownerId: String): List<SyncOutboxEntity>
+    /** [getAllPendingForOwner] with the sync protocol's default batch size (500). */
+    suspend fun getAllPendingForOwner(ownerId: String): List<SyncOutboxEntity> =
+        getAllPendingForOwner(ownerId, 500)
 
     @Query("SELECT * FROM sync_outbox WHERE id = :id LIMIT 1")
     suspend fun getMutationById(id: String): SyncOutboxEntity?
 
     @Query("""
-        SELECT * FROM sync_outbox 
-        WHERE owner_id = :ownerId AND entity_type = :entityType AND entity_id = :entityId 
-        ORDER BY client_time DESC 
+        SELECT * FROM sync_outbox
+        WHERE owner_id = :ownerId AND entity_type = :entityType AND entity_id = :entityId
+        ORDER BY client_time DESC, rowid DESC
         LIMIT 1
     """)
     suspend fun getPendingMutationForEntity(ownerId: String, entityType: String, entityId: String): SyncOutboxEntity?
@@ -58,6 +60,7 @@ interface SyncOutboxDao {
     @Query("SELECT COUNT(*) FROM sync_outbox WHERE owner_id = :ownerId")
     fun observePendingCount(ownerId: String): Flow<Int>
 
+    /** Counts every outbox row for the owner regardless of status (pending, in_flight, failed). */
     @Query("SELECT COUNT(*) FROM sync_outbox WHERE owner_id = :ownerId")
     suspend fun countPending(ownerId: String): Int
 
@@ -89,25 +92,12 @@ interface SyncOutboxDao {
     """)
     suspend fun markFailed(id: String, error: String?, attemptAt: Long): Int
 
-    @Query("""
-        UPDATE sync_outbox 
-        SET attempt_count = attempt_count + 1, last_attempt_at = :attemptAt, last_error = :error 
-        WHERE id = :id
-    """)
-    suspend fun recordAttempt(id: String, attemptAt: Long, error: String?): Int
-
     @Query("DELETE FROM sync_outbox WHERE id = :id")
     suspend fun deleteById(id: String): Int
 
     @Query("DELETE FROM sync_outbox WHERE id IN (:ids)")
     suspend fun deleteMutations(ids: List<String>): Int
 
-    @Query("DELETE FROM sync_outbox WHERE id IN (:ids)")
-    suspend fun deleteByIds(ids: List<String>): Int
-
     @Query("DELETE FROM sync_outbox WHERE owner_id = :ownerId")
     suspend fun clearOutbox(ownerId: String): Int
-
-    @Query("DELETE FROM sync_outbox WHERE owner_id = :ownerId")
-    suspend fun deleteForOwner(ownerId: String): Int
 }

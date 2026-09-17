@@ -24,10 +24,12 @@ import com.maciekhetman.cubetimer.model.currentUser
 import com.maciekhetman.cubetimer.model.isAdmin
 import com.maciekhetman.cubetimer.model.isAuthenticated
 import com.maciekhetman.cubetimer.model.isGuest
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
@@ -137,6 +139,68 @@ class AuthManagerTest {
 
         assertTrue(authManager.authState.value.isAuthenticated)
         assertEquals("cached-u", authManager.currentUser?.id)
+    }
+
+    @Test
+    fun `startup with cached user surfaces Authenticated immediately, before the refresh call resolves`() = runTest(testDispatcher) {
+        // Regression test for solves being saved as "guest" while a slow refresh-token network
+        // call is in flight: with a cached user available, authState must flip out of Loading
+        // before the (potentially slow) refreshToken() call even completes.
+        fakeTokenStorage.storedRefreshToken = "some-token"
+        fakeTokenStorage.storedCachedUser = User(
+            id = "cached-u",
+            email = "cached@test.com",
+            userRole = UserRole.USER,
+            emailVerified = true
+        )
+        val pendingRefresh = CompletableDeferred<AuthResponse>()
+        fakeApiClient.refreshDeferred = pendingRefresh
+
+        val job = launch { authManager.initialize() }
+        testDispatcher.scheduler.runCurrent()
+
+        // The network call hasn't resolved yet, but authState is already Authenticated.
+        assertTrue(authManager.authState.value.isAuthenticated)
+        assertEquals("cached-u", authManager.currentUser?.id)
+
+        // Now let the refresh succeed with a (possibly updated) user and confirm the final state.
+        pendingRefresh.complete(
+            AuthResponse(
+                accessToken = "new-acc",
+                refreshToken = "new-ref",
+                user = UserDto(id = "cached-u", email = "cached@test.com", userRole = "user", emailVerified = true)
+            )
+        )
+        job.join()
+
+        assertTrue(authManager.authState.value.isAuthenticated)
+        assertEquals("new-acc", fakeTokenStorage.storedAccessToken)
+    }
+
+    @Test
+    fun `startup with cached user and definitive refresh rejection clears storage and reverts to Guest`() = runTest(testDispatcher) {
+        fakeTokenStorage.storedRefreshToken = "compromised-token"
+        fakeTokenStorage.storedCachedUser = User(
+            id = "cached-u",
+            email = "cached@test.com",
+            userRole = UserRole.USER,
+            emailVerified = true
+        )
+        val pendingRefresh = CompletableDeferred<AuthResponse>()
+        fakeApiClient.refreshDeferred = pendingRefresh
+
+        val job = launch { authManager.initialize() }
+        testDispatcher.scheduler.runCurrent()
+
+        // Immediately shown as Authenticated from the cache while the rejection is in flight.
+        assertTrue(authManager.authState.value.isAuthenticated)
+
+        pendingRefresh.completeExceptionally(AuthException.RefreshTokenReused("Reused"))
+        job.join()
+
+        assertTrue(authManager.authState.value.isGuest)
+        assertNull(authManager.currentUser)
+        assertNull(fakeTokenStorage.storedRefreshToken)
     }
 
     @Test
@@ -386,6 +450,7 @@ class AuthManagerTest {
 
         var refreshResponse: AuthResponse? = null
         var refreshError: AuthException? = null
+        var refreshDeferred: CompletableDeferred<AuthResponse>? = null
 
         var verifyEmailResponse: AuthResponse? = null
         var verifyEmailError: AuthException? = null
@@ -414,6 +479,7 @@ class AuthManagerTest {
         }
 
         override suspend fun refreshToken(refreshToken: String): AuthResponse {
+            refreshDeferred?.let { return it.await() }
             refreshError?.let { throw it }
             return refreshResponse ?: throw AuthException.InvalidRefreshToken()
         }
