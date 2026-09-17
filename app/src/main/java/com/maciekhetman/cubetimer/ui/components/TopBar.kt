@@ -1,11 +1,5 @@
 package com.maciekhetman.cubetimer.ui.components
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -16,17 +10,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CloudDone
-import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -52,17 +40,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Session
-import com.maciekhetman.cubetimer.model.SyncStatusType
-import com.maciekhetman.cubetimer.model.SyncUiState
 import com.maciekhetman.cubetimer.ui.session.SessionDropdownMenu
 
 @Composable
@@ -76,10 +60,6 @@ fun TimerTopHeader(
     onSessionSelected: (Session) -> Unit = {},
     onCreateSessionClick: () -> Unit = {},
     onManageSessionsClick: () -> Unit = {},
-    syncUiState: SyncUiState = SyncUiState(),
-    onSyncClick: () -> Unit = {},
-    authState: AuthState = AuthState.Guest,
-    onAuthClick: () -> Unit = {},
     hideSessionMenu: Boolean = false,
     modifier: Modifier = Modifier
 ) {
@@ -91,6 +71,11 @@ fun TimerTopHeader(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
+        Text(
+            text = "Timer",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold
+        )
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -112,20 +97,6 @@ fun TimerTopHeader(
                 )
             }
         }
-
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            SyncStatusIconButton(
-                syncUiState = syncUiState,
-                onClick = onSyncClick
-            )
-            AuthStatusIconButton(
-                authState = authState,
-                onClick = onAuthClick
-            )
-        }
     }
 }
 
@@ -143,10 +114,6 @@ fun CollapsingTopBar(
     onSessionSelected: (Session) -> Unit = {},
     onCreateSessionClick: () -> Unit = {},
     onManageSessionsClick: () -> Unit = {},
-    syncUiState: SyncUiState = SyncUiState(),
-    onSyncClick: () -> Unit = {},
-    authState: AuthState = AuthState.Guest,
-    onAuthClick: () -> Unit = {},
     titleBadgeText: String? = null,
     hideSessionMenu: Boolean = false,
     extraActions: @Composable RowScope.() -> Unit = {},
@@ -191,10 +158,6 @@ fun CollapsingTopBar(
                 onSessionSelected = onSessionSelected,
                 onCreateSessionClick = onCreateSessionClick,
                 onManageSessionsClick = onManageSessionsClick,
-                syncUiState = syncUiState,
-                onSyncClick = onSyncClick,
-                authState = authState,
-                onAuthClick = onAuthClick,
                 hideSessionMenu = hideSessionMenu
             )
         },
@@ -218,10 +181,6 @@ private fun TopBarActionItems(
     onSessionSelected: (Session) -> Unit,
     onCreateSessionClick: () -> Unit,
     onManageSessionsClick: () -> Unit,
-    syncUiState: SyncUiState,
-    onSyncClick: () -> Unit,
-    authState: AuthState,
-    onAuthClick: () -> Unit,
     hideSessionMenu: Boolean = false
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -244,18 +203,6 @@ private fun TopBarActionItems(
                 onManageSessionsClick = onManageSessionsClick
             )
         }
-
-        // Cloud Sync Status Icon
-        SyncStatusIconButton(
-            syncUiState = syncUiState,
-            onClick = onSyncClick
-        )
-
-        // User / Profile / Admin Icon
-        AuthStatusIconButton(
-            authState = authState,
-            onClick = onAuthClick
-        )
     }
 }
 
@@ -332,139 +279,6 @@ private fun SessionPillMenu(
             onCreateSessionClick = onCreateSessionClick,
             onManageSessionsClick = onManageSessionsClick
         )
-    }
-}
-
-@Composable
-private fun SyncStatusIconButton(
-    syncUiState: SyncUiState,
-    onClick: () -> Unit
-) {
-    val haptic = LocalHapticFeedback.current
-    val infiniteTransition = rememberInfiniteTransition(label = "topbar_sync_spin")
-    val rotation by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "topbar_sync_rotation"
-    )
-
-    IconButton(
-        onClick = {
-            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-            onClick()
-        }
-    ) {
-        when (syncUiState.status) {
-            SyncStatusType.SYNCED -> {
-                Icon(
-                    imageVector = Icons.Default.CloudDone,
-                    contentDescription = "Synced",
-                    tint = if (syncUiState.isGuest) {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    } else {
-                        MaterialTheme.colorScheme.primary
-                    },
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-            SyncStatusType.SYNCING -> {
-                Icon(
-                    imageVector = Icons.Default.Sync,
-                    contentDescription = "Syncing",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .size(22.dp)
-                        .rotate(rotation)
-                )
-            }
-            SyncStatusType.OFFLINE -> {
-                if (syncUiState.pendingCount > 0) {
-                    BadgedBox(
-                        badge = {
-                            Badge {
-                                Text(syncUiState.pendingCount.coerceAtMost(99).toString())
-                            }
-                        }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CloudOff,
-                            contentDescription = "Offline with pending changes",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
-                } else {
-                    Icon(
-                        imageVector = Icons.Default.CloudOff,
-                        contentDescription = "Offline",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
-            }
-            SyncStatusType.ERROR -> {
-                BadgedBox(
-                    badge = {
-                        Badge(containerColor = MaterialTheme.colorScheme.error) {
-                            Text("!")
-                        }
-                    }
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.CloudOff,
-                        contentDescription = "Sync Error",
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun AuthStatusIconButton(
-    authState: AuthState,
-    onClick: () -> Unit
-) {
-    val haptic = LocalHapticFeedback.current
-
-    IconButton(
-        onClick = {
-            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-            onClick()
-        }
-    ) {
-        when (authState) {
-            is AuthState.Admin -> {
-                Icon(
-                    imageVector = Icons.Default.AdminPanelSettings,
-                    contentDescription = "Admin Account",
-                    tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-            is AuthState.Authenticated -> {
-                Icon(
-                    imageVector = Icons.Default.AccountCircle,
-                    contentDescription = "User Profile",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-            else -> {
-                Icon(
-                    imageVector = Icons.Default.AccountCircle,
-                    contentDescription = "Sign In",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-        }
     }
 }
 

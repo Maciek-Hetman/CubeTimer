@@ -1,5 +1,11 @@
 package com.maciekhetman.cubetimer.ui.screens
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,11 +19,19 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -39,6 +53,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -55,6 +70,7 @@ import kotlin.math.roundToInt
 
 import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.Session
+import com.maciekhetman.cubetimer.model.SyncStatusType
 import com.maciekhetman.cubetimer.model.SyncUiState
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
@@ -122,10 +138,6 @@ fun SettingsScreen(
                 onSessionSelected = onSessionSelected,
                 onCreateSessionClick = onCreateSessionClick,
                 onManageSessionsClick = onManageSessionsClick,
-                syncUiState = syncUiState,
-                onSyncClick = onSyncClick,
-                authState = authState,
-                onAuthClick = onAuthClick,
                 hideSessionMenu = hideSessionMenu || hideSessionMenuInTopBar
             )
         }
@@ -146,6 +158,50 @@ fun SettingsScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            item {
+                SettingsSection(title = "Account") {
+                    Surface(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onSyncClick()
+                        },
+                        color = androidx.compose.ui.graphics.Color.Transparent
+                    ) {
+                        SettingsRow(title = "Cloud Sync") {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = syncStatusLabel(syncUiState),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                SyncStatusIcon(syncUiState)
+                            }
+                        }
+                    }
+                    SettingsDivider()
+                    Surface(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onAuthClick()
+                        },
+                        color = androidx.compose.ui.graphics.Color.Transparent
+                    ) {
+                        SettingsRow(title = "Account") {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = accountStatusLabel(authState),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                AccountStatusIcon(authState)
+                            }
+                        }
+                    }
+                }
+            }
+
             item {
                 SettingsSection(title = "Appearance") {
                     SettingToggleRow(
@@ -555,4 +611,127 @@ fun SettingMenuRow(
 fun timerAveragesLabel(averages: Set<Int>): String {
     return if (averages.isEmpty()) "None"
     else averages.asSequence().sorted().joinToString(", ") { "Ao$it" }
+}
+
+fun syncStatusLabel(syncUiState: SyncUiState): String = when (syncUiState.status) {
+    SyncStatusType.SYNCED -> "Synced"
+    SyncStatusType.SYNCING -> "Syncing…"
+    SyncStatusType.OFFLINE -> if (syncUiState.pendingCount > 0) "Offline (${syncUiState.pendingCount} pending)" else "Offline"
+    SyncStatusType.ERROR -> "Sync error"
+}
+
+fun accountStatusLabel(authState: AuthState): String = when (authState) {
+    is AuthState.Admin -> authState.user.email
+    is AuthState.Authenticated -> authState.user.email
+    is AuthState.Guest, is AuthState.Loading -> "Guest"
+}
+
+@Composable
+private fun SyncStatusIcon(syncUiState: SyncUiState) {
+    val infiniteTransition = rememberInfiniteTransition(label = "settings_sync_spin")
+    val rotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "settings_sync_rotation"
+    )
+
+    when (syncUiState.status) {
+        SyncStatusType.SYNCED -> {
+            Icon(
+                imageVector = Icons.Default.CloudDone,
+                contentDescription = "Synced",
+                tint = if (syncUiState.isGuest) {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                } else {
+                    MaterialTheme.colorScheme.primary
+                },
+                modifier = Modifier.size(22.dp)
+            )
+        }
+        SyncStatusType.SYNCING -> {
+            Icon(
+                imageVector = Icons.Default.Sync,
+                contentDescription = "Syncing",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .size(22.dp)
+                    .rotate(rotation)
+            )
+        }
+        SyncStatusType.OFFLINE -> {
+            if (syncUiState.pendingCount > 0) {
+                BadgedBox(
+                    badge = {
+                        Badge {
+                            Text(syncUiState.pendingCount.coerceAtMost(99).toString())
+                        }
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CloudOff,
+                        contentDescription = "Offline with pending changes",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            } else {
+                Icon(
+                    imageVector = Icons.Default.CloudOff,
+                    contentDescription = "Offline",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        }
+        SyncStatusType.ERROR -> {
+            BadgedBox(
+                badge = {
+                    Badge(containerColor = MaterialTheme.colorScheme.error) {
+                        Text("!")
+                    }
+                }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.CloudOff,
+                    contentDescription = "Sync Error",
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccountStatusIcon(authState: AuthState) {
+    when (authState) {
+        is AuthState.Admin -> {
+            Icon(
+                imageVector = Icons.Default.AdminPanelSettings,
+                contentDescription = "Admin Account",
+                tint = MaterialTheme.colorScheme.error,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+        is AuthState.Authenticated -> {
+            Icon(
+                imageVector = Icons.Default.AccountCircle,
+                contentDescription = "User Profile",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+        is AuthState.Guest, is AuthState.Loading -> {
+            Icon(
+                imageVector = Icons.Default.AccountCircle,
+                contentDescription = "Sign In",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+    }
 }

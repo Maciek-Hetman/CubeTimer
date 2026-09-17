@@ -85,12 +85,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.maciekhetman.cubetimer.domain.TimeFormatter
-import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Penalty
 import com.maciekhetman.cubetimer.model.Session
 import com.maciekhetman.cubetimer.model.SolveTime
-import com.maciekhetman.cubetimer.model.SyncUiState
 import com.maciekhetman.cubetimer.ui.components.CollapsingTopBar
 import com.maciekhetman.cubetimer.ui.components.GroupInnerCorner
 import com.maciekhetman.cubetimer.ui.components.GroupSegmentGap
@@ -126,10 +124,6 @@ fun HistoryScreen(
     onSessionSelected: (Session) -> Unit = {},
     onCreateSessionClick: () -> Unit = {},
     onManageSessionsClick: () -> Unit = {},
-    syncUiState: SyncUiState = SyncUiState(),
-    onSyncClick: () -> Unit = {},
-    authState: AuthState = AuthState.Guest,
-    onAuthClick: () -> Unit = {},
     onSolveClick: (SolveTime, Int) -> Unit = { _, _ -> },
     hideSessionMenu: Boolean = false,
     modifier: Modifier = Modifier
@@ -248,10 +242,6 @@ fun HistoryScreen(
                         onSessionSelected = onSessionSelected,
                         onCreateSessionClick = onCreateSessionClick,
                         onManageSessionsClick = onManageSessionsClick,
-                        syncUiState = syncUiState,
-                        onSyncClick = onSyncClick,
-                        authState = authState,
-                        onAuthClick = onAuthClick,
                         hideSessionMenu = hideSessionMenu,
                         extraActions = {
                             IconButton(onClick = { viewModel.openFilterSheet() }) {

@@ -102,8 +102,11 @@ in DataStore keyed by `Mode.name`.
 - Navigation is **not** `NavHost`-based despite the navigation-compose dependency: `MainActivity` keeps a
   `rememberSaveable` `AppDestinations` enum and swaps screens inside an `AnimatedContent`, with a custom bottom
   pill nav and a `BackHandler`. The bottom bar shows TIMER / STATS / HISTORY / SETTINGS; ADMIN has no bar entry
-  and is reached from Settings (or the TopBar profile menu) only when `authState is AuthState.Admin`, and hides
-  the bottom bar while open.
+  and is reached from Settings only when `authState is AuthState.Admin`, and hides the bottom bar while open.
+- The cloud sync status and account/admin indicators live in Settings' "Account" section
+  (`SettingsScreen.kt`), not the shared top bar — `TopBar.kt`'s `TimerTopHeader`/`CollapsingTopBar` no
+  longer take `syncUiState`/`authState`/click-handler params. Tapping the rows opens the same
+  `SyncStatusDialog` / `AuthDialog` (`UserProfileDialog`) as before.
 - Preferences live in two DataStores (`AppDataStore.kt`): `solves` (legacy, source of the one-time
   Room migration in `DataStoreMigration`) and `settings` (`SettingsRepository`).
 - Theming: `CubeTimerTheme(dynamicColor, amoled)`; haptics are globally disabled by overriding

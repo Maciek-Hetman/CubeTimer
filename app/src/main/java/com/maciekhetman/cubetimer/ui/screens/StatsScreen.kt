@@ -54,10 +54,8 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.*
 
-import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.Session
 import com.maciekhetman.cubetimer.model.StatsFilter
-import com.maciekhetman.cubetimer.model.SyncUiState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -72,10 +70,6 @@ fun StatsScreen(
     onSessionSelected: (Session) -> Unit = {},
     onCreateSessionClick: () -> Unit = {},
     onManageSessionsClick: () -> Unit = {},
-    syncUiState: SyncUiState = SyncUiState(),
-    onSyncClick: () -> Unit = {},
-    authState: AuthState = AuthState.Guest,
-    onAuthClick: () -> Unit = {},
     hideSessionMenu: Boolean = false,
     modifier: Modifier = Modifier
 ) {
@@ -114,10 +108,6 @@ fun StatsScreen(
                 onSessionSelected = onSessionSelected,
                 onCreateSessionClick = onCreateSessionClick,
                 onManageSessionsClick = onManageSessionsClick,
-                syncUiState = syncUiState,
-                onSyncClick = onSyncClick,
-                authState = authState,
-                onAuthClick = onAuthClick,
                 hideSessionMenu = hideSessionMenu || hideSessionMenuInTopBar
             )
         }

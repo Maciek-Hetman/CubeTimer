@@ -320,10 +320,6 @@ fun CubeTimerApp(
                         onSessionSelected = { session -> sessionViewModel.switchSession(session.id) },
                         onCreateSessionClick = { showCreateSessionDialog = true },
                         onManageSessionsClick = { showSessionManagementSheet = true },
-                        syncUiState = syncUiState,
-                        onSyncClick = { showSyncDialog = true },
-                        authState = authState,
-                        onAuthClick = onAuthClick,
                         hideSessionMenu = hideSessionMenuInTopBar,
                         modifier = contentModifier
                     )
@@ -343,10 +339,6 @@ fun CubeTimerApp(
                         onSessionSelected = { session -> sessionViewModel.switchSession(session.id) },
                         onCreateSessionClick = { showCreateSessionDialog = true },
                         onManageSessionsClick = { showSessionManagementSheet = true },
-                        syncUiState = syncUiState,
-                        onSyncClick = { showSyncDialog = true },
-                        authState = authState,
-                        onAuthClick = onAuthClick,
                         hideSessionMenu = hideSessionMenuInTopBar,
                         modifier = contentModifier
                     )
@@ -368,10 +360,6 @@ fun CubeTimerApp(
                         onSessionSelected = { session -> sessionViewModel.switchSession(session.id) },
                         onCreateSessionClick = { showCreateSessionDialog = true },
                         onManageSessionsClick = { showSessionManagementSheet = true },
-                        syncUiState = syncUiState,
-                        onSyncClick = { showSyncDialog = true },
-                        authState = authState,
-                        onAuthClick = onAuthClick,
                         hideSessionMenu = hideSessionMenuInTopBar,
                         modifier = contentModifier
                     )

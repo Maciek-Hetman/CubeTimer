@@ -55,9 +55,7 @@ import com.maciekhetman.cubetimer.model.SolveTime
 import com.maciekhetman.cubetimer.model.TimerAverageOptions
 import com.maciekhetman.cubetimer.model.TimerState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.Session
-import com.maciekhetman.cubetimer.model.SyncUiState
 import kotlinx.coroutines.launch
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.shape.CircleShape
@@ -81,10 +79,6 @@ fun TimerScreen(
     onSessionSelected: (Session) -> Unit = {},
     onCreateSessionClick: () -> Unit = {},
     onManageSessionsClick: () -> Unit = {},
-    syncUiState: SyncUiState = SyncUiState(),
-    onSyncClick: () -> Unit = {},
-    authState: AuthState = AuthState.Guest,
-    onAuthClick: () -> Unit = {},
     hideSessionMenu: Boolean = false,
     modifier: Modifier = Modifier
 ) {
@@ -186,10 +180,6 @@ fun TimerScreen(
                 onSessionSelected = onSessionSelected,
                 onCreateSessionClick = onCreateSessionClick,
                 onManageSessionsClick = onManageSessionsClick,
-                syncUiState = syncUiState,
-                onSyncClick = onSyncClick,
-                authState = authState,
-                onAuthClick = onAuthClick,
                 hideSessionMenu = hideSessionMenu || hideSessionMenuInTopBar
             )
         }
