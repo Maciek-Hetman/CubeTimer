@@ -275,35 +275,38 @@ class SyncEngineTest {
         )
         syncOutboxDao.enqueue(inFlightMutation)
 
-        // Second mutation created concurrently (user changed penalty to plus_two)
-        val updatedSolve = solve.copy(penalty = "plus_two", durationMs = 15000L)
-        solveDao.update(updatedSolve)
-        val secondMutation = SyncOutboxEntity(
-            id = "mut-second",
-            ownerId = testUser.id,
-            entityType = "solve",
-            entityId = solveId,
-            action = "upsert",
-            baseVersion = 0L, // Still baseVersion 0 initially
-            payloadJson = json.encodeToString(SolveSyncPayload.serializer(), updatedSolve.toSyncPayload()),
-            clientTime = "2026-08-30T09:01:00Z",
-            status = "pending"
-        )
-        syncOutboxDao.enqueue(secondMutation)
+        // While that request is in flight, the user changes the penalty to plus_two; the server
+        // then accepts the first mutation and advances the version to 1.
+        fakeApiClient.respond = { request ->
+            val updatedSolve = solve.copy(penalty = "plus_two", durationMs = 15000L)
+            solveDao.update(updatedSolve)
+            val secondMutation = SyncOutboxEntity(
+                id = "mut-second",
+                ownerId = testUser.id,
+                entityType = "solve",
+                entityId = solveId,
+                action = "upsert",
+                baseVersion = 0L, // Still baseVersion 0 initially
+                payloadJson = json.encodeToString(SolveSyncPayload.serializer(), updatedSolve.toSyncPayload()),
+                clientTime = "2026-08-30T09:01:00Z",
+                status = "pending"
+            )
+            syncOutboxDao.enqueue(secondMutation)
+            assertEquals(listOf("mut-first"), request.mutations.map { it.id })
 
-        // Server accepts first mutation and advances version to 1
-        fakeApiClient.syncResponse = SyncResponse(
-            outcomes = listOf(
-                MutationOutcomeDto(
-                    mutationId = "mut-first",
-                    status = "accepted",
-                    version = 1L
-                )
-            ),
-            changes = emptyList(),
-            nextCursor = 60L,
-            hasMore = false
-        )
+            SyncResponse(
+                outcomes = listOf(
+                    MutationOutcomeDto(
+                        mutationId = "mut-first",
+                        status = "accepted",
+                        version = 1L
+                    )
+                ),
+                changes = emptyList(),
+                nextCursor = 60L,
+                hasMore = false
+            )
+        }
 
         val result = syncEngine.sync(testUser.id)
         assertTrue(result is SyncResult.Success)
@@ -502,6 +505,45 @@ class SyncEngineTest {
     // =========================================================================
 
     @Test
+    fun sync_twoQueuedEditsOfOneSolve_sendOneMutationAndSettleBoth() = runTest {
+        // Saved, then given a +2 before the first upsert reached the server: both upserts carry
+        // base_version 0. Sent separately, the server accepts the first and answers the second
+        // with a conflict, keeping the stale time. Only the latest may go out.
+        val saved = SolveEntity(
+            id = "solve-twice",
+            ownerId = testUser.id,
+            durationMs = 9_000L,
+            solvedAt = "2026-08-30T10:00:00.000Z"
+        )
+        solveDao.insert(saved)
+        syncOutboxDao.enqueue(saved.toUpsertMutation(clientTime = "2026-08-30T10:00:00.000Z", json = json))
+        val plusTwo = saved.copy(penalty = "plus_two", updatedAt = "2026-08-30T10:00:05.000Z")
+        solveDao.update(plusTwo)
+        val latest = plusTwo.toUpsertMutation(clientTime = "2026-08-30T10:00:05.000Z", json = json)
+        syncOutboxDao.enqueue(latest)
+
+        fakeApiClient.respond = { request ->
+            SyncResponse(
+                outcomes = request.mutations.map { MutationOutcomeDto(mutationId = it.id, status = "accepted", version = 1L) },
+                nextCursor = 10L
+            )
+        }
+
+        val result = syncEngine.sync()
+
+        assertTrue(result is SyncResult.Success)
+        val sent = fakeApiClient.syncRequests.first().mutations
+        assertEquals(1, sent.size)
+        assertEquals(latest.id, sent.single().id)
+        assertEquals(0L, sent.single().baseVersion)
+        val payload = json.decodeFromJsonElement(SolveSyncPayload.serializer(), sent.single().data!!)
+        assertEquals("plus_two", payload.penalty)
+        assertEquals(0, syncOutboxDao.countPending(testUser.id))
+        assertEquals(1L, solveDao.getSolveById("solve-twice")?.version)
+        assertEquals(0, conflictDao.getAll(testUser.id).size)
+    }
+
+    @Test
     fun sync_cancelledMidRequest_clearsSyncingFlagAndDoesNotRecordFailure() = runTest {
         // WorkManager cancels the worker when the network drops mid-sync. That must not be
         // recorded as a failed attempt, and must not leave is_syncing stuck at 1 (which pins the
@@ -540,10 +582,15 @@ class SyncEngineTest {
         var shouldThrowUnauthorized = false
         var hangUntilCancelled = false
         val syncStarted = CompletableDeferred<Unit>()
+        val syncRequests = mutableListOf<SyncRequest>()
+        /** When set, builds the response from the request (e.g. to answer its mutation ids). */
+        var respond: (suspend (SyncRequest) -> SyncResponse)? = null
 
         override suspend fun sync(request: SyncRequest, authToken: String?): SyncResponse {
             syncCallCount++
+            syncRequests += request
             syncStarted.complete(Unit)
+            respond?.let { return it(request) }
             if (hangUntilCancelled) awaitCancellation()
             if (shouldThrowNetworkError) throw IOException("No network connection")
             if (shouldThrowUnauthorized) throw AuthException.Unauthorized("Token expired")

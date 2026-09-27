@@ -137,8 +137,9 @@ class SyncEngineImpl(
                         platform = "android"
                     )
 
-                    // 4. Map pending mutations to DTOs
-                    val mutationDtos = pending.map { mutation ->
+                    // 4. One mutation per entity (see coalescePerEntity), mapped to DTOs
+                    val outgoing = coalescePerEntity(pending)
+                    val mutationDtos = outgoing.mutations.map { mutation ->
                         SyncMutationDto(
                             id = mutation.id,
                             entity = mutation.entityType,
@@ -201,7 +202,7 @@ class SyncEngineImpl(
 
                     // 6. Apply outcomes and changes inside database transaction
                     val batchResult = database.withTransaction {
-                        applyBatch(resolvedOwnerId, pending, response)
+                        applyBatch(resolvedOwnerId, outgoing, response)
                     }
 
                     totalMutationsSynced += batchResult.mutationsSynced
@@ -299,20 +300,55 @@ class SyncEngineImpl(
         val conflictsRecorded: Int
     )
 
+    /**
+     * What one sync request sends: at most one mutation per entity, plus the older queued mutations
+     * for that entity it supersedes (keyed by the sent mutation's id).
+     */
+    private class OutgoingBatch(
+        val mutations: List<SyncOutboxEntity>,
+        val supersededIds: Map<String, List<String>>
+    )
+
+    /**
+     * The server applies a request's mutations one at a time, each checked against the entity's
+     * current version. Two queued edits of the same entity (a solve saved and then given a +2, or
+     * saved and then deleted, while offline) both carry the base version the client last saw, so
+     * the server accepts the first and answers the second with a conflict: the stale value stays
+     * on the server and the user gets a conflict against their own edit.
+     *
+     * So send only the latest mutation per entity. It already carries the entity's full current
+     * state (upserts send the whole row) or the delete; its base version is the highest in the
+     * group, i.e. the newest server version the client has learned (an accepted outcome rebases
+     * only the newest pending mutation). The older mutations are settled by its outcome.
+     */
+    private fun coalescePerEntity(pending: List<SyncOutboxEntity>): OutgoingBatch {
+        val mutations = ArrayList<SyncOutboxEntity>()
+        val supersededIds = HashMap<String, List<String>>()
+        // Pending is ordered oldest first, so each group's last element is its latest mutation.
+        for (group in pending.groupBy { it.entityType to it.entityId }.values) {
+            val latest = group.last()
+            mutations += latest.copy(baseVersion = group.maxOf { it.baseVersion })
+            if (group.size > 1) supersededIds[latest.id] = group.dropLast(1).map { it.id }
+        }
+        return OutgoingBatch(mutations, supersededIds)
+    }
+
     private suspend fun applyBatch(
         ownerId: String,
-        pendingMutations: List<SyncOutboxEntity>,
+        outgoing: OutgoingBatch,
         response: SyncResponse
     ): BatchResult {
         var mutationsSynced = 0
         var changesApplied = 0
         var conflictsRecorded = 0
 
-        val pendingMap = pendingMutations.associateBy { it.id }
+        val pendingMap = outgoing.mutations.associateBy { it.id }
 
         // Step A: Process mutation outcomes
         for (outcome in response.outcomes) {
             val mutation = pendingMap[outcome.mutationId] ?: continue
+            // Whatever the outcome, it settles the older mutations this one superseded.
+            outgoing.supersededIds[mutation.id]?.let { syncOutboxDao.deleteMutations(it) }
 
             when (outcome.status.lowercase()) {
                 "accepted" -> {
@@ -499,12 +535,13 @@ class SyncEngineImpl(
 
         // Reset any unanswered mutations in this batch back to pending
         val answeredIds = response.outcomes.map { it.mutationId }.toSet()
-        for (m in pendingMutations) {
+        for (m in outgoing.mutations) {
             if (m.id !in answeredIds) {
                 val currentInDb = syncOutboxDao.getMutationById(m.id)
                 if (currentInDb != null) {
                     syncOutboxDao.update(currentInDb.copy(status = "pending"))
                 }
+                outgoing.supersededIds[m.id]?.let { syncOutboxDao.resetInFlight(it) }
             }
         }
 
