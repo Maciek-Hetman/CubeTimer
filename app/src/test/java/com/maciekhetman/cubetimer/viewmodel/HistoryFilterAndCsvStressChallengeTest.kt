@@ -785,7 +785,8 @@ class HistoryFilterAndCsvStressChallengeTest {
         val sessionsInDb = database.sessionDao().getAllSessionsForOwner("guest")
         val autoCreated = sessionsInDb.find { it.name == "AutoCreatedSession" }
         assertNotNull("Missing session must be auto-recreated", autoCreated)
-        assertEquals("manual", autoCreated?.kind)
+        // Sessions are automatic-only; CsvImporter recreates missing ones as automatic.
+        assertEquals("automatic", autoCreated?.kind)
 
         // 4. Duplicate Solves Import
         // Re-importing the same stream should skip duplicates
