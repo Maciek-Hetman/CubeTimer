@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Manages reactive synchronization state, network connectivity, and UI observables.
@@ -52,6 +53,10 @@ class SyncStateManager(
 
     private val _lastErrorMessage = MutableStateFlow<String?>(null)
     val lastErrorMessage: StateFlow<String?> = _lastErrorMessage.asStateFlow()
+
+    // Every network currently satisfying the callback's request. The callback fires per network,
+    // so a single onLost (e.g. Wi-Fi dropping while mobile data is still up) doesn't mean offline.
+    private val availableNetworks: MutableSet<Network> = ConcurrentHashMap.newKeySet()
 
     private val _isOnline = MutableStateFlow(checkInitialConnectivity())
     val isOnline: StateFlow<Boolean> = _isOnline.asStateFlow()
@@ -205,7 +210,9 @@ class SyncStateManager(
     private fun checkInitialConnectivity(): Boolean {
         if (context == null) return true
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return true
-        val active = cm.activeNetwork ?: return true
+        // No active network at all means offline (e.g. launched in airplane mode). The network
+        // callback never reports onLost for a network it never saw, so this can't be optimistic.
+        val active = cm.activeNetwork ?: return false
         val caps = cm.getNetworkCapabilities(active) ?: return true
         return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) ||
                caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) ||
@@ -223,11 +230,13 @@ class SyncStateManager(
                 .build()
             cm.registerNetworkCallback(request, object : ConnectivityManager.NetworkCallback() {
                 override fun onAvailable(network: Network) {
+                    availableNetworks.add(network)
                     _isOnline.value = true
                 }
 
                 override fun onLost(network: Network) {
-                    _isOnline.value = false
+                    availableNetworks.remove(network)
+                    _isOnline.value = availableNetworks.isNotEmpty()
                 }
             })
         } catch (_: Exception) {

@@ -48,6 +48,28 @@ class SyncSchedulerTest {
     }
 
     @Test
+    fun scheduleImmediateSync_repeatedWhileOneIsPending_doesNotGrowTheChain() {
+        // Offline, every local write calls this. A sync that hasn't started yet already covers the
+        // new outbox rows, so appending one request per write would just replay N syncs later.
+        repeat(5) { scheduler.scheduleImmediateSync() }
+
+        val workInfos = workManager.getWorkInfosForUniqueWork(WorkManagerSyncScheduler.WORK_NAME_IMMEDIATE).get()
+        assertEquals(1, workInfos.size)
+        assertEquals(WorkInfo.State.ENQUEUED, workInfos[0].state)
+    }
+
+    @Test
+    fun scheduleImmediateSync_afterPreviousFinished_enqueuesAgain() {
+        scheduler.scheduleImmediateSync()
+        workManager.cancelUniqueWork(WorkManagerSyncScheduler.WORK_NAME_IMMEDIATE).result.get()
+
+        scheduler.scheduleImmediateSync()
+
+        val workInfos = workManager.getWorkInfosForUniqueWork(WorkManagerSyncScheduler.WORK_NAME_IMMEDIATE).get()
+        assertEquals(1, workInfos.count { it.state == WorkInfo.State.ENQUEUED })
+    }
+
+    @Test
     fun scheduleImmediateSync_enqueuesUniqueOneTimeWork() {
         scheduler.scheduleImmediateSync()
 

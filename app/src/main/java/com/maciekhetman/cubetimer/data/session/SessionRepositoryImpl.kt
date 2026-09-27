@@ -6,6 +6,8 @@ import com.maciekhetman.cubetimer.data.local.converter.CubeTypeConverters
 import com.maciekhetman.cubetimer.data.local.dao.SessionDao
 import com.maciekhetman.cubetimer.data.local.dao.SolveDao
 import com.maciekhetman.cubetimer.data.local.dao.SyncOutboxDao
+import com.maciekhetman.cubetimer.data.local.dao.getSolvesByIdsChunked
+import com.maciekhetman.cubetimer.data.local.dao.softDeleteAllChunked
 import com.maciekhetman.cubetimer.data.local.entity.SyncOutboxEntity
 import com.maciekhetman.cubetimer.data.local.mapper.toDeleteMutation
 import com.maciekhetman.cubetimer.data.local.mapper.toDomain
@@ -137,7 +139,7 @@ class SessionRepositoryImpl(
 
             val activeSolves = solveDao.getSolvesBySession(entity.ownerId, id)
             if (activeSolves.isNotEmpty()) {
-                solveDao.softDeleteAll(activeSolves.map { it.id }, deletedAt = nowIso, updatedAt = nowIso)
+                solveDao.softDeleteAllChunked(activeSolves.map { it.id }, deletedAt = nowIso, updatedAt = nowIso)
             }
 
             if (entity.ownerId != "guest") {
@@ -179,7 +181,7 @@ class SessionRepositoryImpl(
             // 3. Soft-delete all solves belonging to this session
             if (activeSolvesEntities.isNotEmpty()) {
                 val solveIds = activeSolvesEntities.map { it.id }
-                solveDao.softDeleteAll(solveIds, deletedAt = nowIso, updatedAt = nowIso)
+                solveDao.softDeleteAllChunked(solveIds, deletedAt = nowIso, updatedAt = nowIso)
             }
 
             // 4. Enqueue delete mutations in outbox if authenticated
@@ -234,7 +236,7 @@ class SessionRepositoryImpl(
 
             // 2. Restore all solves from snapshot (deleted_at = null)
             if (snapshot.solves.isNotEmpty()) {
-                val existingSolvesMap = solveDao.getSolvesByIds(snapshot.solves.map { it.id }).associateBy { it.id }
+                val existingSolvesMap = solveDao.getSolvesByIdsChunked(snapshot.solves.map { it.id }).associateBy { it.id }
                 val restoredSolvesEntities = snapshot.solves.map { solve ->
                     val existing = existingSolvesMap[solve.id]
                     if (existing != null) {

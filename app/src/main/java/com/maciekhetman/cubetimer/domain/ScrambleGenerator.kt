@@ -2,13 +2,13 @@ package com.maciekhetman.cubetimer.domain
 
 import com.maciekhetman.cubetimer.model.Mode
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.worldcubeassociation.tnoodle.scrambles.PuzzleRegistry
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
 
 /**
  * Generates WCA-style scrambles via TNoodle.
@@ -31,8 +31,11 @@ object ScrambleGenerator {
         Mode.PYRAMINX to PuzzleRegistry.PYRA
     )
 
-    @OptIn(ExperimentalCoroutinesApi::class)
-    private val scrambleDispatcher = Dispatchers.Default.limitedParallelism(1)
+    // A real single thread, not Dispatchers.Default.limitedParallelism(1): that only caps
+    // concurrency and can hop between pool threads, rebuilding the ThreadLocal searchers on each.
+    private val scrambleDispatcher = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "scramble-generator").apply { isDaemon = true }
+    }.asCoroutineDispatcher()
     private val scrambleScope = CoroutineScope(SupervisorJob() + scrambleDispatcher)
 
     private val nextScrambleCache = ConcurrentHashMap<Mode, String>()

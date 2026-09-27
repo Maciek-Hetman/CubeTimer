@@ -366,10 +366,19 @@ class AuthManagerStressTest {
         assertEquals(15, database.solveDao().getAllActiveSolvesForOwner("user-b").size)
         assertEquals(17, database.syncOutboxDao().getAllPendingForOwner("user-b").size)
 
-        // User A's data was completely isolated and unaffected
+        // User A's data was completely isolated and unaffected. Outbox: 33 adopted + 1 upsert per
+        // automatic session logout closed (so the server learns they ended): auto-sess-a plus the
+        // three adopted guest sessions, which default to kind = "automatic" and were still open.
         assertEquals(4, database.sessionDao().getAllActiveSessionsForOwner("user-a").size)
         assertEquals(40, database.solveDao().getAllActiveSolvesForOwner("user-a").size)
-        assertEquals(33, database.syncOutboxDao().getAllPendingForOwner("user-a").size)
+        val userAOutbox = database.syncOutboxDao().getAllPendingForOwner("user-a")
+        assertEquals(37, userAOutbox.size)
+        val logoutCloses = userAOutbox.drop(33)
+        assertEquals(
+            setOf("auto-sess-a", "g-sess-1", "g-sess-2", "g-sess-3"),
+            logoutCloses.map { it.entityId }.toSet()
+        )
+        assertTrue(logoutCloses.all { it.entityType == "session" && it.action == "upsert" })
 
         // Phase 7: User B Logs Out, Guest creates 5 solves
         authManager.logout()
@@ -401,8 +410,8 @@ class AuthManagerStressTest {
         // User A now has original 40 solves + 5 newly adopted guest solves = 45 solves
         assertEquals(0, database.solveDao().getAllActiveSolvesForOwner("guest").size)
         assertEquals(45, database.solveDao().getAllActiveSolvesForOwner("user-a").size)
-        // User A outbox: 33 previous + 5 new = 38 mutations
-        assertEquals(38, database.syncOutboxDao().getAllPendingForOwner("user-a").size)
+        // User A outbox: 37 previous (33 adopted + 4 logout closes) + 5 new = 42 mutations
+        assertEquals(42, database.syncOutboxDao().getAllPendingForOwner("user-a").size)
 
         // User B data remains intact: 2 sessions, 15 solves
         assertEquals(2, database.sessionDao().getAllActiveSessionsForOwner("user-b").size)

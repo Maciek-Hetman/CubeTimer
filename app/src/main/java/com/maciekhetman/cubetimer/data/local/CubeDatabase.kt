@@ -76,7 +76,8 @@ abstract class CubeDatabase : RoomDatabase() {
                     }
                 })
                 .addMigrations(MIGRATION_1_2)
-                .fallbackToDestructiveMigration()
+                // Deliberately no fallbackToDestructiveMigration(): a version bump without a
+                // Migration must fail loudly rather than silently wipe every local solve.
                 .build()
         }
 

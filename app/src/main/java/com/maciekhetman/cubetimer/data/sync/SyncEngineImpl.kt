@@ -28,8 +28,10 @@ import com.maciekhetman.cubetimer.data.remote.dto.SyncRequest
 import com.maciekhetman.cubetimer.data.remote.dto.SyncResponse
 import com.maciekhetman.cubetimer.model.AuthException
 import com.maciekhetman.cubetimer.model.AuthState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
@@ -163,6 +165,9 @@ class SyncEngineImpl(
                     // 5. Send HTTP request with 409 snapshot recovery
                     val response: SyncResponse = try {
                         apiClient.sync(syncRequest)
+                    } catch (e: CancellationException) {
+                        // Not a failed attempt: leave the rows in_flight, the next sync resets them.
+                        throw e
                     } catch (e: AuthException.CursorExpired) {
                         if (pendingIds.isNotEmpty()) {
                             syncOutboxDao.resetInFlight(pendingIds)
@@ -219,6 +224,14 @@ class SyncEngineImpl(
                     changesApplied = totalChangesApplied,
                     conflictsRecorded = totalConflictsRecorded
                 )
+            } catch (e: CancellationException) {
+                // The worker was stopped (typically WorkManager cancelling it when the network
+                // drops mid-sync). Don't report that as a sync error, but clear the persisted
+                // is_syncing flag - the coroutine is already cancelled, so this write needs
+                // NonCancellable - otherwise the UI keeps showing SYNCING until the next sync.
+                withContext(NonCancellable) { setSyncing(resolvedOwnerId, false) }
+                stateManager.setOffline()
+                throw e
             } catch (e: AuthException.Unauthorized) {
                 stateManager.setUnauthenticated()
                 setSyncError(resolvedOwnerId, e.message)
@@ -371,7 +384,7 @@ class SyncEngineImpl(
 
         // B1. Apply session changes
         for (change in sessionChanges) {
-            val pendingCount = syncOutboxDao.countPendingForEntity(ownerId, change.entityId)
+            val pendingCount = syncOutboxDao.countPendingForEntity(ownerId, "session", change.entityId)
             if (pendingCount > 0) {
                 // Protect local uncommitted edits
                 continue
@@ -428,7 +441,7 @@ class SyncEngineImpl(
 
         // B2. Apply solve changes
         for (change in solveChanges) {
-            val pendingCount = syncOutboxDao.countPendingForEntity(ownerId, change.entityId)
+            val pendingCount = syncOutboxDao.countPendingForEntity(ownerId, "solve", change.entityId)
             if (pendingCount > 0) {
                 // Protect local uncommitted edits
                 continue
@@ -538,7 +551,7 @@ class SyncEngineImpl(
                     // Same protection as the incremental sync path (see applyBatch): don't let a
                     // snapshot row clobber a local edit that hasn't reached the server yet.
                     val entities = sessions.mapNotNull { dto ->
-                        if (syncOutboxDao.countPendingForEntity(ownerId, dto.id) > 0) {
+                        if (syncOutboxDao.countPendingForEntity(ownerId, "session", dto.id) > 0) {
                             return@mapNotNull null
                         }
                         SessionEntity(
@@ -562,7 +575,7 @@ class SyncEngineImpl(
 
                 response.solves?.let { solves ->
                     val entities = solves.mapNotNull { dto ->
-                        if (syncOutboxDao.countPendingForEntity(ownerId, dto.id) > 0) {
+                        if (syncOutboxDao.countPendingForEntity(ownerId, "solve", dto.id) > 0) {
                             return@mapNotNull null
                         }
                         SolveEntity(

@@ -64,8 +64,16 @@ interface SyncOutboxDao {
     @Query("SELECT COUNT(*) FROM sync_outbox WHERE owner_id = :ownerId")
     suspend fun countPending(ownerId: String): Int
 
-    @Query("SELECT COUNT(*) FROM sync_outbox WHERE owner_id = :ownerId AND entity_id = :entityId")
-    suspend fun countPendingForEntity(ownerId: String, entityId: String): Int
+    /**
+     * Filters on all three columns of `idx_outbox_owner_entity_entity_id` so this is an index
+     * lookup; without `entity_type` SQLite can only use the `owner_id` prefix and scans every
+     * outbox row for the owner, once per incoming change during sync.
+     */
+    @Query("""
+        SELECT COUNT(*) FROM sync_outbox
+        WHERE owner_id = :ownerId AND entity_type = :entityType AND entity_id = :entityId
+    """)
+    suspend fun countPendingForEntity(ownerId: String, entityType: String, entityId: String): Int
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun enqueue(mutation: SyncOutboxEntity): Long

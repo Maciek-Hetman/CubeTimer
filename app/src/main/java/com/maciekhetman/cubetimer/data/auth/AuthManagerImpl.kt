@@ -4,6 +4,7 @@ import com.maciekhetman.cubetimer.data.local.converter.CubeTypeConverters
 import androidx.room.withTransaction
 import com.maciekhetman.cubetimer.data.local.CubeDatabase
 import com.maciekhetman.cubetimer.data.local.entity.SyncOutboxEntity
+import com.maciekhetman.cubetimer.data.local.mapper.toUpsertMutation
 import com.maciekhetman.cubetimer.data.remote.CubeSyncApiClient
 import com.maciekhetman.cubetimer.data.remote.NetworkModule
 import com.maciekhetman.cubetimer.data.remote.dto.AuthResponse
@@ -212,14 +213,20 @@ class AuthManagerImpl(
         val user = currentUser
         val refreshToken = tokenStorage.getRefreshToken()
 
-        // 1. Close active automatic sessions for the outgoing user
+        // 1. Close active automatic sessions for the outgoing user. Each close also gets an outbox
+        // mutation (owned by that user, so it goes out on their next sync); a bare DAO update would
+        // leave the server believing the session is still open.
         if (user != null) {
             val nowIso = CubeTypeConverters.nowIso()
-            val sessionDao = database.sessionDao()
-            val openAutoSessions = sessionDao.getAllActiveSessionsForOwner(user.id)
-                .filter { it.kind == "automatic" && it.endedAt == null }
-            for (session in openAutoSessions) {
-                sessionDao.closeSession(session.id, endedAt = nowIso, updatedAt = nowIso)
+            database.withTransaction {
+                val sessionDao = database.sessionDao()
+                val openAutoSessions = sessionDao.getAllActiveSessionsForOwner(user.id)
+                    .filter { it.kind == "automatic" && it.endedAt == null }
+                for (session in openAutoSessions) {
+                    val closed = session.copy(endedAt = nowIso, updatedAt = nowIso)
+                    sessionDao.update(closed)
+                    database.syncOutboxDao().enqueue(closed.toUpsertMutation(clientTime = nowIso, json = json))
+                }
             }
         }
 

@@ -15,6 +15,7 @@ import com.maciekhetman.cubetimer.data.local.entity.SessionEntity
 import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
 import com.maciekhetman.cubetimer.data.local.entity.SyncOutboxEntity
 import com.maciekhetman.cubetimer.data.local.mapper.toSyncPayload
+import com.maciekhetman.cubetimer.data.local.mapper.toUpsertMutation
 import com.maciekhetman.cubetimer.data.remote.CubeSyncApiClient
 import com.maciekhetman.cubetimer.data.remote.NetworkModule
 import com.maciekhetman.cubetimer.data.remote.dto.ChangeDto
@@ -31,8 +32,12 @@ import com.maciekhetman.cubetimer.model.AuthException
 import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.User
 import com.maciekhetman.cubetimer.model.UserRole
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.encodeToJsonElement
@@ -496,6 +501,36 @@ class SyncEngineTest {
     // TEST FAKES
     // =========================================================================
 
+    @Test
+    fun sync_cancelledMidRequest_clearsSyncingFlagAndDoesNotRecordFailure() = runTest {
+        // WorkManager cancels the worker when the network drops mid-sync. That must not be
+        // recorded as a failed attempt, and must not leave is_syncing stuck at 1 (which pins the
+        // UI on SYNCING until some later sync completes).
+        val solve = SolveEntity(
+            id = "solve-cancel",
+            ownerId = testUser.id,
+            durationMs = 9_000L,
+            solvedAt = "2026-08-30T10:00:00.000Z"
+        )
+        solveDao.insert(solve)
+        syncOutboxDao.enqueue(solve.toUpsertMutation(clientTime = "2026-08-30T10:00:00.000Z", json = json))
+        fakeApiClient.hangUntilCancelled = true
+
+        val syncJob = launch { syncEngine.sync() }
+        fakeApiClient.syncStarted.await()
+        assertEquals(true, syncMetadataDao.getMetadata(testUser.id)?.isSyncing)
+
+        syncJob.cancelAndJoin()
+
+        assertTrue(syncJob.isCancelled)
+        assertEquals(false, syncMetadataDao.getMetadata(testUser.id)?.isSyncing)
+        assertNull(syncMetadataDao.getMetadata(testUser.id)?.lastError)
+        assertTrue(syncEngine.syncStatus.value != SyncStatus.ERROR)
+        val mutation = syncOutboxDao.getAllPendingForOwner(testUser.id).single()
+        assertEquals(0, mutation.attemptCount)
+        assertTrue(mutation.status != "failed")
+    }
+
     private class FakeSyncApiClient : CubeSyncApiClient {
         var syncCallCount = 0
         var syncResponse: SyncResponse = SyncResponse()
@@ -503,9 +538,13 @@ class SyncEngineTest {
         var shouldThrowCursorExpiredOnFirstSync = false
         var shouldThrowNetworkError = false
         var shouldThrowUnauthorized = false
+        var hangUntilCancelled = false
+        val syncStarted = CompletableDeferred<Unit>()
 
         override suspend fun sync(request: SyncRequest, authToken: String?): SyncResponse {
             syncCallCount++
+            syncStarted.complete(Unit)
+            if (hangUntilCancelled) awaitCancellation()
             if (shouldThrowNetworkError) throw IOException("No network connection")
             if (shouldThrowUnauthorized) throw AuthException.Unauthorized("Token expired")
             if (shouldThrowCursorExpiredOnFirstSync && syncCallCount == 1) {

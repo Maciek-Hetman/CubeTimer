@@ -7,8 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Android speedcubing timer (Kotlin, Jetpack Compose, single `:app` module) that is being extended into an
 offline-first client for a "CubeSync" backend (github.com/Maciek-Hetman/cubesync — `api/openapi.yaml` and
 `docs/sync-protocol.md` are the wire contract; the server decodes bodies with `DisallowUnknownFields`, so
-never send fields it doesn't declare). Supports GAN and QiYi Bluetooth timers. `PROJECT.md` holds the milestone plan (M1–M6) and the
-sync/auth API contract; keep its milestone status table in sync when finishing work on a milestone.
+never send fields it doesn't declare). Supports GAN and QiYi Bluetooth timers.
 
 ## Commands
 
@@ -55,10 +54,11 @@ No DI framework. `CubeTimerApplication` is the manual singleton graph (`database
 both files. `SyncWorker` is built by a custom `WorkerFactory` in `workManagerConfiguration`.
 
 ### Layers
-- `data/local` — Room (`CubeDatabase`, v2, `exportSchema` to `app/schemas/`, `fallbackToDestructiveMigration`,
+- `data/local` — Room (`CubeDatabase`, v2, `exportSchema` to `app/schemas/`, no destructive-migration fallback,
   WAL, `PRAGMA foreign_keys = ON`). Entities: `solves`, `sessions`, `sync_outbox`, `sync_metadata`, `conflicts`.
-  Every version bump needs a real `Migration` (v1→v2 adds `solves.timing_device`): the destructive fallback
-  would otherwise wipe never-synced guest data. `CubeDatabaseMigrationTest` replays `1.json`.
+  Every version bump needs a real `Migration` (v1→v2 adds `solves.timing_device`); there is deliberately no
+  destructive fallback, so a missing one fails loudly instead of wiping never-synced guest data.
+  `CubeDatabaseMigrationTest` replays `1.json`.
 - `data/remote` — Retrofit + OkHttp + kotlinx.serialization; `AuthInterceptor` attaches the access token,
   `TokenAuthenticator` refreshes on 401 and notifies `AuthManager` via `SessionExpirationListener`.
 - `data/auth` — `AuthManagerImpl` owns `AuthState` (Guest / Authenticated / Admin) and `adoptGuestData`.
@@ -142,8 +142,10 @@ never become the active session. CSV import recreates missing sessions as closed
 - `SolvesRepository` has several secondary constructors kept purely for older tests/ViewModel call sites —
   when changing its primary constructor, keep them compiling.
 - Room schema JSON (`app/schemas/.../<version>.json`) is committed; regenerate it whenever entities change.
+- Room doesn't split `IN (:ids)` list parameters, and SQLite on API ≤ 30 caps a statement at 999 variables. Bulk
+  id operations go through the chunked helpers in `data/local/dao/ChunkedQueries.kt`.
 - BLE: Android allows one outstanding GATT operation per connection — route every write through the
   connection's op lock. QiYi timers ignore everything until they get a hello carrying their MAC (advertised in
   manufacturer data `0x0504`, else the device address) and re-send recorded solves until acknowledged.
 - `.agents/` is a gitignored scratch directory used by a multi-agent workflow (briefings, handoffs). It is not
-  part of the app, but `.agents/PROJECT.md` / `ORIGINAL_REQUEST.md` mirror the root-level planning docs.
+  part of the app.

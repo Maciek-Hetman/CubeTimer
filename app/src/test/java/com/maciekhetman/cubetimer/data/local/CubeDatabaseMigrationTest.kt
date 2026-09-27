@@ -20,8 +20,8 @@ import java.io.File
 
 /**
  * Upgrading a real v1 database (schema taken from the committed app/schemas/.../1.json) must keep
- * every solve: the database is built with fallbackToDestructiveMigration, so a missing or
- * schema-mismatched migration would silently wipe local (and never-synced guest) data.
+ * every solve. There is no destructive fallback, so a missing or schema-mismatched migration fails
+ * the upgrade outright instead of silently wiping local (and never-synced guest) data.
  */
 @RunWith(RobolectricTestRunner::class)
 class CubeDatabaseMigrationTest {

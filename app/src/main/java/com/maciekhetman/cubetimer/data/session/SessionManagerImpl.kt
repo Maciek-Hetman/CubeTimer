@@ -82,6 +82,9 @@ class SessionManagerImpl(
 
         // Create new automatic session with disambiguated name
         val instant = Instant.ofEpochMilli(currentTimestampMs)
+        // Fixed-width ISO string (Instant.toString() drops ".000" on whole seconds, which breaks
+        // the lexicographic ordering the started_at queries rely on).
+        val startedAtIso = CubeTypeConverters.epochMillisToIso(currentTimestampMs)
         val baseName = AutomaticSessionHelper.automaticSessionName(instant)
         val existingNames = sessionRepository.getSessionNamesWithPrefix(ownerId, mode, baseName)
         val disambiguatedName = AutomaticSessionHelper.disambiguateSessionName(baseName, existingNames)
@@ -93,10 +96,10 @@ class SessionManagerImpl(
             event = mode,
             kind = SessionKind.AUTOMATIC,
             archived = false,
-            startedAt = instant.toString(),
+            startedAt = startedAtIso,
             endedAt = null,
             version = 0L,
-            updatedAt = instant.toString(),
+            updatedAt = startedAtIso,
             deletedAt = null
         )
 

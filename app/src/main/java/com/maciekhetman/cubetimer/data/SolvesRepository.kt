@@ -9,6 +9,8 @@ import com.maciekhetman.cubetimer.data.local.converter.CubeTypeConverters
 import com.maciekhetman.cubetimer.data.local.dao.SessionDao
 import com.maciekhetman.cubetimer.data.local.dao.SolveDao
 import com.maciekhetman.cubetimer.data.local.dao.SyncOutboxDao
+import com.maciekhetman.cubetimer.data.local.dao.getSolvesByIdsChunked
+import com.maciekhetman.cubetimer.data.local.dao.softDeleteAllChunked
 import com.maciekhetman.cubetimer.data.local.mapper.toDbString
 import com.maciekhetman.cubetimer.data.local.mapper.toDeleteMutation
 import com.maciekhetman.cubetimer.data.local.mapper.toEventString
@@ -303,14 +305,14 @@ class SolvesRepository(
     ): List<SolveTime> = withContext(ioDispatcher) {
         if (ids.isEmpty()) return@withContext emptyList()
 
-        val existing = solveDao.getSolvesByIds(ids).filter { it.deletedAt == null && it.ownerId == ownerId }
+        val existing = solveDao.getSolvesByIdsChunked(ids).filter { it.deletedAt == null && it.ownerId == ownerId }
         if (existing.isEmpty()) return@withContext emptyList()
 
         val nowIso = CubeTypeConverters.nowIso()
         val targetIds = existing.map { it.id }
 
         runInTransaction {
-            solveDao.softDeleteAll(targetIds, deletedAt = nowIso, updatedAt = nowIso)
+            solveDao.softDeleteAllChunked(targetIds, deletedAt = nowIso, updatedAt = nowIso)
             if (ownerId != "guest") {
                 syncOutboxDao.enqueueAll(existing.map { it.toDeleteMutation(ownerId = ownerId, clientTime = nowIso) })
             }
@@ -361,7 +363,7 @@ class SolvesRepository(
             if (existing.isNotEmpty()) {
                 val targetIds = existing.map { it.id }
                 runInTransaction {
-                    solveDao.softDeleteAll(targetIds, deletedAt = nowIso, updatedAt = nowIso)
+                    solveDao.softDeleteAllChunked(targetIds, deletedAt = nowIso, updatedAt = nowIso)
                     if (ownerId != "guest") {
                         syncOutboxDao.enqueueAll(existing.map { it.toDeleteMutation(ownerId = ownerId, clientTime = nowIso) })
                     }
@@ -381,7 +383,7 @@ class SolvesRepository(
 
         runInTransaction {
             if (removedEntities.isNotEmpty()) {
-                solveDao.softDeleteAll(removedEntities.map { it.id }, deletedAt = nowIso, updatedAt = nowIso)
+                solveDao.softDeleteAllChunked(removedEntities.map { it.id }, deletedAt = nowIso, updatedAt = nowIso)
                 if (ownerId != "guest") {
                     syncOutboxDao.enqueueAll(removedEntities.map { it.toDeleteMutation(ownerId = ownerId, clientTime = nowIso) })
                 }
@@ -415,7 +417,7 @@ class SolvesRepository(
         val targetIds = existing.map { it.id }
 
         runInTransaction {
-            solveDao.softDeleteAll(targetIds, deletedAt = nowIso, updatedAt = nowIso)
+            solveDao.softDeleteAllChunked(targetIds, deletedAt = nowIso, updatedAt = nowIso)
             if (ownerId != "guest") {
                 syncOutboxDao.enqueueAll(existing.map { it.toDeleteMutation(ownerId = ownerId, clientTime = nowIso) })
             }
@@ -448,7 +450,7 @@ class SolvesRepository(
         }
 
         val nowIso = CubeTypeConverters.nowIso()
-        val existingById = solveDao.getSolvesByIds(solves.map { it.id }).associateBy { it.id }
+        val existingById = solveDao.getSolvesByIdsChunked(solves.map { it.id }).associateBy { it.id }
         val entities = solves.map { solve ->
             val existing = existingById[solve.id]
             if (existing != null) {

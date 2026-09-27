@@ -575,6 +575,22 @@ class HistoryViewModelTest {
     }
 
     @Test
+    fun testSelectAllWithNoExpandedSessionSelectsNothing() = runTest(testDispatcher) {
+        createSessionWithSolves("Collapsed", durationsMs = listOf(10000L, 12000L))
+
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        // Nothing is on screen, so nothing may be selected (and then deleted) - in particular not
+        // the hidden flat page of recent solves.
+        viewModel.selectAllSolves()
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.selectedSolveIds.isEmpty())
+        assertFalse(viewModel.uiState.value.isSelectionMode)
+    }
+
+    @Test
     fun testSelectAllSolvesAndGetSelectedSolves() = runTest(testDispatcher) {
         val (session1, solves) = createSessionWithSolves("Session 1", durationsMs = listOf(10000L, 12000L))
 

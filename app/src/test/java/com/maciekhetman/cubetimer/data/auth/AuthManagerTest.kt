@@ -402,6 +402,41 @@ class AuthManagerTest {
     }
 
     @Test
+    fun `logout enqueues an upsert for each automatic session it closes`() = runTest(testDispatcher) {
+        fakeApiClient.loginResponse = AuthResponse(
+            accessToken = "acc-close",
+            refreshToken = "ref-close",
+            user = UserDto(id = "user-close", email = "close@test.com", userRole = "user", emailVerified = true)
+        )
+        authManager.login("close@test.com", "Password123!")
+        database.syncOutboxDao().clearOutbox("user-close")
+
+        database.sessionDao().insert(
+            SessionEntity(
+                id = "sess-auto-close",
+                ownerId = "user-close",
+                name = "30 aug 2026 morning",
+                event = "3x3",
+                kind = "automatic",
+                startedAt = "2026-08-30T09:00:00.000Z",
+                endedAt = null
+            )
+        )
+
+        authManager.logout()
+
+        // Without an outbox row the server never learns the session ended.
+        val closed = database.sessionDao().getSessionById("sess-auto-close")
+        val mutation = database.syncOutboxDao().getAllPendingForOwner("user-close").single()
+        assertEquals("session", mutation.entityType)
+        assertEquals("sess-auto-close", mutation.entityId)
+        assertEquals("upsert", mutation.action)
+        val payload = Json.decodeFromString(SessionSyncPayload.serializer(), mutation.payloadJson!!)
+        assertNotNull(payload.endedAt)
+        assertEquals(closed?.endedAt, payload.endedAt)
+    }
+
+    @Test
     fun `adoptGuestData with multiple solves and sessions enqueues ordered mutations with valid JSON`() = runTest(testDispatcher) {
         val s1 = SessionEntity(id = "sess-1", ownerId = "guest", name = "Session 1", event = "3x3", kind = "manual", startedAt = "2026-08-30T08:00:00Z")
         val s2 = SessionEntity(id = "sess-2", ownerId = "guest", name = "Session 2", event = "2x2", kind = "automatic", startedAt = "2026-08-30T09:00:00Z")

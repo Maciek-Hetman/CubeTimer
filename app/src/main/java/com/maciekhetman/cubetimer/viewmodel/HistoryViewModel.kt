@@ -14,6 +14,7 @@ import com.maciekhetman.cubetimer.data.local.converter.CubeTypeConverters
 import com.maciekhetman.cubetimer.data.local.dao.SessionDao
 import com.maciekhetman.cubetimer.data.local.dao.SolveDao
 import com.maciekhetman.cubetimer.data.local.dao.SyncOutboxDao
+import com.maciekhetman.cubetimer.data.local.dao.getSolvesByIdsChunked
 import com.maciekhetman.cubetimer.data.local.dto.SessionWithStats
 import com.maciekhetman.cubetimer.data.local.entity.SessionEntity
 import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
@@ -649,14 +650,13 @@ class HistoryViewModel(
     }
 
     fun selectAllSolves() {
+        // Only solves the user can actually see (expanded, filtered session groups). No fallback to
+        // the flat paged list: History doesn't render it, so it would select solves off-screen.
         val visibleSolves = uiState.value.sessionGroups
             .filter { it.isExpanded }
             .flatMap { it.solves }
             .map { it.id }
             .toSet()
-            .ifEmpty {
-                uiState.value.solves.map { it.id }.toSet()
-            }
 
         if (visibleSolves.isEmpty()) return
 
@@ -968,7 +968,7 @@ class HistoryViewModel(
         if (selectedIds.isEmpty()) return@withContext 0
 
         val ownerId = currentOwnerId
-        val entities: List<SolveEntity> = effectiveSolveDao.getSolvesByIds(selectedIds)
+        val entities: List<SolveEntity> = effectiveSolveDao.getSolvesByIdsChunked(selectedIds)
             .filter { it.ownerId == ownerId && it.deletedAt == null }
         val solves: List<SolveTime> = entities.map { it.toSolveTime() }
 

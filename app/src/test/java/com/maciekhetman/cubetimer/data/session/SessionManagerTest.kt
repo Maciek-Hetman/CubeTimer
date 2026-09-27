@@ -107,6 +107,17 @@ class SessionManagerTest {
     }
 
     @Test
+    fun testNewSessionTimestampsUseFixedWidthIso() = runTest {
+        // A whole-second timestamp: Instant.toString() would render it without ".000", breaking
+        // the lexicographic ordering that ORDER BY started_at relies on.
+        val t0 = LocalDateTime.of(2026, 8, 30, 6, 0).toInstant(ZoneOffset.UTC).toEpochMilli()
+
+        val automatic = sessionManager.getOrCreateActiveSession("guest", Mode.CUBE_3x3, t0)
+        assertEquals("2026-08-30T06:00:00.000Z", automatic.startedAt)
+        assertEquals("2026-08-30T06:00:00.000Z", database.sessionDao().getSessionById(automatic.id)?.startedAt)
+    }
+
+    @Test
     fun testAutomaticSessionExpirationAfter60Minutes() = runTest {
         val t0 = LocalDateTime.of(2026, 8, 30, 6, 0).toInstant(ZoneOffset.UTC).toEpochMilli()
         val session1 = sessionManager.getOrCreateActiveSession(

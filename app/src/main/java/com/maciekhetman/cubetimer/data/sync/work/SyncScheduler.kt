@@ -8,6 +8,7 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import java.util.concurrent.TimeUnit
 
@@ -54,6 +55,13 @@ class WorkManagerSyncScheduler(
     }
 
     override fun scheduleImmediateSync() {
+        // A sync that hasn't started yet (waiting for network, or queued behind a running one)
+        // reads the outbox when it starts, so it already covers this write. Appending another
+        // would grow the chain by one per write while offline, then replay it as that many
+        // sequential /v1/sync calls on reconnect. WorkManager marks work RUNNING before doWork(),
+        // so ENQUEUED/BLOCKED here means its outbox read is still ahead of us.
+        if (hasPendingImmediateSync()) return
+
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
@@ -72,6 +80,14 @@ class WorkManagerSyncScheduler(
             ExistingWorkPolicy.APPEND_OR_REPLACE,
             immediateRequest
         )
+    }
+
+    private fun hasPendingImmediateSync(): Boolean = try {
+        workManager.getWorkInfosForUniqueWork(WORK_NAME_IMMEDIATE).get()
+            .any { it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.BLOCKED }
+    } catch (e: Exception) {
+        // If the lookup fails, fall back to enqueueing: an extra sync is harmless, a missed one isn't.
+        false
     }
 
     override fun cancelPeriodicSync() {

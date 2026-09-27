@@ -197,8 +197,11 @@ class CsvImporter(
                 val missingSessionIds = referencedSessionIds.filter { it !in existingDbSessionIds }
                 val nowIso = CubeTypeConverters.nowIso()
 
+                // Grouped once up front; filtering the whole import per missing session was
+                // O(sessions x solves).
+                val solvesBySessionId = solvesToInsert.groupBy { it.sessionId }
                 val sessionsToCreate = missingSessionIds.map { sId ->
-                    val sessionSolves = solvesToInsert.filter { it.sessionId == sId }
+                    val sessionSolves = solvesBySessionId.getValue(sId)
                     val firstSolve = sessionSolves.first()
                     val minTimestamp = sessionSolves.minOf { it.timestamp }
                     val maxTimestamp = sessionSolves.maxOf { it.timestamp }

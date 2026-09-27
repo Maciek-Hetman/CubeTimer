@@ -1,6 +1,7 @@
 package com.maciekhetman.cubetimer.data.sync
 
 import android.content.Context
+import android.net.ConnectivityManager
 import androidx.test.core.app.ApplicationProvider
 import app.cash.turbine.test
 import com.maciekhetman.cubetimer.data.auth.AuthManager
@@ -23,6 +24,8 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowNetwork
 import java.util.UUID
 
 @RunWith(RobolectricTestRunner::class)
@@ -49,6 +52,35 @@ class SyncStateManagerTest {
     @After
     fun tearDown() {
         database.close()
+    }
+
+    @Test
+    fun losingOneOfSeveralNetworksKeepsOnline_losingTheLastGoesOffline() {
+        val cm = context.getSystemService(ConnectivityManager::class.java)
+        val callbacks = shadowOf(cm).networkCallbacks
+        assertTrue(callbacks.isNotEmpty())
+        val wifi = ShadowNetwork.newInstance(101)
+        val cellular = ShadowNetwork.newInstance(102)
+
+        callbacks.forEach { it.onAvailable(wifi); it.onAvailable(cellular) }
+        assertTrue(syncStateManager.isOnline.value)
+
+        // e.g. walking out of Wi-Fi range while mobile data is still up
+        callbacks.forEach { it.onLost(wifi) }
+        assertTrue(syncStateManager.isOnline.value)
+
+        callbacks.forEach { it.onLost(cellular) }
+        assertFalse(syncStateManager.isOnline.value)
+    }
+
+    @Test
+    fun startsOfflineWhenThereIsNoActiveNetwork() {
+        val cm = context.getSystemService(ConnectivityManager::class.java)
+        shadowOf(cm).setActiveNetworkInfo(null)
+
+        val manager = SyncStateManager(context = context, database = database, authManager = fakeAuthManager)
+
+        assertFalse(manager.isOnline.value)
     }
 
     @Test
