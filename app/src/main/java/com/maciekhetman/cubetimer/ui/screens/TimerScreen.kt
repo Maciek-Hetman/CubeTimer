@@ -55,8 +55,8 @@ import com.maciekhetman.cubetimer.model.SolveTime
 import com.maciekhetman.cubetimer.model.TimerAverageOptions
 import com.maciekhetman.cubetimer.model.TimerState
 import com.maciekhetman.cubetimer.model.TimingDevice
+import com.maciekhetman.cubetimer.data.bluetooth.BluetoothTimerStatus
 import com.maciekhetman.cubetimer.ui.bluetooth.BluetoothTimerDialog
-import com.maciekhetman.cubetimer.ui.bluetooth.BluetoothTimerStatusChip
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import androidx.compose.animation.core.Animatable
@@ -64,6 +64,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.rotate
 import com.maciekhetman.cubetimer.ui.components.TimerTopHeader
+import com.maciekhetman.cubetimer.ui.components.TimingDeviceToggle
 import com.maciekhetman.cubetimer.ui.dialogs.ScramblePreviewDialog
 import com.maciekhetman.cubetimer.viewmodel.TimerViewModel
 import kotlin.time.Duration.Companion.milliseconds
@@ -84,6 +85,10 @@ fun TimerScreen(
     val isTimerRunning by viewModel.isTimerRunning.collectAsStateWithLifecycle()
     val isHolding by remember { derivedStateOf { timerState.value is TimerState.Holding } }
     val isFinished by remember { derivedStateOf { timerState.value is TimerState.Finished } }
+    // Switching input mid-solve would strand the running timer, so only allow it between solves.
+    val canSwitchTimingDevice by remember {
+        derivedStateOf { timerState.value is TimerState.Idle || timerState.value is TimerState.Finished }
+    }
     val solves by viewModel.solves.collectAsStateWithLifecycle()
     val scramble by viewModel.currentScramble.collectAsStateWithLifecycle()
     val recordCelebration by viewModel.recordCelebration.collectAsStateWithLifecycle()
@@ -103,6 +108,8 @@ fun TimerScreen(
     val bluetoothTimerState by viewModel.bluetoothTimerState.collectAsStateWithLifecycle()
     // With a Bluetooth timer the screen is display-only: the timer starts/stops solves.
     val bluetoothMode = timingDevice == TimingDevice.EXTERNAL_TIMER
+    // No point offering a Bluetooth timer on a device without BLE, unless it is already selected.
+    val showTimingDeviceToggle = bluetoothMode || bluetoothTimerState.status != BluetoothTimerStatus.Unsupported
     var showBluetoothDialog by remember { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
@@ -172,10 +179,22 @@ fun TimerScreen(
                 currentMode = currentMode,
                 onModeSelected = onModeSelected,
                 extraActions = {
-                    if (bluetoothMode) {
-                        BluetoothTimerStatusChip(
-                            status = bluetoothTimerState.status,
-                            onClick = { showBluetoothDialog = true }
+                    if (showTimingDeviceToggle) {
+                        TimingDeviceToggle(
+                            timingDevice = timingDevice,
+                            bluetoothStatus = bluetoothTimerState.status,
+                            enabled = canSwitchTimingDevice,
+                            onDeviceClick = { device ->
+                                val alreadySelected = device == timingDevice
+                                if (!alreadySelected) viewModel.setTimingDevice(device)
+                                // Switching to the Bluetooth timer asks to connect one; tapping it again
+                                // reopens the dialog to manage the connection.
+                                if (device == TimingDevice.EXTERNAL_TIMER &&
+                                    (alreadySelected || !bluetoothTimerState.isConnected)
+                                ) {
+                                    showBluetoothDialog = true
+                                }
+                            }
                         )
                     }
                 }

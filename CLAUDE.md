@@ -124,7 +124,9 @@ never become the active session. CSV import recreates missing sessions as closed
   `SyncStatusDialog` / `AuthDialog` (`UserProfileDialog`) as before.
 - The top bar only carries the mode picker (plus screen-specific actions via `extraActions`); there is no
   session picker.
-- Timing input is a setting (`SettingsRepository.timingDeviceFlow`, Settings → "Timing device"). With
+- Timing input is a setting (`SettingsRepository.timingDeviceFlow`), switchable from Settings → "Timing device"
+  or the `TimingDeviceToggle` next to the mode picker on the timer screen (hidden without BLE support,
+  disabled mid-solve; tapping the selected Bluetooth segment reopens `BluetoothTimerDialog`). With
   `TimingDevice.EXTERNAL_TIMER` the timer screen ignores touches and `TimerViewModel.onSmartTimerEvent` drives
   the same `TimerState` machine; `Stopped` carries the timer's own time and `TimerState.Finished.timingDevice`
   is saved with the solve. `BluetoothTimerDialog` handles permissions, enabling Bluetooth, scanning and connecting.

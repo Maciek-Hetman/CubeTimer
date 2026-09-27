@@ -23,7 +23,6 @@ import androidx.compose.material.icons.filled.BluetoothConnected
 import androidx.compose.material.icons.filled.BluetoothDisabled
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -255,28 +254,5 @@ private fun DiscoveryContent(
                 }
             }
         }
-    }
-}
-
-/** Compact connection indicator for the timer header; opens the connect dialog. */
-@Composable
-fun BluetoothTimerStatusChip(
-    status: BluetoothTimerStatus,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val connected = status is BluetoothTimerStatus.Connected
-    FilledTonalButton(
-        onClick = onClick,
-        shape = RoundedCornerShape(20.dp),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-        modifier = modifier
-    ) {
-        Icon(
-            imageVector = if (connected) Icons.Filled.BluetoothConnected else Icons.Filled.BluetoothDisabled,
-            contentDescription = if (connected) "Bluetooth timer connected" else "Bluetooth timer not connected",
-            tint = if (connected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-            modifier = Modifier.size(18.dp)
-        )
     }
 }
