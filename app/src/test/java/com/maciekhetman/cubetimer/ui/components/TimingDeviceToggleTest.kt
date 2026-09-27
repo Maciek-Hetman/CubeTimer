@@ -1,12 +1,16 @@
 package com.maciekhetman.cubetimer.ui.components
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.maciekhetman.cubetimer.data.bluetooth.BluetoothTimerStatus
 import com.maciekhetman.cubetimer.domain.bluetooth.SmartTimerModel
@@ -68,6 +72,52 @@ class TimingDeviceToggleTest {
         setToggle(TimingDevice.EXTERNAL_TIMER, bluetoothStatus = BluetoothTimerStatus.Disconnected)
 
         composeTestRule.onNodeWithContentDescription("Bluetooth timer, Not connected").assertIsSelected()
+    }
+
+    @Test
+    fun `only the selected segment is labelled`() {
+        setToggle(TimingDevice.KEYBOARD)
+
+        composeTestRule.onNodeWithText("Touch").assertIsDisplayed().assertIsSelected()
+        composeTestRule.onNodeWithText("Bluetooth").assertDoesNotExist()
+    }
+
+    @Test
+    fun `bluetooth selected carries the bluetooth label`() {
+        setToggle(
+            TimingDevice.EXTERNAL_TIMER,
+            bluetoothStatus = BluetoothTimerStatus.Connected("GAN-1234", SmartTimerModel.GAN)
+        )
+
+        composeTestRule.onNodeWithText("Bluetooth").assertIsDisplayed().assertIsSelected()
+        composeTestRule.onNodeWithText("Touch").assertDoesNotExist()
+    }
+
+    @Test
+    fun `label follows the selected device when it changes`() {
+        var device by mutableStateOf(TimingDevice.KEYBOARD)
+        composeTestRule.setContent {
+            MaterialTheme {
+                TimingDeviceToggle(
+                    timingDevice = device,
+                    bluetoothStatus = BluetoothTimerStatus.Disconnected,
+                    onDeviceClick = { device = it }
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithContentDescription("Bluetooth timer").performClick()
+
+        composeTestRule.onNodeWithText("Bluetooth").assertIsDisplayed().assertIsSelected()
+        composeTestRule.onNodeWithText("Touch").assertDoesNotExist()
+        composeTestRule.onNodeWithContentDescription("Bluetooth timer, Not connected").assertIsSelected()
+    }
+
+    @Test
+    fun `disabled toggle keeps the selection visible`() {
+        setToggle(TimingDevice.EXTERNAL_TIMER, enabled = false)
+
+        composeTestRule.onNodeWithText("Bluetooth").assertIsDisplayed().assertIsSelected().assertIsNotEnabled()
     }
 
     @Test

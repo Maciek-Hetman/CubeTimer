@@ -184,6 +184,9 @@ fun TimerScreen(
                             timingDevice = timingDevice,
                             bluetoothStatus = bluetoothTimerState.status,
                             enabled = canSwitchTimingDevice,
+                            // Measured after the mode menu, so on narrow screens the selected label
+                            // ellipsizes instead of squeezing the mode button.
+                            modifier = Modifier.weight(1f, fill = false),
                             onDeviceClick = { device ->
                                 val alreadySelected = device == timingDevice
                                 if (!alreadySelected) viewModel.setTimingDevice(device)
