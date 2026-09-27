@@ -1,5 +1,6 @@
 package com.maciekhetman.cubetimer.data.sync
 
+import android.app.Application
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.Configuration
@@ -15,8 +16,13 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
+// A plain Application, not CubeTimerApplication: the app's auth-state observer cancels periodic sync
+// whenever it sees Guest, and it can land on the test WorkManager right after a test schedules work
+// (schedulePeriodicSync_... intermittently saw CANCELLED instead of ENQUEUED).
 @RunWith(RobolectricTestRunner::class)
+@Config(application = Application::class)
 class SyncSchedulerTest {
 
     private lateinit var context: Context
