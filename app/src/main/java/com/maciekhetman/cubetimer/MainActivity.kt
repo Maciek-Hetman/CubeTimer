@@ -1,7 +1,6 @@
 package com.maciekhetman.cubetimer
 
 import android.os.Bundle
-import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
@@ -134,9 +133,6 @@ class MainActivity : ComponentActivity() {
         timerViewModel = ViewModelProvider(this, factory)[TimerViewModel::class.java]
         authViewModel = ViewModelProvider(this, factory)[AuthViewModel::class.java]
         syncStateManager = app.syncStateManager
-
-        // Keep screen on while app is open
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         setContent {
             val dynamicColorEnabled by timerViewModel.dynamicColorEnabled.collectAsStateWithLifecycle()

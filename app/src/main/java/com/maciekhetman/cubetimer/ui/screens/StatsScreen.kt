@@ -382,18 +382,26 @@ data class StandardAverageData(
     val best: Long?
 )
 
+private val StandardAverageCounts = listOf(5, 12, 50, 100)
+
 @Composable
 fun CompactSummaryGrid(
     solves: List<SolveTime>,
     modifier: Modifier = Modifier
 ) {
-    val items = remember(solves) {
-        listOf(
-            StandardAverageData("Ao5", 5, AverageCalculator.averageOfN(solves, 5), AverageCalculator.bestAverageOfN(solves, 5)),
-            StandardAverageData("Ao12", 12, AverageCalculator.averageOfN(solves, 12), AverageCalculator.bestAverageOfN(solves, 12)),
-            StandardAverageData("Ao50", 50, AverageCalculator.averageOfN(solves, 50), AverageCalculator.bestAverageOfN(solves, 50)),
-            StandardAverageData("Ao100", 100, AverageCalculator.averageOfN(solves, 100), AverageCalculator.bestAverageOfN(solves, 100))
-        )
+    // Current averages only look at the last N solves, so they're cheap enough for composition.
+    // The bests scan the whole history (bestAverageOfN is O(n log n) per count), so they run off
+    // the main thread; until they arrive the PB row shows the previous value (or "--").
+    val currents = remember(solves) {
+        StandardAverageCounts.associateWith { count -> AverageCalculator.averageOfN(solves, count) }
+    }
+    val bests by produceState<Map<Int, Long?>>(initialValue = emptyMap(), solves) {
+        value = withContext(Dispatchers.Default) {
+            StandardAverageCounts.associateWith { count -> AverageCalculator.bestAverageOfN(solves, count) }
+        }
+    }
+    val items = StandardAverageCounts.map { count ->
+        StandardAverageData("Ao$count", count, currents[count], bests[count])
     }
 
     Column(

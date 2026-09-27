@@ -111,8 +111,6 @@ private data class Chunk1(
 )
 
 private data class Chunk2(
-    val activeSessionCount: Int,
-    val allSolvesCount: Int,
     val currentMode: Mode,
     val currentFilter: StatsFilter,
     val errorMessage: String?
@@ -268,12 +266,6 @@ class HistoryViewModel(
     private val _totalCount = MutableStateFlow(0)
     val totalCount: StateFlow<Int> = _totalCount.asStateFlow()
 
-    private val _activeSessionCount = MutableStateFlow(0)
-    val activeSessionSolvesCount: StateFlow<Int> = _activeSessionCount.asStateFlow()
-
-    private val _allSolvesCount = MutableStateFlow(0)
-    val allSolvesCount: StateFlow<Int> = _allSolvesCount.asStateFlow()
-
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
@@ -384,8 +376,8 @@ class HistoryViewModel(
             combine(_solves, _isLoading, _isLoadingMore, _hasMore, _totalCount) { s, l, lm, hm, tc ->
                 Chunk1(s, l, lm, hm, tc)
             },
-            combine(_activeSessionCount, _allSolvesCount, _currentMode, _currentFilter, _errorMessage) { ac, alc, cm, cf, em ->
-                Chunk2(ac, alc, cm, cf, em)
+            combine(_currentMode, _currentFilter, _errorMessage) { cm, cf, em ->
+                Chunk2(cm, cf, em)
             },
             combine(activeSession, sessions, _selectedSolveDetail) { asess, sessList, selSolve ->
                 Triple(asess, sessList, selSolve)
@@ -415,8 +407,6 @@ class HistoryViewModel(
             isLoadingMore = c1.isLoadingMore,
             hasMore = c1.hasMore,
             totalCount = c1.totalCount,
-            activeSessionCount = c2.activeSessionCount,
-            allSolvesCount = c2.allSolvesCount,
             currentMode = c2.currentMode,
             currentFilter = c2.currentFilter,
             activeSession = asess,
@@ -1234,44 +1224,26 @@ class HistoryViewModel(
         }
     }
 
+    /**
+     * Observes the one solve count the current filter needs for [totalCount] / [hasMore]. This used
+     * to keep up to three count queries live (each re-run on every solves write), two of them only
+     * feeding count fields that nothing displayed.
+     */
     private fun observeCounts(scope: FilterScope) {
         countObservationJob?.cancel()
-        countObservationJob = viewModelScope.launch {
-            launch {
+        val countFlow = when (val filter = scope.filter) {
+            is StatsFilter.SpecificSession ->
+                solvesRepository.observeSolveCountBySession(filter.sessionId, scope.ownerId)
+            is StatsFilter.ActiveSession -> scope.activeSessionId
+                ?.let { solvesRepository.observeSolveCountBySession(it, scope.ownerId) }
+                ?: solvesRepository.observeSolveCountByEvent(scope.mode, scope.ownerId)
+            is StatsFilter.AllSessions ->
                 solvesRepository.observeSolveCountByEvent(scope.mode, scope.ownerId)
-                    .collect { count ->
-                        _allSolvesCount.value = count
-                        if (scope.filter is StatsFilter.AllSessions || (scope.filter is StatsFilter.ActiveSession && scope.activeSessionId == null)) {
-                            _totalCount.value = count
-                            _hasMore.value = _solves.value.size < count
-                        }
-                    }
-            }
-
-            val activeId = scope.activeSessionId
-            if (activeId != null) {
-                launch {
-                    solvesRepository.observeSolveCountBySession(activeId, scope.ownerId)
-                        .collect { count ->
-                            _activeSessionCount.value = count
-                            if (scope.filter is StatsFilter.ActiveSession) {
-                                _totalCount.value = count
-                                _hasMore.value = _solves.value.size < count
-                            }
-                        }
-                }
-            } else {
-                _activeSessionCount.value = 0
-            }
-
-            if (scope.filter is StatsFilter.SpecificSession) {
-                launch {
-                    solvesRepository.observeSolveCountBySession(scope.filter.sessionId, scope.ownerId)
-                        .collect { count ->
-                            _totalCount.value = count
-                            _hasMore.value = _solves.value.size < count
-                        }
-                }
+        }
+        countObservationJob = viewModelScope.launch {
+            countFlow.collect { count ->
+                _totalCount.value = count
+                _hasMore.value = _solves.value.size < count
             }
         }
     }

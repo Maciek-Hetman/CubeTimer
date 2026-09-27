@@ -63,6 +63,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.rotate
+import com.maciekhetman.cubetimer.ui.components.KeepScreenOn
 import com.maciekhetman.cubetimer.ui.components.TimerTopHeader
 import com.maciekhetman.cubetimer.ui.components.TimingDeviceToggle
 import com.maciekhetman.cubetimer.ui.dialogs.ScramblePreviewDialog
@@ -125,6 +126,8 @@ fun TimerScreen(
         !hideLastResultsOnTimer &&
         (!isSolving || (!hideLastResultsDuringSolve && !focusModeActive))
     val showBottomContent = showAverages || showLastResults
+
+    KeepScreenOn()
 
     LaunchedEffect(isHolding, timerStartDelayMillis, hapticsEnabled, bluetoothMode) {
         if (isHolding && hapticsEnabled && !bluetoothMode) {

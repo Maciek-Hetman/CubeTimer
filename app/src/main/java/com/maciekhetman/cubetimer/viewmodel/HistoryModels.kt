@@ -156,8 +156,6 @@ data class HistoryUiState(
     val isLoadingMore: Boolean = false,
     val hasMore: Boolean = false,
     val totalCount: Int = 0,
-    val activeSessionCount: Int = 0,
-    val allSolvesCount: Int = 0,
     val currentMode: Mode = Mode.CUBE_3x3,
     val currentFilter: StatsFilter = StatsFilter.AllSessions,
     val activeSession: Session? = null,
@@ -179,7 +177,6 @@ data class HistoryUiState(
         get() = activeSessionFilterCount + activeSolveFilterCount
 
     val isInitialLoading: Boolean get() = isLoading
-    val activeSessionSolvesCount: Int get() = activeSessionCount
 }
 
 /**
