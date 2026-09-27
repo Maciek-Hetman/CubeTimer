@@ -2,6 +2,7 @@ package com.maciekhetman.cubetimer.ui.screens
 
 import android.content.Context
 import android.os.Build
+import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -15,7 +16,10 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
@@ -50,8 +54,19 @@ import com.maciekhetman.cubetimer.model.RunningTimerDisplay
 import com.maciekhetman.cubetimer.model.SolveTime
 import com.maciekhetman.cubetimer.model.TimerAverageOptions
 import com.maciekhetman.cubetimer.model.TimerState
+import com.maciekhetman.cubetimer.model.TimingDevice
+import com.maciekhetman.cubetimer.data.bluetooth.BluetoothTimerStatus
+import com.maciekhetman.cubetimer.ui.bluetooth.BluetoothTimerDialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.maciekhetman.cubetimer.ui.components.TopBar
+import kotlinx.coroutines.launch
+import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.rotate
+import com.maciekhetman.cubetimer.ui.components.KeepScreenOn
+import com.maciekhetman.cubetimer.ui.components.TimerTopHeader
+import com.maciekhetman.cubetimer.ui.components.TimingDeviceToggle
+import com.maciekhetman.cubetimer.ui.dialogs.ScramblePreviewDialog
 import com.maciekhetman.cubetimer.viewmodel.TimerViewModel
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.delay
@@ -63,7 +78,18 @@ fun TimerScreen(
     onModeSelected: (Mode) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val timerState by viewModel.timerState.collectAsStateWithLifecycle()
+    // NOTE: `timerState` is intentionally kept as a State<TimerState> (not read with `by` here) so that
+    // reading it does not subscribe this whole screen to every tick (every 10ms while running, 16ms while
+    // holding). Only small child composables that actually need the live value (TimerContent) read
+    // `timerState.value`; everything else here derives cheap, rarely-changing booleans instead.
+    val timerState = viewModel.timerState.collectAsStateWithLifecycle()
+    val isTimerRunning by viewModel.isTimerRunning.collectAsStateWithLifecycle()
+    val isHolding by remember { derivedStateOf { timerState.value is TimerState.Holding } }
+    val isFinished by remember { derivedStateOf { timerState.value is TimerState.Finished } }
+    // Switching input mid-solve would strand the running timer, so only allow it between solves.
+    val canSwitchTimingDevice by remember {
+        derivedStateOf { timerState.value is TimerState.Idle || timerState.value is TimerState.Finished }
+    }
     val solves by viewModel.solves.collectAsStateWithLifecycle()
     val scramble by viewModel.currentScramble.collectAsStateWithLifecycle()
     val recordCelebration by viewModel.recordCelebration.collectAsStateWithLifecycle()
@@ -76,14 +102,22 @@ fun TimerScreen(
     val hideAveragesDuringSolve by viewModel.hideAveragesDuringSolve.collectAsStateWithLifecycle()
     val hideLastResultsDuringSolve by viewModel.hideLastResultsDuringSolve.collectAsStateWithLifecycle()
     val hideLastResultsOnTimer by viewModel.hideLastResultsOnTimer.collectAsStateWithLifecycle()
+    val hideStartHint by viewModel.hideStartHint.collectAsStateWithLifecycle()
     val hapticsEnabled by viewModel.hapticsEnabled.collectAsStateWithLifecycle()
     val focusMode by viewModel.focusMode.collectAsStateWithLifecycle()
+    val timingDevice by viewModel.timingDevice.collectAsStateWithLifecycle()
+    val bluetoothTimerState by viewModel.bluetoothTimerState.collectAsStateWithLifecycle()
+    // With a Bluetooth timer the screen is display-only: the timer starts/stops solves.
+    val bluetoothMode = timingDevice == TimingDevice.EXTERNAL_TIMER
+    // No point offering a Bluetooth timer on a device without BLE, unless it is already selected.
+    val showTimingDeviceToggle = bluetoothMode || bluetoothTimerState.status != BluetoothTimerStatus.Unsupported
+    var showBluetoothDialog by remember { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
     val density = LocalDensity.current
     var topContentHeight by remember { mutableStateOf(0.dp) }
     var bottomContentHeight by remember { mutableStateOf(0.dp) }
-    val isSolving = timerState is TimerState.Running
+    val isSolving = isTimerRunning
     val focusModeActive = focusMode && isSolving
     val showTopBar = !focusModeActive
     val showScramble = !isSolving || (!hideScrambleDuringSolve && !focusModeActive)
@@ -92,11 +126,11 @@ fun TimerScreen(
         !hideLastResultsOnTimer &&
         (!isSolving || (!hideLastResultsDuringSolve && !focusModeActive))
     val showBottomContent = showAverages || showLastResults
-    
-    val latestTimerState by rememberUpdatedState(timerState)
 
-    LaunchedEffect((timerState is TimerState.Holding), timerStartDelayMillis, hapticsEnabled) {
-        if ((timerState is TimerState.Holding) && hapticsEnabled) {
+    KeepScreenOn()
+
+    LaunchedEffect(isHolding, timerStartDelayMillis, hapticsEnabled, bluetoothMode) {
+        if (isHolding && hapticsEnabled && !bluetoothMode) {
             val holdDuration = timerStartDelayMillis.coerceAtLeast(200)
             val pulses = listOf(
                 0.14f to 22,
@@ -111,7 +145,7 @@ fun TimerScreen(
             pulses.forEach { (fraction, amplitude) ->
                 val targetDelay = (holdDuration * fraction).toLong()
                 delay((targetDelay - previousDelay).milliseconds)
-                if (latestTimerState !is TimerState.Holding) return@LaunchedEffect
+                if (timerState.value !is TimerState.Holding) return@LaunchedEffect
                 vibrateOneShot(context, durationMillis = 8L, amplitude = amplitude)
                 previousDelay = targetDelay
             }
@@ -119,8 +153,8 @@ fun TimerScreen(
     }
 
     // Trigger haptic feedback only once when timer starts
-    LaunchedEffect(timerState is TimerState.Running, hapticsEnabled) {
-        if (timerState is TimerState.Running && hapticsEnabled) {
+    LaunchedEffect(isTimerRunning, hapticsEnabled, bluetoothMode) {
+        if (isTimerRunning && hapticsEnabled && !bluetoothMode) {
             val usedVibrator = vibrateOneShot(context, durationMillis = 14L, amplitude = 255)
             if (!usedVibrator) {
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -144,13 +178,35 @@ fun TimerScreen(
 
     Column(modifier = modifier.fillMaxSize()) {
         if (showTopBar) {
-            TopBar(
-                title = "Timer",
+            TimerTopHeader(
                 currentMode = currentMode,
-                onModeSelected = onModeSelected
+                onModeSelected = onModeSelected,
+                extraActions = {
+                    if (showTimingDeviceToggle) {
+                        TimingDeviceToggle(
+                            timingDevice = timingDevice,
+                            bluetoothStatus = bluetoothTimerState.status,
+                            enabled = canSwitchTimingDevice,
+                            // Measured after the mode menu, so on narrow screens the selected label
+                            // ellipsizes instead of squeezing the mode button.
+                            modifier = Modifier.weight(1f, fill = false),
+                            onDeviceClick = { device ->
+                                val alreadySelected = device == timingDevice
+                                if (!alreadySelected) viewModel.setTimingDevice(device)
+                                // Switching to the Bluetooth timer asks to connect one; tapping it again
+                                // reopens the dialog to manage the connection.
+                                if (device == TimingDevice.EXTERNAL_TIMER &&
+                                    (alreadySelected || !bluetoothTimerState.isConnected)
+                                ) {
+                                    showBluetoothDialog = true
+                                }
+                            }
+                        )
+                    }
+                }
             )
         }
-        
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -168,83 +224,97 @@ fun TimerScreen(
                 ) {
                     ScrambleDisplay(
                         scramble = scramble,
+                        mode = currentMode,
                         onRefresh = { viewModel.generateNewScramble() },
                         showRefreshButton = showScrambleRefreshButton,
-                        scale = scrambleScalePercent / 100f
+                        scale = scrambleScalePercent / 100f,
+                        enabled = !isTimerRunning && !isHolding
                     )
                 }
             }
-        
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .navigationBarsPadding()
-                .padding(
-                    top = if (showScramble) topContentHeight + 12.dp else 12.dp,
-                    bottom = if (showBottomContent) bottomContentHeight + 12.dp else 96.dp
-                )
-                .semantics {
-                    contentDescription = if (isSolving) "Tap to stop timer" else "Tap and hold to start timer"
-                }
-                .then(
-                    if (timerState !is TimerState.Finished && recordCelebration == null) {
-                        Modifier.pointerInput(Unit) {
-                            detectTapGestures(
-                            onPress = {
-                                val wasRunning = viewModel.timerState.value is TimerState.Running
-                                viewModel.onPressStart()
-                                tryAwaitRelease()
-                                viewModel.onPressRelease()
-                                if (wasRunning) {
-                                    // Timer stopped
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .navigationBarsPadding()
+                    .padding(
+                        top = if (showScramble) topContentHeight + 12.dp else 12.dp,
+                        bottom = if (showBottomContent) bottomContentHeight + 12.dp else 96.dp
+                    )
+                    .semantics {
+                        contentDescription = when {
+                            bluetoothMode -> "Timer controlled by Bluetooth timer"
+                            isSolving -> "Tap to stop timer"
+                            else -> "Tap and hold to start timer"
+                        }
+                    }
+                    .then(
+                        if (!isFinished && recordCelebration == null && !bluetoothMode) {
+                            Modifier.pointerInput(Unit) {
+                                awaitEachGesture {
+                                    val down = awaitFirstDown()
+                                    val wasRunning = viewModel.timerState.value is TimerState.Running
+                                    viewModel.onPressStart(down.uptimeMillis)
+                                    val up = waitForUpOrCancellation()
+                                    viewModel.onPressRelease(up?.uptimeMillis ?: SystemClock.uptimeMillis())
+                                    if (wasRunning) {
+                                        // Timer stopped
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    }
                                 }
                             }
-                            )
+                        } else {
+                            Modifier
                         }
-                    } else {
-                        Modifier
-                    }
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            TimerContent(
-                timerState = timerState,
-                viewModel = viewModel,
-                runningTimerDisplay = runningTimerDisplay,
-                focusModeActive = focusModeActive
-            )
-        }
-        
-        if (showBottomContent) {
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(horizontal = 12.dp)
-                    .padding(bottom = 88.dp, top = 8.dp)
-                    .onGloballyPositioned {
-                        bottomContentHeight = with(density) { it.size.height.toDp() }
-                    },
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ),
+                contentAlignment = Alignment.Center
             ) {
-                if (showAverages) {
-                    AveragesDisplay(
-                        solves = solves,
-                        enabledAverages = timerAverages
-                    )
-                }
-                if (showLastResults) {
-                    RecentSolvesDisplay(solves = solves)
+                TimerContent(
+                    timerState = timerState,
+                    viewModel = viewModel,
+                    runningTimerDisplay = runningTimerDisplay,
+                    focusModeActive = focusModeActive,
+                    hideStartHint = hideStartHint,
+                    bluetoothMode = bluetoothMode,
+                    bluetoothConnected = bluetoothTimerState.isConnected,
+                    onConnectBluetoothTimer = { showBluetoothDialog = true }
+                )
+            }
+
+            if (showBottomContent) {
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .navigationBarsPadding()
+                        .padding(horizontal = 12.dp)
+                        .padding(bottom = 88.dp, top = 8.dp)
+                        .onGloballyPositioned {
+                            bottomContentHeight = with(density) { it.size.height.toDp() }
+                        },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    if (showAverages) {
+                        AveragesDisplay(
+                            solves = solves,
+                            enabledAverages = timerAverages
+                        )
+                    }
+                    if (showLastResults) {
+                        RecentSolvesDisplay(solves = solves)
+                    }
                 }
             }
-        }        
+
             // Record celebration overlay
             RecordCelebrationOverlay(
                 celebration = recordCelebration
             ) { viewModel.dismissRecordCelebration() }
         }
+    }
+
+    if (showBluetoothDialog) {
+        BluetoothTimerDialog(viewModel = viewModel, onDismiss = { showBluetoothDialog = false })
     }
 }
 
@@ -281,12 +351,19 @@ private fun Context.defaultVibrator(): Vibrator? {
 
 @Composable
 private fun TimerContent(
-    timerState: TimerState,
+    timerState: State<TimerState>,
     viewModel: TimerViewModel,
     runningTimerDisplay: RunningTimerDisplay,
     focusModeActive: Boolean,
+    hideStartHint: Boolean = false,
+    bluetoothMode: Boolean = false,
+    bluetoothConnected: Boolean = false,
+    onConnectBluetoothTimer: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    // Reading the fast-changing TimerState here (via `by`) is intentional and safe: this is the small
+    // leaf composable that is meant to recompose on every tick, isolated from the rest of TimerScreen.
+    val state = timerState.value
     val haptic = LocalHapticFeedback.current
     var showDiscardDialog by remember { mutableStateOf(false) }
     Column(
@@ -294,49 +371,64 @@ private fun TimerContent(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        val showTimerDisplay = (timerState !is TimerState.Running) ||
+        val showTimerDisplay = (state !is TimerState.Running) ||
             (!focusModeActive && runningTimerDisplay != RunningTimerDisplay.HIDDEN)
         if (showTimerDisplay) {
             TimerDisplay(
-                time = when (timerState) {
-                    is TimerState.Running -> timerState.elapsedTime
-                    is TimerState.Finished -> timerState.time
+                time = when (state) {
+                    is TimerState.Running -> state.elapsedTime
+                    is TimerState.Finished -> state.time
                     else -> 0
                 },
-                color = when (timerState) {
+                color = when (state) {
                     is TimerState.Holding -> MaterialTheme.colorScheme.error
                     is TimerState.Ready -> MaterialTheme.colorScheme.primary
                     is TimerState.Running -> MaterialTheme.colorScheme.primary
                     is TimerState.Finished -> MaterialTheme.colorScheme.primary
                     else -> MaterialTheme.colorScheme.onBackground
                 },
-                showDecimals = timerState !is TimerState.Running ||
+                showDecimals = state !is TimerState.Running ||
                     runningTimerDisplay == RunningTimerDisplay.FULL
             )
-            Spacer(modifier = Modifier.height(24.dp))
+            if (state !is TimerState.Idle || !hideStartHint || (bluetoothMode && !bluetoothConnected)) {
+                Spacer(modifier = Modifier.height(24.dp))
+            }
         }
-        when (timerState) {
+        when (state) {
             is TimerState.Idle -> {
-                Text(
-                    text = "Tap and hold to start",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-                )
+                if (bluetoothMode && !bluetoothConnected) {
+                    // Shown even with the start hint hidden: nothing can start a solve until then.
+                    FilledTonalButton(
+                        onClick = onConnectBluetoothTimer,
+                        shape = RoundedCornerShape(20.dp)
+                    ) {
+                        Text("Connect Bluetooth timer")
+                    }
+                } else if (!hideStartHint) {
+                    Text(
+                        text = if (bluetoothMode) "Place both hands on the timer" else "Tap and hold to start",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
             is TimerState.Holding -> {
-                val color = if (timerState.progress < 1f) {
+                val color = if (state.progress < 1f) {
                     MaterialTheme.colorScheme.error
                 } else {
                     MaterialTheme.colorScheme.tertiary
                 }
-                LinearProgressIndicator(
-                    progress = { timerState.progress },
-                    modifier = Modifier
-                        .width(200.dp)
-                        .height(4.dp),
-                    color = color,
-                )
-                Spacer(modifier = Modifier.height(16.dp))
+                if (!bluetoothMode) {
+                    // The Bluetooth timer runs its own hold countdown; there is no progress to show.
+                    LinearProgressIndicator(
+                        progress = { state.progress },
+                        modifier = Modifier
+                            .width(200.dp)
+                            .height(4.dp),
+                        color = color,
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
                 Text(
                     text = "Hold...",
                     style = MaterialTheme.typography.bodyLarge,
@@ -345,7 +437,7 @@ private fun TimerContent(
             }
             is TimerState.Ready -> {
                 Text(
-                    text = "Release to start!",
+                    text = if (bluetoothMode) "Lift your hands to start!" else "Release to start!",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.tertiary,
                     fontWeight = FontWeight.Bold
@@ -353,16 +445,16 @@ private fun TimerContent(
             }
             is TimerState.Running -> {
                 Text(
-                    text = "Tap to stop",
+                    text = if (bluetoothMode) "Stop on the timer" else "Tap to stop",
                     style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
             is TimerState.Finished -> {
                 Spacer(modifier = Modifier.height(16.dp))
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.padding(horizontal = 16.dp)
                 ) {
                     Button(
@@ -372,12 +464,12 @@ private fun TimerContent(
                         },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(64.dp),
-                        shape = MaterialTheme.shapes.extraLarge
+                            .height(56.dp),
+                        shape = RoundedCornerShape(20.dp)
                     ) {
                         Text(
                             text = "Save Time",
-                            style = MaterialTheme.typography.titleLarge,
+                            style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -394,7 +486,7 @@ private fun TimerContent(
                             modifier = Modifier
                                 .weight(1f)
                                 .height(56.dp),
-                            shape = MaterialTheme.shapes.large
+                            shape = RoundedCornerShape(20.dp)
                         ) {
                             Text(
                                 text = "+2",
@@ -410,7 +502,7 @@ private fun TimerContent(
                             modifier = Modifier
                                 .weight(1f)
                                 .height(56.dp),
-                            shape = MaterialTheme.shapes.extraLarge,
+                            shape = RoundedCornerShape(20.dp),
                             colors = ButtonDefaults.filledTonalButtonColors(
                                 containerColor = MaterialTheme.colorScheme.errorContainer,
                                 contentColor = MaterialTheme.colorScheme.onErrorContainer
@@ -430,7 +522,7 @@ private fun TimerContent(
                             modifier = Modifier
                                 .weight(1f)
                                 .height(56.dp),
-                            shape = MaterialTheme.shapes.medium
+                            shape = RoundedCornerShape(20.dp)
                         ) {
                             Text(
                                 text = "Discard",
@@ -447,6 +539,7 @@ private fun TimerContent(
     if (showDiscardDialog) {
         AlertDialog(
             onDismissRequest = { showDiscardDialog = false },
+            shape = RoundedCornerShape(24.dp),
             title = { Text("Discard solve?") },
             text = { Text("This solve will be removed without saving.") },
             confirmButton = {
@@ -456,6 +549,7 @@ private fun TimerContent(
                         showDiscardDialog = false
                         viewModel.discardSolve()
                     },
+                    shape = RoundedCornerShape(20.dp),
                     colors = ButtonDefaults.filledTonalButtonColors(
                         containerColor = MaterialTheme.colorScheme.errorContainer,
                         contentColor = MaterialTheme.colorScheme.onErrorContainer
@@ -469,7 +563,8 @@ private fun TimerContent(
                     onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         showDiscardDialog = false
-                    }
+                    },
+                    shape = RoundedCornerShape(20.dp)
                 ) {
                     Text("Cancel")
                 }
@@ -515,15 +610,15 @@ private fun AveragesDisplay(
     enabledAverages: Set<Int>,
     modifier: Modifier = Modifier
 ) {
+    // AverageCalculator.averageOfN returns null both when there aren't enough solves yet AND when there
+    // are enough solves but too many DNFs to compute a real average. Only the first case should hide the
+    // average entirely; the second case is a legitimate "DNF" average and must still be shown.
     val averages = remember(solves, enabledAverages) {
         TimerAverageOptions
             .asSequence()
             .filter { it in enabledAverages }
-            .mapNotNull { count ->
-                AverageCalculator.averageOfN(solves, count)?.let { average ->
-                    count to average
-                }
-            }
+            .filter { count -> solves.size >= count }
+            .map { count -> count to AverageCalculator.averageOfN(solves, count) }
             .toList()
     }
 
@@ -533,11 +628,11 @@ private fun AveragesDisplay(
 
     Surface(
         modifier = modifier,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.7f),
-        shape = MaterialTheme.shapes.large
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = RoundedCornerShape(24.dp)
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -558,21 +653,21 @@ private fun AveragesDisplay(
 @Composable
 private fun AverageStat(
     label: String,
-    time: Long
+    time: Long?
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(modifier = Modifier.height(2.dp))
         Text(
-            text = formatDisplayTime(time),
+            text = time?.let { formatDisplayTime(it) } ?: "DNF",
             style = MaterialTheme.typography.titleSmall,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground
+            color = if (time == null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onBackground
         )
     }
 }
@@ -606,9 +701,9 @@ private fun RecentSolvesDisplay(
         }
 
         val dynamicHorizontalPadding = when {
-            estimatedItemWidth < 50.dp -> 4.dp
-            estimatedItemWidth < 60.dp -> 5.dp
-            else -> 6.dp
+            estimatedItemWidth < 50.dp -> 6.dp
+            estimatedItemWidth < 60.dp -> 8.dp
+            else -> 10.dp
         }
 
         Row(
@@ -617,8 +712,8 @@ private fun RecentSolvesDisplay(
         ) {
             recentSolves.forEach { solve ->
                 Surface(
-                    shape = MaterialTheme.shapes.small,
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 ) {
                     Text(
                         text = formatDisplayTime(solve.displayTime),
@@ -626,13 +721,13 @@ private fun RecentSolvesDisplay(
                         fontSize = dynamicFontSize,
                         fontFamily = FontFamily.Monospace,
                         color = when (solve.penalty) {
-                            Penalty.DNF -> MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
-                            Penalty.PLUS_TWO -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.8f)
-                            Penalty.NONE -> MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                            Penalty.DNF -> MaterialTheme.colorScheme.error
+                            Penalty.PLUS_TWO -> MaterialTheme.colorScheme.tertiary
+                            Penalty.NONE -> MaterialTheme.colorScheme.onBackground
                         },
                         modifier = Modifier.padding(
                             horizontal = dynamicHorizontalPadding,
-                            vertical = 2.dp
+                            vertical = 4.dp
                         )
                     )
                 }
@@ -648,19 +743,21 @@ private fun formatDisplayTime(millis: Long): String {
 @Composable
 private fun ScrambleDisplay(
     scramble: String,
+    mode: Mode,
     onRefresh: () -> Unit,
     showRefreshButton: Boolean,
     scale: Float,
+    enabled: Boolean = true,
     modifier: Modifier = Modifier
 ) {
-    var showFullScramble by remember { mutableStateOf(false) }
-    var isTruncated by remember { mutableStateOf(false) }
+    var showPreviewDialog by remember { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
+    val coroutineScope = rememberCoroutineScope()
+    val refreshRotation = remember { Animatable(0f) }
     val maxLines = 4
     val safeScale = scale.coerceIn(0.8f, 1.4f)
     val contentPadding = 16.dp * safeScale
     val spacerWidth = 12.dp * safeScale
-    val textEndPadding = 8.dp * safeScale
     val buttonSize = 40.dp * safeScale
     val iconSize = 20.dp * safeScale
     val baseTextStyle = MaterialTheme.typography.bodyLarge
@@ -673,24 +770,24 @@ private fun ScrambleDisplay(
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
             .then(
-                if (isTruncated) {
+                if (enabled) {
                     Modifier.clickable {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        showFullScramble = true
+                        showPreviewDialog = true
                     }
                 } else {
                     Modifier
                 }
             ),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = MaterialTheme.shapes.large,
-        tonalElevation = 3.dp
+        shape = RoundedCornerShape(24.dp),
+        tonalElevation = 2.dp
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(contentPadding),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
@@ -698,66 +795,50 @@ private fun ScrambleDisplay(
                 style = scrambleTextStyle,
                 fontFamily = FontFamily.Monospace,
                 color = MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Start,
+                textAlign = TextAlign.Center,
                 maxLines = maxLines,
                 overflow = TextOverflow.Ellipsis,
-                onTextLayout = { textLayoutResult ->
-                    isTruncated = textLayoutResult.hasVisualOverflow
-                },
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(end = textEndPadding)
+                modifier = Modifier.weight(1f)
             )
             if (showRefreshButton) {
                 Spacer(modifier = Modifier.width(spacerWidth))
                 FilledTonalIconButton(
                     onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        coroutineScope.launch {
+                            refreshRotation.snapTo(0f)
+                            refreshRotation.animateTo(
+                                targetValue = 360f,
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioLowBouncy,
+                                    stiffness = Spring.StiffnessMediumLow
+                                )
+                            )
+                        }
                         onRefresh()
                     },
-                    modifier = Modifier.size(buttonSize)
+                    modifier = Modifier.size(buttonSize),
+                    shape = CircleShape
                 ) {
                     Icon(
                         imageVector = Icons.Default.Refresh,
                         contentDescription = "Generate new scramble",
-                        modifier = Modifier.size(iconSize)
+                        modifier = Modifier
+                            .size(iconSize)
+                            .rotate(refreshRotation.value)
                     )
                 }
             }
         }
     }
     
-    // Full scramble dialog
-    if (showFullScramble) {
-        AlertDialog(
-            onDismissRequest = { showFullScramble = false },
-            title = {
-                Text(
-                    text = "Full Scramble",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            text = {
-                Column(
-                    modifier = Modifier.verticalScroll(rememberScrollState())
-                ) {
-                    Text(
-                        text = scramble,
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontFamily = FontFamily.Monospace,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    showFullScramble = false
-                }) {
-                    Text("Close")
-                }
-            }
+    // Scramble preview dialog
+    if (showPreviewDialog) {
+        ScramblePreviewDialog(
+            scramble = scramble,
+            mode = mode,
+            onDismiss = { showPreviewDialog = false },
+            onGenerateNewScramble = onRefresh
         )
     }
 }
@@ -792,7 +873,7 @@ private fun RecordCelebrationOverlay(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.45f))
+                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.45f))
                 .pointerInput(Unit) {
                     detectTapGestures {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -806,7 +887,7 @@ private fun RecordCelebrationOverlay(
                     modifier = Modifier
                         .fillMaxWidth(0.84f)
                         .padding(16.dp),
-                    shape = MaterialTheme.shapes.extraLarge,
+                    shape = RoundedCornerShape(24.dp),
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
                     contentColor = MaterialTheme.colorScheme.onSurface,
                     tonalElevation = 6.dp,
@@ -828,7 +909,7 @@ private fun RecordCelebrationOverlay(
                         )
                         Surface(
                             color = MaterialTheme.colorScheme.primaryContainer,
-                            shape = MaterialTheme.shapes.large
+                            shape = RoundedCornerShape(16.dp)
                         ) {
                             Text(
                                 text = when (it.type) {

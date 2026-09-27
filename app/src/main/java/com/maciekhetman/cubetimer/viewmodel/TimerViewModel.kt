@@ -1,39 +1,60 @@
 package com.maciekhetman.cubetimer.viewmodel
 
 import android.app.Application
+import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.maciekhetman.cubetimer.data.SettingsRepository
 import com.maciekhetman.cubetimer.data.SolvesRepository
+import com.maciekhetman.cubetimer.data.auth.AuthManager
+import com.maciekhetman.cubetimer.data.bluetooth.BluetoothTimerManager
+import com.maciekhetman.cubetimer.data.bluetooth.BluetoothTimerState
+import com.maciekhetman.cubetimer.data.bluetooth.BluetoothTimerStatus
+import com.maciekhetman.cubetimer.data.session.SessionManager
 import com.maciekhetman.cubetimer.domain.AverageCalculator
 import com.maciekhetman.cubetimer.domain.ScrambleGenerator
+import com.maciekhetman.cubetimer.domain.bluetooth.SmartTimerEvent
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Penalty
 import com.maciekhetman.cubetimer.model.RecordCelebration
 import com.maciekhetman.cubetimer.model.RecordType
 import com.maciekhetman.cubetimer.model.RunningTimerDisplay
+import com.maciekhetman.cubetimer.model.Session
 import com.maciekhetman.cubetimer.model.SolveTime
+import com.maciekhetman.cubetimer.model.StatsFilter
 import com.maciekhetman.cubetimer.model.TimerState
+import com.maciekhetman.cubetimer.model.TimingDevice
+import com.maciekhetman.cubetimer.model.ownerId
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class TimerViewModel(application: Application) : AndroidViewModel(application) {
-    private val repository = SolvesRepository(application)
-    private val settingsRepository = SettingsRepository(application)
+class TimerViewModel(
+    application: Application,
+    private val repository: SolvesRepository,
+    private val settingsRepository: SettingsRepository,
+    private val sessionManager: SessionManager,
+    private val authManager: AuthManager,
+    private val timeSource: () -> Long = SystemClock::uptimeMillis,
+    private val defaultDispatcher: CoroutineDispatcher = Dispatchers.Default,
+    private val bluetoothTimer: BluetoothTimerManager? = null
+) : AndroidViewModel(application) {
 
     private val _timerState = MutableStateFlow<TimerState>(TimerState.Idle)
     val timerState: StateFlow<TimerState> = _timerState.asStateFlow()
@@ -46,52 +67,156 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     private val _currentMode = MutableStateFlow(Mode.CUBE_3x3)
     val currentMode: StateFlow<Mode> = _currentMode.asStateFlow()
 
-    private val _dynamicColorEnabled = MutableStateFlow(true)
-    val dynamicColorEnabled: StateFlow<Boolean> = _dynamicColorEnabled.asStateFlow()
+    val dynamicColorEnabled: StateFlow<Boolean> = settingsRepository.dynamicColorEnabledFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
-    private val _defaultMode = MutableStateFlow(Mode.CUBE_3x3)
-    val defaultMode: StateFlow<Mode> = _defaultMode.asStateFlow()
+    val defaultMode: StateFlow<Mode> = settingsRepository.defaultModeFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, Mode.CUBE_3x3)
 
-    private val _amoledEnabled = MutableStateFlow(false)
-    val amoledEnabled: StateFlow<Boolean> = _amoledEnabled.asStateFlow()
+    val amoledEnabled: StateFlow<Boolean> = settingsRepository.amoledEnabledFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    private val _showScrambleRefreshButton = MutableStateFlow(true)
-    val showScrambleRefreshButton: StateFlow<Boolean> = _showScrambleRefreshButton.asStateFlow()
+    val showScrambleRefreshButton: StateFlow<Boolean> = settingsRepository.showScrambleRefreshButtonFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
-    private val _scrambleScalePercent = MutableStateFlow(100)
-    val scrambleScalePercent: StateFlow<Int> = _scrambleScalePercent.asStateFlow()
+    val scrambleScalePercent: StateFlow<Int> = settingsRepository.scrambleScalePercentFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 100)
 
-    private val _timerStartDelayMillis = MutableStateFlow(500)
-    val timerStartDelayMillis: StateFlow<Int> = _timerStartDelayMillis.asStateFlow()
+    val timerStartDelayMillis: StateFlow<Int> = settingsRepository.timerStartDelayMillisFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 500)
 
-    private val _timerAverages = MutableStateFlow(setOf(5, 12))
-    val timerAverages: StateFlow<Set<Int>> = _timerAverages.asStateFlow()
+    val timerAverages: StateFlow<Set<Int>> = settingsRepository.timerAveragesFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, setOf(5, 12))
 
-    private val _runningTimerDisplay = MutableStateFlow(RunningTimerDisplay.FULL)
-    val runningTimerDisplay: StateFlow<RunningTimerDisplay> = _runningTimerDisplay.asStateFlow()
+    val runningTimerDisplay: StateFlow<RunningTimerDisplay> = settingsRepository.runningTimerDisplayFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, RunningTimerDisplay.FULL)
 
-    private val _hideScrambleDuringSolve = MutableStateFlow(false)
-    val hideScrambleDuringSolve: StateFlow<Boolean> = _hideScrambleDuringSolve.asStateFlow()
+    val hideScrambleDuringSolve: StateFlow<Boolean> = settingsRepository.hideScrambleDuringSolveFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    private val _hideAveragesDuringSolve = MutableStateFlow(false)
-    val hideAveragesDuringSolve: StateFlow<Boolean> = _hideAveragesDuringSolve.asStateFlow()
+    val hideAveragesDuringSolve: StateFlow<Boolean> = settingsRepository.hideAveragesDuringSolveFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    private val _hideLastResultsDuringSolve = MutableStateFlow(false)
-    val hideLastResultsDuringSolve: StateFlow<Boolean> = _hideLastResultsDuringSolve.asStateFlow()
+    val hideLastResultsDuringSolve: StateFlow<Boolean> = settingsRepository.hideLastResultsDuringSolveFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    private val _hideLastResultsOnTimer = MutableStateFlow(false)
-    val hideLastResultsOnTimer: StateFlow<Boolean> = _hideLastResultsOnTimer.asStateFlow()
+    val hideLastResultsOnTimer: StateFlow<Boolean> = settingsRepository.hideLastResultsOnTimerFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    private val _focusMode = MutableStateFlow(false)
-    val focusMode: StateFlow<Boolean> = _focusMode.asStateFlow()
+    val hideStartHint: StateFlow<Boolean> = settingsRepository.hideStartHintFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    private val _hapticsEnabled = MutableStateFlow(true)
-    val hapticsEnabled: StateFlow<Boolean> = _hapticsEnabled.asStateFlow()
+    val focusMode: StateFlow<Boolean> = settingsRepository.focusModeFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    private val _allSolves = MutableStateFlow<List<SolveTime>>(emptyList())
+    val hapticsEnabled: StateFlow<Boolean> = settingsRepository.hapticsEnabledFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    /** Touch timing, or a Bluetooth timer driving the timer instead of the screen. */
+    val timingDevice: StateFlow<TimingDevice> = settingsRepository.timingDeviceFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, TimingDevice.KEYBOARD)
+
+    val bluetoothTimerState: StateFlow<BluetoothTimerState> = bluetoothTimer?.state
+        ?: MutableStateFlow(BluetoothTimerState(status = BluetoothTimerStatus.Unsupported)).asStateFlow()
+
+    val bluetoothPermissions: List<String> = bluetoothTimer?.requiredPermissions.orEmpty()
+
+    // Last known DB-confirmed solves per owner, used only to show the right list instantly when
+    // switching owners (never merged with pending local edits - the Room flow below is always the
+    // single source of truth for the active owner).
+    private val confirmedSolvesByOwner = mutableMapOf<String, List<SolveTime>>()
+
+    /**
+     * A local write that the DB has not reflected yet ([solve] == null means a pending delete).
+     * Pending entries let the UI update instantly, but they are always short-lived: each one is
+     * dropped as soon as a DB emission proves it applied, or one emission after its write finished,
+     * so a failed write can never keep a stale solve on screen indefinitely.
+     */
+    private class PendingWrite(val ownerId: String, val solve: SolveTime?, var settledAtEmission: Long? = null)
+
+    private val pendingWrites = linkedMapOf<String, PendingWrite>()
+    private var emissionCount = 0L
+
+    private fun markPendingUpserts(ownerId: String, solves: List<SolveTime>) {
+        solves.forEach { pendingWrites[it.id] = PendingWrite(ownerId, it) }
+    }
+
+    private fun markPendingDeletes(ownerId: String, ids: Collection<String>) {
+        ids.forEach { pendingWrites[it] = PendingWrite(ownerId, null) }
+    }
+
+    private fun settlePending(ids: Collection<String>) {
+        ids.forEach { id -> pendingWrites[id]?.settledAtEmission = emissionCount }
+    }
+
+    /** Drops pending writes the DB has caught up with (or that settled an emission ago). */
+    private fun reconcilePending(ownerId: String, dbSolves: List<SolveTime>) {
+        if (pendingWrites.isEmpty()) return
+        val dbById = dbSolves.associateBy { it.id }
+        val iterator = pendingWrites.entries.iterator()
+        while (iterator.hasNext()) {
+            val entry = iterator.next()
+            val pending = entry.value
+            if (pending.ownerId != ownerId) continue
+            val inDb = dbById[entry.key]
+            val applied = if (pending.solve == null) inDb == null else inDb == pending.solve
+            val settledEarlier = pending.settledAtEmission?.let { emissionCount > it } == true
+            if (applied || settledEarlier) iterator.remove()
+        }
+    }
+
+    private fun mergeWithPending(ownerId: String, dbSolves: List<SolveTime>): List<SolveTime> {
+        val relevant = pendingWrites.filterValues { it.ownerId == ownerId }
+        if (relevant.isEmpty()) return dbSolves
+        val upserts = relevant.values.mapNotNull { it.solve }
+        val replacedIds = relevant.keys
+        return (dbSolves.filter { it.id !in replacedIds } + upserts).sortedBy { it.timestamp }
+    }
+
+    private fun publishSolves(solves: List<SolveTime>) {
+        _allSolves.value = solves
+        _solves.value = solves.filter { it.mode == _currentMode.value }
+    }
 
     private val _solves = MutableStateFlow<List<SolveTime>>(emptyList())
     val solves: StateFlow<List<SolveTime>> = _solves.asStateFlow()
+
+    private val _allSolves = MutableStateFlow<List<SolveTime>>(emptyList())
+    val allSolves: StateFlow<List<SolveTime>> = _allSolves.asStateFlow()
+
+    private val _statsFilter = MutableStateFlow<StatsFilter>(StatsFilter.AllSessions)
+    val statsFilter: StateFlow<StatsFilter> = _statsFilter.asStateFlow()
+
+    /**
+     * Active session for the currently selected Mode.
+     */
+    val activeSession: StateFlow<Session?> = combine(_currentMode, authManager.authState) { mode, authState ->
+        Pair(authState.ownerId, mode)
+    }.flatMapLatest { (ownerId, mode) ->
+        sessionManager.getActiveSessionFlow(ownerId, mode)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /**
+     * Solves filtered for StatsScreen based on the selected StatsFilter (ActiveSession, AllSessions, SpecificSession).
+     */
+    val statsFilteredSolves: StateFlow<List<SolveTime>> = combine(
+        _solves,
+        activeSession,
+        _statsFilter
+    ) { modeSolves, activeSes, filter ->
+        when (filter) {
+            is StatsFilter.ActiveSession -> {
+                val activeId = activeSes?.id
+                if (activeId != null) {
+                    modeSolves.filter { it.sessionId == activeId }
+                } else {
+                    modeSolves
+                }
+            }
+            is StatsFilter.AllSessions -> modeSolves
+            is StatsFilter.SpecificSession -> modeSolves.filter { it.sessionId == filter.sessionId }
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     private val _currentScramble = MutableStateFlow("")
     val currentScramble: StateFlow<String> = _currentScramble.asStateFlow()
@@ -107,105 +232,73 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
 
     private var timerJob: Job? = null
     private var holdJob: Job? = null
+    private var scrambleJob: Job? = null
     private var startTime: Long = 0
     private var hasAppliedDefaultMode = false
     private var inputBlockedUntil: Long = 0L
 
     init {
-        // Generate the first scramble off the main thread (table initialization can be expensive).
-        viewModelScope.launch(Dispatchers.Default) {
-            val mode = _currentMode.value
-            _currentScramble.value = ScrambleGenerator.generateScramble(mode)
-        }
-
         // Migrate settings from the legacy combined datastore if needed.
         viewModelScope.launch {
             settingsRepository.migrateFromLegacyIfNeeded()
         }
 
-        // Load saved solves on initialization
-        viewModelScope.launch {
-            repository.solvesFlow.collect { savedSolves ->
-                _allSolves.value = savedSolves
-                _solves.value = savedSolves.filter { it.mode == _currentMode.value }
-            }
-        }
-
-        // Load settings
-        viewModelScope.launch {
-            settingsRepository.dynamicColorEnabledFlow.collect { enabled ->
-                _dynamicColorEnabled.value = enabled
-            }
-        }
+        // Apply the default mode exactly once, as soon as it is known, and generate/warm up the
+        // scramble for that mode (avoids generating one scramble for the initial 3x3 mode and then
+        // immediately throwing it away for the real default mode).
         viewModelScope.launch {
             settingsRepository.defaultModeFlow.collect { mode ->
-                _defaultMode.value = mode
                 if (!hasAppliedDefaultMode) {
                     hasAppliedDefaultMode = true
-                    setMode(mode)
+                    _currentMode.value = mode
+                    _solves.value = _allSolves.value.filter { it.mode == mode }
+                    regenerateScramble(mode)
                 }
             }
         }
+
+        // Synchronously reset in-memory state when auth owner transitions, showing the new owner's
+        // last known solves instantly rather than flashing the previous owner's list.
         viewModelScope.launch {
-            settingsRepository.amoledEnabledFlow.collect { enabled ->
-                _amoledEnabled.value = enabled
+            var lastOwnerId: String? = null
+            authManager.authState.collect { authState ->
+                val newOwnerId = authState.ownerId
+                if (lastOwnerId != newOwnerId) {
+                    val currentMode = _currentMode.value
+                    val ownerSolves = confirmedSolvesByOwner[newOwnerId] ?: emptyList()
+                    publishSolves(mergeWithPending(newOwnerId, ownerSolves))
+                }
+                lastOwnerId = newOwnerId
             }
         }
+
+        // Reactive Room flow collector for the active owner. The DB is the single source of truth:
+        // every emission fully replaces the in-memory list rather than merging it with whatever was
+        // there before, so solves deleted/edited elsewhere (History screen, session cascade delete,
+        // sync) are reflected instead of resurrected by a stale local copy.
         viewModelScope.launch {
-            settingsRepository.showScrambleRefreshButtonFlow.collect { show ->
-                _showScrambleRefreshButton.value = show
+            authManager.authState.flatMapLatest { authState ->
+                val flowOwner = authState.ownerId
+                repository.getAllSolvesFlow(flowOwner)
+                    .map { dbSolves -> flowOwner to dbSolves.sortedBy { it.timestamp } }
+                    .flowOn(defaultDispatcher)
+            }.collect { (flowOwner, sortedSolves) ->
+                confirmedSolvesByOwner[flowOwner] = sortedSolves
+                emissionCount++
+                reconcilePending(flowOwner, sortedSolves)
+                if (flowOwner == authManager.currentOwnerId) {
+                    publishSolves(mergeWithPending(flowOwner, sortedSolves))
+                }
             }
         }
+
+        // Reactive update for mode selection
         viewModelScope.launch {
-            settingsRepository.scrambleScalePercentFlow.collect { percent ->
-                _scrambleScalePercent.value = percent
+            _currentMode.collect { mode ->
+                _solves.value = _allSolves.value.filter { it.mode == mode }
             }
         }
-        viewModelScope.launch {
-            settingsRepository.timerStartDelayMillisFlow.collect { delayMillis ->
-                _timerStartDelayMillis.value = delayMillis
-            }
-        }
-        viewModelScope.launch {
-            settingsRepository.timerAveragesFlow.collect { averages ->
-                _timerAverages.value = averages
-            }
-        }
-        viewModelScope.launch {
-            settingsRepository.runningTimerDisplayFlow.collect { display ->
-                _runningTimerDisplay.value = display
-            }
-        }
-        viewModelScope.launch {
-            settingsRepository.hideScrambleDuringSolveFlow.collect { hide ->
-                _hideScrambleDuringSolve.value = hide
-            }
-        }
-        viewModelScope.launch {
-            settingsRepository.hideAveragesDuringSolveFlow.collect { hide ->
-                _hideAveragesDuringSolve.value = hide
-            }
-        }
-        viewModelScope.launch {
-            settingsRepository.hideLastResultsDuringSolveFlow.collect { hide ->
-                _hideLastResultsDuringSolve.value = hide
-            }
-        }
-        viewModelScope.launch {
-            settingsRepository.hideLastResultsOnTimerFlow.collect { hide ->
-                _hideLastResultsOnTimer.value = hide
-            }
-        }
-        viewModelScope.launch {
-            settingsRepository.focusModeFlow.collect { enabled ->
-                _focusMode.value = enabled
-            }
-        }
-        viewModelScope.launch {
-            settingsRepository.hapticsEnabledFlow.collect { enabled ->
-                _hapticsEnabled.value = enabled
-            }
-        }
+
         // Load saved app time for the selected mode, switching collectors when the mode changes.
         viewModelScope.launch {
             _currentMode
@@ -216,17 +309,32 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
                     _appTimeMillis.value = savedTime
                 }
         }
+
+        // A connected Bluetooth timer drives the timer only while it is the selected input.
+        bluetoothTimer?.let { manager ->
+            viewModelScope.launch {
+                timingDevice
+                    .flatMapLatest { device ->
+                        if (device == TimingDevice.EXTERNAL_TIMER) manager.events else emptyFlow()
+                    }
+                    .collect { onSmartTimerEvent(it) }
+            }
+        }
     }
 
-    fun onPressStart() {
-        if (System.currentTimeMillis() < inputBlockedUntil) return
+    fun onPressStart() = onPressStart(timeSource())
+
+    fun onPressStart(eventUptimeMillis: Long) {
+        if (eventUptimeMillis < inputBlockedUntil) return
+        // With a Bluetooth timer selected the screen is not a timer input.
+        if (timingDevice.value == TimingDevice.EXTERNAL_TIMER) return
 
         when (_timerState.value) {
             is TimerState.Idle -> {
-                startHoldTimer()
+                startHoldTimer(eventUptimeMillis)
             }
             is TimerState.Running -> {
-                stopTimer()
+                stopTimer(eventUptimeMillis)
             }
             else -> {
                 // Already holding or ready, ignore additional press.
@@ -235,7 +343,10 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun onPressRelease() {
+    fun onPressRelease() = onPressRelease(timeSource())
+
+    fun onPressRelease(eventUptimeMillis: Long) {
+        if (timingDevice.value == TimingDevice.EXTERNAL_TIMER) return
         when (_timerState.value) {
             is TimerState.Holding -> {
                 holdJob?.cancel()
@@ -243,79 +354,113 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
             }
             is TimerState.Ready -> {
                 holdJob?.cancel()
-                startTimer()
+                startTimer(eventUptimeMillis)
             }
             else -> {}
         }
     }
 
-    private fun startHoldTimer() {
+    private fun startHoldTimer(pressStartUptimeMillis: Long) {
         holdJob?.cancel()
         holdJob = viewModelScope.launch {
-            val holdDuration = _timerStartDelayMillis.value.toLong()
+            val holdDuration = timerStartDelayMillis.value.toLong()
             val updateInterval = 16L // ~60fps
-            var elapsed = 0L
 
-            while (elapsed < holdDuration) {
-                delay(updateInterval.milliseconds)
-                elapsed += updateInterval
+            while (true) {
+                val elapsed = timeSource() - pressStartUptimeMillis
+                if (elapsed >= holdDuration) break
                 val progress = (elapsed.toFloat() / holdDuration).coerceIn(0f, 1f)
                 _timerState.value = TimerState.Holding(progress)
+                delay(updateInterval.milliseconds)
             }
 
             _timerState.value = TimerState.Ready
         }
     }
 
-    private fun startTimer() {
-        startTime = System.currentTimeMillis()
+    private fun startTimer(startUptimeMillis: Long) {
+        startTime = startUptimeMillis
         _timerState.value = TimerState.Running(0)
+
+        // Pre-generate the next scramble in the background so that saving this solve shows the
+        // following scramble instantly instead of waiting on TNoodle's search.
+        viewModelScope.launch {
+            ScrambleGenerator.warmUp(_currentMode.value)
+        }
 
         timerJob?.cancel()
         timerJob = viewModelScope.launch {
-            val updateInterval = when (_runningTimerDisplay.value) {
-                RunningTimerDisplay.FULL -> 10L
+            val updateInterval = when (runningTimerDisplay.value) {
+                RunningTimerDisplay.FULL -> 16L // ~60fps, matches display refresh
                 RunningTimerDisplay.SECONDS_ONLY -> 200L
                 RunningTimerDisplay.HIDDEN -> return@launch // no UI updates needed
             }
 
             while (true) {
                 delay(updateInterval.milliseconds)
-                val elapsed = System.currentTimeMillis() - startTime
+                val elapsed = timeSource() - startTime
                 _timerState.value = TimerState.Running(elapsed)
             }
         }
     }
 
-    private fun stopTimer() {
+    private fun stopTimer(stopUptimeMillis: Long) {
         timerJob?.cancel()
-        val elapsed = System.currentTimeMillis() - startTime
+        val elapsed = stopUptimeMillis - startTime
         _timerState.value = TimerState.Finished(elapsed)
     }
 
     fun saveSolveWithPenalty(penalty: Penalty) {
         val currentState = _timerState.value
         if (currentState is TimerState.Finished) {
-            val newSolve = SolveTime(
-                timeInMillis = currentState.time,
-                penalty = penalty,
-                scramble = _currentScramble.value,
-                mode = _currentMode.value
-            )
-            val newAllSolves = _allSolves.value + newSolve
-
-            _allSolves.value = newAllSolves
-            _solves.value = newAllSolves.filter { it.mode == _currentMode.value }
-            viewModelScope.launch {
-                repository.saveSolves(newAllSolves)
-            }
-
-            // Check for records using the actual saved penalty.
-            val previousSolves = _solves.value - newSolve
-            checkForRecords(newSolve, previousSolves, _solves.value)
+            val nowMs = System.currentTimeMillis()
+            // Capture the scramble/mode synchronously: generateNewScramble() below runs
+            // concurrently on another thread, and for fast puzzles (2x2/pyraminx/megaminx, scrambles
+            // that generate in single-digit milliseconds) it can finish before this coroutine resumes
+            // from the suspending getOrCreateActiveSession call, which would otherwise save the NEXT
+            // scramble instead of the one that was actually solved.
+            val currentModeValue = _currentMode.value
+            val capturedScramble = _currentScramble.value
+            val ownerId = authManager.currentOwnerId
 
             resetTimer()
             generateNewScramble()
+
+            viewModelScope.launch {
+                val activeSession = sessionManager.getOrCreateActiveSession(
+                    ownerId = ownerId,
+                    mode = currentModeValue,
+                    solveTimestamp = nowMs
+                )
+
+                val newSolve = SolveTime(
+                    timeInMillis = currentState.time,
+                    penalty = penalty,
+                    scramble = capturedScramble,
+                    mode = currentModeValue,
+                    timestamp = nowMs,
+                    sessionId = activeSession.id,
+                    timingDevice = currentState.timingDevice
+                )
+
+                val newAllSolves = (_allSolves.value.filter { it.id != newSolve.id } + newSolve).sortedBy { it.timestamp }
+                markPendingUpserts(ownerId, listOf(newSolve))
+                if (authManager.currentOwnerId == ownerId) {
+                    publishSolves(newAllSolves)
+                }
+
+                try {
+                    repository.saveSolve(newSolve, ownerId = ownerId, sessionId = activeSession.id)
+                } finally {
+                    settlePending(listOf(newSolve.id))
+                }
+
+                // Check for records using solves for the captured mode, not whatever mode happens
+                // to be selected once this coroutine resumes.
+                val modeSolves = newAllSolves.filter { it.mode == currentModeValue }
+                val previousSolves = modeSolves - newSolve
+                checkForRecords(newSolve, previousSolves, modeSolves)
+            }
         }
     }
 
@@ -325,13 +470,14 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun generateNewScramble() {
-        val mode = _currentMode.value
-        viewModelScope.launch(Dispatchers.Default) {
-            val scramble = ScrambleGenerator.generateScramble(mode)
-            // Guard against out-of-order results from rapid mode switches.
-            if (_currentMode.value == mode) {
-                _currentScramble.value = scramble
-            }
+        regenerateScramble(_currentMode.value)
+    }
+
+    private fun regenerateScramble(mode: Mode) {
+        scrambleJob?.cancel()
+        scrambleJob = viewModelScope.launch {
+            val scramble = ScrambleGenerator.nextScramble(mode)
+            _currentScramble.value = scramble
         }
     }
 
@@ -342,56 +488,93 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun deleteSolve(solve: SolveTime) {
-        val newAllSolves = _allSolves.value - solve
-        _allSolves.value = newAllSolves
-        _solves.value = newAllSolves.filter { it.mode == _currentMode.value }
+        val ownerId = authManager.currentOwnerId
+        markPendingDeletes(ownerId, listOf(solve.id))
+        publishSolves(_allSolves.value.filter { it.id != solve.id })
         viewModelScope.launch {
-            repository.saveSolves(newAllSolves)
+            try {
+                repository.deleteSolve(solve, ownerId = ownerId)
+            } finally {
+                settlePending(listOf(solve.id))
+            }
         }
     }
 
     fun updateSolvePenalty(solve: SolveTime, penalty: Penalty) {
+        val ownerId = authManager.currentOwnerId
+        val updated = solve.copy(penalty = penalty)
         val newAllSolves = _allSolves.value.map { existing ->
-            if (existing.id == solve.id) {
-                existing.copy(penalty = penalty)
-            } else {
-                existing
-            }
+            if (existing.id == solve.id) existing.copy(penalty = penalty) else existing
         }
-        if (newAllSolves == _allSolves.value) return
-        _allSolves.value = newAllSolves
-        _solves.value = newAllSolves.filter { it.mode == _currentMode.value }
+        markPendingUpserts(ownerId, listOf(updated))
+        publishSolves(newAllSolves)
         viewModelScope.launch {
-            repository.saveSolves(newAllSolves)
+            try {
+                repository.updateSolvePenalty(solve, penalty, ownerId = ownerId)
+            } finally {
+                settlePending(listOf(solve.id))
+            }
         }
     }
 
     fun addSolve(solve: SolveTime) {
-        val newAllSolves = (_allSolves.value + solve).sortedBy { it.timestamp }
-        _allSolves.value = newAllSolves
-        _solves.value = newAllSolves.filter { it.mode == _currentMode.value }
+        val ownerId = authManager.currentOwnerId
+        markPendingUpserts(ownerId, listOf(solve))
+        publishSolves((_allSolves.value.filter { it.id != solve.id } + solve).sortedBy { it.timestamp })
         viewModelScope.launch {
-            repository.saveSolves(newAllSolves)
+            try {
+                repository.saveSolve(solve, ownerId = ownerId, sessionId = solve.sessionId)
+            } finally {
+                settlePending(listOf(solve.id))
+            }
+        }
+    }
+
+    fun setStatsFilter(filter: StatsFilter) {
+        _statsFilter.value = filter
+    }
+
+    fun clearFilteredSolves() {
+        val toDelete = statsFilteredSolves.value
+        if (toDelete.isEmpty()) return
+        val ownerId = authManager.currentOwnerId
+        val toDeleteIds = toDelete.map { it.id }.toSet()
+        markPendingDeletes(ownerId, toDeleteIds)
+        publishSolves(_allSolves.value.filter { it.id !in toDeleteIds })
+        viewModelScope.launch {
+            try {
+                repository.deleteSolves(toDelete, ownerId = ownerId)
+            } finally {
+                settlePending(toDeleteIds)
+            }
         }
     }
 
     fun clearAllSolves() {
-        _allSolves.value = emptyList()
-        _solves.value = emptyList()
+        val ownerId = authManager.currentOwnerId
+        val clearedIds = _allSolves.value.map { it.id }
+        markPendingDeletes(ownerId, clearedIds)
+        publishSolves(emptyList())
         viewModelScope.launch {
-            repository.saveSolves(emptyList())
+            try {
+                repository.clearAllSolves(ownerId = ownerId)
+            } finally {
+                settlePending(clearedIds)
+            }
         }
     }
 
     fun restoreSolves(previous: List<SolveTime>) {
-        val current = _allSolves.value
-        val merged = (previous + current)
-            .distinctBy { it.id }
-            .sortedBy { it.timestamp }
-        _allSolves.value = merged
-        _solves.value = merged.filter { it.mode == _currentMode.value }
+        val ownerId = authManager.currentOwnerId
+        val toRestoreIds = previous.map { it.id }.toSet()
+        markPendingUpserts(ownerId, previous)
+        publishSolves((_allSolves.value.filter { it.id !in toRestoreIds } + previous).sortedBy { it.timestamp })
         viewModelScope.launch {
-            repository.saveSolves(merged)
+            try {
+                repository.restoreSolves(previous, ownerId = ownerId)
+            } finally {
+                settlePending(toRestoreIds)
+            }
         }
     }
 
@@ -420,10 +603,8 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun setScrambleScalePercent(percent: Int) {
-        viewModelScope.launch {
-            settingsRepository.setScrambleScalePercent(percent)
-        }
+    fun setScrambleScalePercent(percent: Int): Job = viewModelScope.launch {
+        settingsRepository.setScrambleScalePercent(percent)
     }
 
     fun setTimerStartDelayMillis(delayMillis: Int) {
@@ -435,9 +616,9 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     fun setTimerAverageEnabled(average: Int, enabled: Boolean) {
         viewModelScope.launch {
             val updated = if (enabled) {
-                _timerAverages.value + average
+                timerAverages.value + average
             } else {
-                _timerAverages.value - average
+                timerAverages.value - average
             }
             settingsRepository.setTimerAverages(updated)
         }
@@ -473,6 +654,12 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setHideStartHint(hide: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setHideStartHint(hide)
+        }
+    }
+
     fun setFocusMode(enabled: Boolean) {
         viewModelScope.launch {
             settingsRepository.setFocusMode(enabled)
@@ -485,12 +672,89 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setTimingDevice(device: TimingDevice) {
+        viewModelScope.launch {
+            settingsRepository.setTimingDevice(device)
+        }
+        if (device != TimingDevice.EXTERNAL_TIMER) {
+            bluetoothTimer?.disconnect()
+            // Drop a half-started Bluetooth solve; a finished one stays so it can still be saved.
+            if (_timerState.value !is TimerState.Finished) resetTimer()
+        }
+    }
+
+    fun hasBluetoothPermissions(): Boolean = bluetoothTimer?.hasPermissions() == true
+
+    fun isBluetoothEnabled(): Boolean = bluetoothTimer?.isBluetoothEnabled() == true
+
+    fun startBluetoothScan() {
+        bluetoothTimer?.startScan()
+    }
+
+    fun stopBluetoothScan() {
+        bluetoothTimer?.stopScan()
+    }
+
+    fun connectBluetoothTimer(address: String) {
+        bluetoothTimer?.connect(address)
+    }
+
+    fun disconnectBluetoothTimer() {
+        bluetoothTimer?.disconnect()
+    }
+
+    fun clearBluetoothError() {
+        bluetoothTimer?.clearError()
+    }
+
+    /**
+     * Maps Bluetooth timer events onto the same state machine touch timing uses. The timer's own
+     * measurement is authoritative: [SmartTimerEvent.Stopped] finishes with its time, not ours.
+     */
+    fun onSmartTimerEvent(event: SmartTimerEvent) {
+        val state = _timerState.value
+        when (event) {
+            SmartTimerEvent.HandsOn -> if (state is TimerState.Idle) {
+                _timerState.value = TimerState.Holding(0f)
+            }
+            SmartTimerEvent.GetSet -> if (state is TimerState.Idle || state is TimerState.Holding) {
+                holdJob?.cancel()
+                _timerState.value = TimerState.Ready
+            }
+            SmartTimerEvent.HandsOff, SmartTimerEvent.Idle, SmartTimerEvent.Inspection -> {
+                if (state is TimerState.Holding || state is TimerState.Ready) {
+                    _timerState.value = TimerState.Idle
+                }
+            }
+            SmartTimerEvent.Running -> when (state) {
+                is TimerState.Running -> Unit
+                is TimerState.Finished -> {
+                    // The next solve started on the timer before the last one was saved: keep it
+                    // (no penalty) rather than silently dropping it.
+                    saveSolveWithPenalty(Penalty.NONE)
+                    startTimer(timeSource())
+                }
+                else -> {
+                    holdJob?.cancel()
+                    startTimer(timeSource())
+                }
+            }
+            is SmartTimerEvent.Stopped -> if (state is TimerState.Running) {
+                timerJob?.cancel()
+                _timerState.value = TimerState.Finished(event.timeMs, TimingDevice.EXTERNAL_TIMER)
+            }
+            SmartTimerEvent.Disconnected -> if (state is TimerState.Holding || state is TimerState.Ready || state is TimerState.Running) {
+                resetTimer()
+            }
+        }
+    }
+
     fun setMode(mode: Mode) {
         if (_currentMode.value != mode) {
             updateAppTime()
             _currentMode.value = mode
             _solves.value = _allSolves.value.filter { it.mode == mode }
-            generateNewScramble()
+            regenerateScramble(mode)
         }
         // Load time for the new mode - it will be updated by the flow collector
     }
@@ -498,7 +762,7 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     fun dismissRecordCelebration() {
         _recordCelebration.value = null
         // Briefly ignore timer presses so the same tap doesn't immediately start a new solve.
-        inputBlockedUntil = System.currentTimeMillis() + 200
+        inputBlockedUntil = timeSource() + 200
     }
 
     private fun checkForRecords(
@@ -574,5 +838,6 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         super.onCleared()
         timerJob?.cancel()
         holdJob?.cancel()
+        scrambleJob?.cancel()
     }
 }

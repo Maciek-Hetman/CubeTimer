@@ -32,3 +32,10 @@ google-services.json
 
 # Android Profiling
 *.hprof
+
+# VSCode
+.vscode/
+
+# Agent working files
+.agents/
+.agents

@@ -1,0 +1,112 @@
+package com.maciekhetman.cubetimer.data.sync
+
+import android.app.Application
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
+import androidx.work.Configuration
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
+import androidx.work.testing.SynchronousExecutor
+import androidx.work.testing.WorkManagerTestInitHelper
+import com.maciekhetman.cubetimer.data.sync.work.WorkManagerSyncScheduler
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+
+// A plain Application, not CubeTimerApplication: the app's auth-state observer cancels periodic sync
+// whenever it sees Guest, and it can land on the test WorkManager right after a test schedules work
+// (schedulePeriodicSync_... intermittently saw CANCELLED instead of ENQUEUED).
+@RunWith(RobolectricTestRunner::class)
+@Config(application = Application::class)
+class SyncSchedulerTest {
+
+    private lateinit var context: Context
+    private lateinit var workManager: WorkManager
+    private lateinit var scheduler: WorkManagerSyncScheduler
+
+    @Before
+    fun setup() {
+        context = ApplicationProvider.getApplicationContext()
+        val config = Configuration.Builder()
+            .setMinimumLoggingLevel(android.util.Log.DEBUG)
+            .setExecutor(SynchronousExecutor())
+            .build()
+        WorkManagerTestInitHelper.initializeTestWorkManager(context, config)
+        workManager = WorkManager.getInstance(context)
+        scheduler = WorkManagerSyncScheduler(context, workManager)
+    }
+
+    @Test
+    fun schedulePeriodicSync_enqueuesUniquePeriodicWork() {
+        scheduler.schedulePeriodicSync()
+
+        val workInfos = workManager.getWorkInfosForUniqueWork(WorkManagerSyncScheduler.WORK_NAME_PERIODIC).get()
+        assertNotNull(workInfos)
+        assertEquals(1, workInfos.size)
+        val workInfo = workInfos[0]
+        assertTrue(workInfo.tags.contains(WorkManagerSyncScheduler.TAG_SYNC))
+        assertEquals(WorkInfo.State.ENQUEUED, workInfo.state)
+    }
+
+    @Test
+    fun scheduleImmediateSync_repeatedWhileOneIsPending_doesNotGrowTheChain() {
+        // Offline, every local write calls this. A sync that hasn't started yet already covers the
+        // new outbox rows, so appending one request per write would just replay N syncs later.
+        repeat(5) { scheduler.scheduleImmediateSync() }
+
+        val workInfos = workManager.getWorkInfosForUniqueWork(WorkManagerSyncScheduler.WORK_NAME_IMMEDIATE).get()
+        assertEquals(1, workInfos.size)
+        assertEquals(WorkInfo.State.ENQUEUED, workInfos[0].state)
+    }
+
+    @Test
+    fun scheduleImmediateSync_afterPreviousFinished_enqueuesAgain() {
+        scheduler.scheduleImmediateSync()
+        workManager.cancelUniqueWork(WorkManagerSyncScheduler.WORK_NAME_IMMEDIATE).result.get()
+
+        scheduler.scheduleImmediateSync()
+
+        val workInfos = workManager.getWorkInfosForUniqueWork(WorkManagerSyncScheduler.WORK_NAME_IMMEDIATE).get()
+        assertEquals(1, workInfos.count { it.state == WorkInfo.State.ENQUEUED })
+    }
+
+    @Test
+    fun scheduleImmediateSync_enqueuesUniqueOneTimeWork() {
+        scheduler.scheduleImmediateSync()
+
+        val workInfos = workManager.getWorkInfosForUniqueWork(WorkManagerSyncScheduler.WORK_NAME_IMMEDIATE).get()
+        assertNotNull(workInfos)
+        assertEquals(1, workInfos.size)
+        val workInfo = workInfos[0]
+        assertTrue(workInfo.tags.contains(WorkManagerSyncScheduler.TAG_SYNC))
+        assertEquals(WorkInfo.State.ENQUEUED, workInfo.state)
+    }
+
+    @Test
+    fun cancelPeriodicSync_cancelsPeriodicWork() {
+        scheduler.schedulePeriodicSync()
+        scheduler.cancelPeriodicSync()
+
+        val workInfos = workManager.getWorkInfosForUniqueWork(WorkManagerSyncScheduler.WORK_NAME_PERIODIC).get()
+        assertNotNull(workInfos)
+        assertTrue(workInfos.all { it.state == WorkInfo.State.CANCELLED })
+    }
+
+    @Test
+    fun cancelAllSync_cancelsAllSyncWork() {
+        scheduler.schedulePeriodicSync()
+        scheduler.scheduleImmediateSync()
+        scheduler.cancelAllSync()
+
+        val periodic = workManager.getWorkInfosForUniqueWork(WorkManagerSyncScheduler.WORK_NAME_PERIODIC).get()
+        assertTrue(periodic.all { it.state == WorkInfo.State.CANCELLED })
+
+        val immediate = workManager.getWorkInfosForUniqueWork(WorkManagerSyncScheduler.WORK_NAME_IMMEDIATE).get()
+        assertTrue(immediate.all { it.state == WorkInfo.State.CANCELLED })
+    }
+}

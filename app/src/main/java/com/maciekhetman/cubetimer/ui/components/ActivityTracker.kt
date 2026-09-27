@@ -15,6 +15,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.maciekhetman.cubetimer.model.SolveTime
+import java.time.Instant
+import java.time.ZoneId
 import java.util.*
 
 private data class ActivityTile(
@@ -35,16 +37,17 @@ fun ActivityTracker(
     val weeks = 12 // Show last 12 weeks
     
     val activityData = remember(solves) {
-        val calendar = Calendar.getInstance()
-        
-        // Group solves by date (ignoring time)
+        val zone = ZoneId.systemDefault()
+
+        // Group solves by date (ignoring time). Using java.time here avoids mutating a single
+        // shared Calendar instance from within the groupBy lambda.
         val solvesByDate = solves.groupBy { solve ->
-            calendar.timeInMillis = solve.timestamp
-            calendar.set(Calendar.HOUR_OF_DAY, 0)
-            calendar.set(Calendar.MINUTE, 0)
-            calendar.set(Calendar.SECOND, 0)
-            calendar.set(Calendar.MILLISECOND, 0)
-            calendar.timeInMillis
+            Instant.ofEpochMilli(solve.timestamp)
+                .atZone(zone)
+                .toLocalDate()
+                .atStartOfDay(zone)
+                .toInstant()
+                .toEpochMilli()
         }
         
         val maxSolves = solvesByDate.values.maxOfOrNull { it.size } ?: 1
@@ -91,19 +94,19 @@ fun ActivityTracker(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+            .padding(horizontal = 20.dp, vertical = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         // Title and Legend
         Column(
             modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
                 text = "Activity",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(bottom = 2.dp)
+                modifier = Modifier.padding(bottom = 4.dp)
             )
             
             // Legend
@@ -114,7 +117,7 @@ fun ActivityTracker(
                 Text(
                     text = "Less",
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 repeat(5) { level ->
                     Box(
@@ -126,7 +129,7 @@ fun ActivityTracker(
                             )
                             .border(
                                 width = 0.5.dp,
-                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                                color = MaterialTheme.colorScheme.outlineVariant,
                                 shape = RoundedCornerShape(3.dp)
                             )
                     )
@@ -134,7 +137,7 @@ fun ActivityTracker(
                 Text(
                     text = "More",
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -144,7 +147,7 @@ fun ActivityTracker(
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState())
-                .padding(top = 6.dp),
+                .padding(top = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.Start)
         ) {
             // Show day labels on the left
@@ -163,7 +166,7 @@ fun ActivityTracker(
                             text = day,
                             style = MaterialTheme.typography.labelMedium,
                             fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -188,7 +191,7 @@ fun ActivityTracker(
                                     )
                                     .border(
                                         width = 0.5.dp,
-                                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                                        color = MaterialTheme.colorScheme.outlineVariant,
                                         shape = RoundedCornerShape(3.dp)
                                     )
                             )
@@ -203,11 +206,11 @@ fun ActivityTracker(
 @Composable
 private fun getActivityColor(level: Int, baseColor: Color): Color {
     return when (level) {
-        0 -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-        1 -> baseColor.copy(alpha = 0.2f)
-        2 -> baseColor.copy(alpha = 0.4f)
-        3 -> baseColor.copy(alpha = 0.6f)
-        4 -> baseColor.copy(alpha = 0.9f)
+        0 -> MaterialTheme.colorScheme.surfaceContainerHighest
+        1 -> baseColor.copy(alpha = 0.25f)
+        2 -> baseColor.copy(alpha = 0.45f)
+        3 -> baseColor.copy(alpha = 0.7f)
+        4 -> baseColor
         else -> baseColor
     }
 }

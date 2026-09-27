@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.RunningTimerDisplay
 import com.maciekhetman.cubetimer.model.TimerAverageOptions
+import com.maciekhetman.cubetimer.model.TimingDevice
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -25,8 +26,10 @@ class SettingsRepository(private val context: Context) {
     private val HIDE_AVERAGES_DURING_SOLVE_KEY = booleanPreferencesKey("hide_averages_during_solve")
     private val HIDE_LAST_RESULTS_DURING_SOLVE_KEY = booleanPreferencesKey("hide_last_results_during_solve")
     private val HIDE_LAST_RESULTS_ON_TIMER_KEY = booleanPreferencesKey("hide_last_results_on_timer")
+    private val HIDE_START_HINT_KEY = booleanPreferencesKey("hide_start_hint")
     private val FOCUS_MODE_KEY = booleanPreferencesKey("focus_mode")
     private val HAPTICS_ENABLED_KEY = booleanPreferencesKey("haptics_enabled")
+    private val TIMING_DEVICE_KEY = stringPreferencesKey("timing_device")
 
     /**
      * One-time migration: settings used to live in the solves datastore.
@@ -51,6 +54,7 @@ class SettingsRepository(private val context: Context) {
             legacy[HIDE_AVERAGES_DURING_SOLVE_KEY]?.let { prefs[HIDE_AVERAGES_DURING_SOLVE_KEY] = it }
             legacy[HIDE_LAST_RESULTS_DURING_SOLVE_KEY]?.let { prefs[HIDE_LAST_RESULTS_DURING_SOLVE_KEY] = it }
             legacy[HIDE_LAST_RESULTS_ON_TIMER_KEY]?.let { prefs[HIDE_LAST_RESULTS_ON_TIMER_KEY] = it }
+            legacy[HIDE_START_HINT_KEY]?.let { prefs[HIDE_START_HINT_KEY] = it }
             legacy[FOCUS_MODE_KEY]?.let { prefs[FOCUS_MODE_KEY] = it }
             legacy[HAPTICS_ENABLED_KEY]?.let { prefs[HAPTICS_ENABLED_KEY] = it }
         }
@@ -74,7 +78,7 @@ class SettingsRepository(private val context: Context) {
     }
 
     val scrambleScalePercentFlow: Flow<Int> = context.settingsDataStore.data.map { preferences ->
-        preferences[SCRAMBLE_SCALE_PERCENT_KEY] ?: 100
+        (preferences[SCRAMBLE_SCALE_PERCENT_KEY] ?: 100).coerceIn(70, 140)
     }
 
     val timerStartDelayMillisFlow: Flow<Int> = context.settingsDataStore.data.map { preferences ->
@@ -110,12 +114,27 @@ class SettingsRepository(private val context: Context) {
         preferences[HIDE_LAST_RESULTS_ON_TIMER_KEY] ?: false
     }
 
+    val hideStartHintFlow: Flow<Boolean> = context.settingsDataStore.data.map { preferences ->
+        preferences[HIDE_START_HINT_KEY] ?: false
+    }
+
     val focusModeFlow: Flow<Boolean> = context.settingsDataStore.data.map { preferences ->
         preferences[FOCUS_MODE_KEY] ?: false
     }
 
     val hapticsEnabledFlow: Flow<Boolean> = context.settingsDataStore.data.map { preferences ->
         preferences[HAPTICS_ENABLED_KEY] ?: true
+    }
+
+    /**
+     * What drives the timer: on-screen touch ([TimingDevice.KEYBOARD]) or a connected Bluetooth
+     * timer ([TimingDevice.EXTERNAL_TIMER]). Smart cubes aren't a timer input on Android.
+     */
+    val timingDeviceFlow: Flow<TimingDevice> = context.settingsDataStore.data.map { preferences ->
+        when (TimingDevice.fromString(preferences[TIMING_DEVICE_KEY])) {
+            TimingDevice.EXTERNAL_TIMER -> TimingDevice.EXTERNAL_TIMER
+            else -> TimingDevice.KEYBOARD
+        }
     }
 
     suspend fun setDynamicColorEnabled(enabled: Boolean) {
@@ -144,7 +163,7 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setScrambleScalePercent(percent: Int) {
         context.settingsDataStore.edit { preferences ->
-            preferences[SCRAMBLE_SCALE_PERCENT_KEY] = percent.coerceIn(80, 140)
+            preferences[SCRAMBLE_SCALE_PERCENT_KEY] = percent.coerceIn(70, 140)
         }
     }
 
@@ -192,6 +211,12 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
+    suspend fun setHideStartHint(hide: Boolean) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[HIDE_START_HINT_KEY] = hide
+        }
+    }
+
     suspend fun setFocusMode(enabled: Boolean) {
         context.settingsDataStore.edit { preferences ->
             preferences[FOCUS_MODE_KEY] = enabled
@@ -201,6 +226,12 @@ class SettingsRepository(private val context: Context) {
     suspend fun setHapticsEnabled(enabled: Boolean) {
         context.settingsDataStore.edit { preferences ->
             preferences[HAPTICS_ENABLED_KEY] = enabled
+        }
+    }
+
+    suspend fun setTimingDevice(device: TimingDevice) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[TIMING_DEVICE_KEY] = device.value
         }
     }
 

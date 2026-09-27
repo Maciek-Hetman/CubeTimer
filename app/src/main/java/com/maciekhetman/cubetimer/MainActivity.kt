@@ -1,7 +1,6 @@
 package com.maciekhetman.cubetimer
 
 import android.os.Bundle
-import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
@@ -9,84 +8,132 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.clickable
+import kotlin.math.roundToInt
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
-
-import com.maciekhetman.cubetimer.ui.screens.StatsScreen
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.maciekhetman.cubetimer.data.SettingsRepository
+import com.maciekhetman.cubetimer.data.sync.SyncStateManager
+import com.maciekhetman.cubetimer.model.AuthState
+import com.maciekhetman.cubetimer.model.Mode
+import com.maciekhetman.cubetimer.ui.auth.AuthDialog
+import com.maciekhetman.cubetimer.ui.auth.AuthDialogType
 import com.maciekhetman.cubetimer.ui.screens.SettingsScreen
+import com.maciekhetman.cubetimer.ui.screens.HistoryScreen
+import com.maciekhetman.cubetimer.ui.screens.StatsScreen
 import com.maciekhetman.cubetimer.ui.screens.TimerScreen
+import com.maciekhetman.cubetimer.ui.sync.SyncStatusDialog
 import com.maciekhetman.cubetimer.ui.theme.CubeTimerTheme
+import com.maciekhetman.cubetimer.viewmodel.AuthViewModel
+import com.maciekhetman.cubetimer.viewmodel.HistoryViewModel
 import com.maciekhetman.cubetimer.viewmodel.TimerViewModel
 
 class MainActivity : ComponentActivity() {
     private lateinit var timerViewModel: TimerViewModel
-    
+    private lateinit var authViewModel: AuthViewModel
+    private lateinit var syncStateManager: SyncStateManager
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        
-        timerViewModel = ViewModelProvider(this)[TimerViewModel::class.java]
-        
-        // Keep screen on while app is open
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        
+
+        val app = application as CubeTimerApplication
+        val factory = object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+                return when {
+                    modelClass.isAssignableFrom(TimerViewModel::class.java) -> {
+                        TimerViewModel(
+                            application = app,
+                            repository = app.solvesRepository,
+                            settingsRepository = SettingsRepository(app),
+                            sessionManager = app.sessionManager,
+                            authManager = app.authManager,
+                            bluetoothTimer = app.bluetoothTimerManager
+                        ) as T
+                    }
+                    modelClass.isAssignableFrom(AuthViewModel::class.java) -> {
+                        AuthViewModel(
+                            application = app,
+                            authManager = app.authManager
+                        ) as T
+                    }
+                    else -> super.create(modelClass)
+                }
+            }
+        }
+        timerViewModel = ViewModelProvider(this, factory)[TimerViewModel::class.java]
+        authViewModel = ViewModelProvider(this, factory)[AuthViewModel::class.java]
+        syncStateManager = app.syncStateManager
+
         setContent {
             val dynamicColorEnabled by timerViewModel.dynamicColorEnabled.collectAsStateWithLifecycle()
             val amoledEnabled by timerViewModel.amoledEnabled.collectAsStateWithLifecycle()
@@ -96,17 +143,21 @@ class MainActivity : ComponentActivity() {
                 amoled = amoledEnabled && !dynamicColorEnabled
             ) {
                 OptionalHapticsProvider(enabled = hapticsEnabled) {
-                    CubeTimerApp(timerViewModel)
+                    CubeTimerApp(
+                        viewModel = timerViewModel,
+                        authViewModel = authViewModel,
+                        syncStateManager = syncStateManager
+                    )
                 }
             }
         }
     }
-    
+
     override fun onResume() {
         super.onResume()
         timerViewModel.resetAppStartTime()
     }
-    
+
     override fun onPause() {
         super.onPause()
         timerViewModel.updateAppTime()
@@ -132,18 +183,47 @@ private object NoHapticFeedback : HapticFeedback {
 }
 
 @Composable
-fun CubeTimerApp(viewModel: TimerViewModel) {
+fun CubeTimerApp(
+    viewModel: TimerViewModel,
+    authViewModel: AuthViewModel = viewModel(),
+    // HistoryViewModel is expensive to create (eager DB queries), so it is left null here and only looked
+    // up (lazily, via viewModel()) inside the HISTORY branch of AppContent. Passing an explicit instance
+    // (e.g. from a test) still works.
+    historyViewModel: HistoryViewModel? = null,
+    syncStateManager: SyncStateManager = (LocalContext.current.applicationContext as? CubeTimerApplication)?.syncStateManager ?: SyncStateManager()
+) {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.TIMER) }
     val currentMode by viewModel.currentMode.collectAsStateWithLifecycle()
     val isTimerRunning by viewModel.isTimerRunning.collectAsStateWithLifecycle()
     val focusMode by viewModel.focusMode.collectAsStateWithLifecycle()
-    val haptic = LocalHapticFeedback.current
     val focusModeActive = focusMode && isTimerRunning
+
+    // Reactive Auth & Sync States
+    val authState by authViewModel.authState.collectAsStateWithLifecycle()
+    val authFormState by authViewModel.formState.collectAsStateWithLifecycle()
+    val syncUiState by syncStateManager.syncUiState.collectAsStateWithLifecycle()
+
+    // Modals visibility states
+    var showSyncDialog by rememberSaveable { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+
     ApplyStatusBarColor()
 
     // Predictive back navigation support
     BackHandler(enabled = currentDestination != AppDestinations.TIMER && !isTimerRunning) {
         currentDestination = AppDestinations.TIMER
+    }
+
+    val onModeSelected: (Mode) -> Unit = { mode ->
+        viewModel.setMode(mode)
+    }
+
+    val onAuthClick: () -> Unit = {
+        if (authState is AuthState.Guest) {
+            authViewModel.openDialog(AuthDialogType.LOGIN)
+        } else {
+            authViewModel.openDialog(AuthDialogType.USER_PROFILE)
+        }
     }
 
     @Composable
@@ -159,39 +239,21 @@ fun CubeTimerApp(viewModel: TimerViewModel) {
         AnimatedContent(
             targetState = currentDestination,
             transitionSpec = {
-                val springSpec = spring<IntOffset>(
-                    dampingRatio = Spring.DampingRatioNoBouncy,
-                    stiffness = Spring.StiffnessMediumLow
-                )
-                val fadeSpec = tween<Float>(durationMillis = 180)
-                if (targetState.ordinal > initialState.ordinal) {
-                    (slideInHorizontally(springSpec) { width -> width / 4 } +
-                        fadeIn(fadeSpec) +
-                        scaleIn(initialScale = 0.96f, animationSpec = tween(220)))
-                        .togetherWith(
-                            slideOutHorizontally(springSpec) { width -> -width / 5 } +
-                                fadeOut(fadeSpec) +
-                                scaleOut(targetScale = 0.98f, animationSpec = tween(180))
-                        )
-                } else {
-                    (slideInHorizontally(springSpec) { width -> -width / 4 } +
-                        fadeIn(fadeSpec) +
-                        scaleIn(initialScale = 0.96f, animationSpec = tween(220)))
-                        .togetherWith(
-                            slideOutHorizontally(springSpec) { width -> width / 5 } +
-                                fadeOut(fadeSpec) +
-                                scaleOut(targetScale = 0.98f, animationSpec = tween(180))
-                        )
-                }.using(SizeTransform(clip = false))
+                (fadeIn(animationSpec = tween(durationMillis = 220, delayMillis = 60)) +
+                    scaleIn(initialScale = 0.94f, animationSpec = tween(durationMillis = 220, delayMillis = 60)))
+                    .togetherWith(
+                        fadeOut(animationSpec = tween(durationMillis = 140)) +
+                            scaleOut(targetScale = 0.98f, animationSpec = tween(durationMillis = 140))
+                    ).using(SizeTransform(clip = false))
             },
-            label = "screen_transition"
+            label = "screen_fade_through_transition"
         ) { destination ->
             when (destination) {
                 AppDestinations.TIMER -> {
                     TimerScreen(
                         viewModel = viewModel,
                         currentMode = currentMode,
-                        onModeSelected = { mode -> viewModel.setMode(mode) },
+                        onModeSelected = onModeSelected,
                         modifier = contentModifier
                     )
                 }
@@ -202,7 +264,20 @@ fun CubeTimerApp(viewModel: TimerViewModel) {
                     StatsScreen(
                         viewModel = viewModel,
                         currentMode = currentMode,
-                        onModeSelected = { mode -> viewModel.setMode(mode) },
+                        onModeSelected = onModeSelected,
+                        modifier = contentModifier
+                    )
+                }
+                AppDestinations.HISTORY -> {
+                    // Created lazily on first visit to this destination (heavy: eager DB queries).
+                    val resolvedHistoryViewModel = historyViewModel ?: viewModel()
+                    LaunchedEffect(resolvedHistoryViewModel, currentMode) {
+                        resolvedHistoryViewModel.setMode(currentMode)
+                    }
+                    HistoryScreen(
+                        viewModel = resolvedHistoryViewModel,
+                        currentMode = currentMode,
+                        onModeSelected = onModeSelected,
                         modifier = contentModifier
                     )
                 }
@@ -210,7 +285,11 @@ fun CubeTimerApp(viewModel: TimerViewModel) {
                     SettingsScreen(
                         viewModel = viewModel,
                         currentMode = currentMode,
-                        onModeSelected = { mode -> viewModel.setMode(mode) },
+                        onModeSelected = onModeSelected,
+                        syncUiState = syncUiState,
+                        onSyncClick = { showSyncDialog = true },
+                        authState = authState,
+                        onAuthClick = onAuthClick,
                         modifier = contentModifier
                     )
                 }
@@ -219,11 +298,12 @@ fun CubeTimerApp(viewModel: TimerViewModel) {
     }
 
     Scaffold(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier.fillMaxSize(),
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { innerPadding ->
         Box(modifier = Modifier.fillMaxSize()) {
             AppContent(innerPadding)
-            
+
             if (!focusModeActive) {
                 FloatingNavigationBar(
                     currentDestination = currentDestination,
@@ -233,6 +313,23 @@ fun CubeTimerApp(viewModel: TimerViewModel) {
                 )
             }
         }
+    }
+
+    // Modal dialogs and bottom sheets
+    AuthDialog(
+        formState = authFormState,
+        authState = authState,
+        viewModel = authViewModel,
+        onDismiss = { authViewModel.dismissDialog() }
+    )
+
+    if (showSyncDialog) {
+        SyncStatusDialog(
+            syncState = syncUiState,
+            onTriggerSync = { syncStateManager.triggerSync() },
+            onDismiss = { showSyncDialog = false },
+            onLoginClick = { authViewModel.openDialog(AuthDialogType.LOGIN) }
+        )
     }
 }
 
@@ -244,66 +341,134 @@ fun FloatingNavigationBar(
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
+    val density = LocalDensity.current
+    val visibleDestinations = listOf(
+        AppDestinations.TIMER,
+        AppDestinations.STATS,
+        AppDestinations.HISTORY,
+        AppDestinations.SETTINGS
+    )
+    val selectedIndex = visibleDestinations.indexOf(currentDestination).let { if (it >= 0) it else 0 }
+
+    var previousIndex by remember { mutableIntStateOf(selectedIndex) }
+    val isMovingRight = selectedIndex >= previousIndex
+    SideEffect {
+        previousIndex = selectedIndex
+    }
+
+    val leftSpring = spring<Float>(
+        dampingRatio = Spring.DampingRatioLowBouncy,
+        stiffness = if (isMovingRight) Spring.StiffnessMediumLow else Spring.StiffnessMedium
+    )
+    val rightSpring = spring<Float>(
+        dampingRatio = Spring.DampingRatioLowBouncy,
+        stiffness = if (isMovingRight) Spring.StiffnessMedium else Spring.StiffnessMediumLow
+    )
+
+    val indicatorWidth = 64.dp
+    val indicatorHeight = 42.dp
+    val containerPadding = 5.dp
+    val itemGap = 6.dp
+
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainer,
         shape = CircleShape,
         border = BorderStroke(
             width = 1.dp,
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+            color = MaterialTheme.colorScheme.outlineVariant
         ),
-        tonalElevation = 6.dp,
+        tonalElevation = 4.dp,
         shadowElevation = 8.dp,
         modifier = modifier
-            .widthIn(max = 280.dp)
-            .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(bottom = 16.dp, start = 8.dp, end = 8.dp)
+            .padding(bottom = 16.dp)
+            .width(284.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp, horizontal = 2.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            AppDestinations.entries.forEach { destination ->
-                val selected = destination == currentDestination
-                val color = if (selected) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                }
-                
-                val scale by animateFloatAsState(
-                    targetValue = if (selected) 1.22f else 1.0f,
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessMediumLow
-                    ),
-                    label = "nav_icon_scale"
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            Box(
+                modifier = Modifier.padding(containerPadding)
+            ) {
+                val targetLeft = (indicatorWidth + itemGap) * selectedIndex
+                val targetRight = targetLeft + indicatorWidth
+
+                val targetLeftPx = with(density) { targetLeft.toPx() }
+                val targetRightPx = with(density) { targetRight.toPx() }
+
+                val animatedLeft by animateFloatAsState(
+                    targetValue = targetLeftPx,
+                    animationSpec = leftSpring,
+                    label = "nav_indicator_left"
+                )
+                val animatedRight by animateFloatAsState(
+                    targetValue = targetRightPx,
+                    animationSpec = rightSpring,
+                    label = "nav_indicator_right"
                 )
 
+                val pillLeft = animatedLeft
+                val pillWidth = (animatedRight - animatedLeft).coerceAtLeast(with(density) { indicatorWidth.toPx() })
+
+                // Animated Material You indicator pill sliding & morphing behind active destination
                 Box(
-                    contentAlignment = Alignment.Center,
                     modifier = Modifier
-                        .weight(1f)
-                        .height(48.dp)
-                        .clip(CircleShape)
-                        .clickable {
-                            if (!isTimerRunning && currentDestination != destination) {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                onNavigate(destination)
-                            }
+                        .offset {
+                            IntOffset(x = pillLeft.roundToInt(), y = 0)
                         }
+                        .size(
+                            width = with(density) { pillWidth.toDp() },
+                            height = indicatorHeight
+                        )
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.secondaryContainer)
+                )
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(itemGap),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = destination.icon,
-                        contentDescription = destination.label,
-                        tint = color,
-                        modifier = Modifier
-                            .size(26.dp)
-                            .scale(scale)
-                    )
+                    visibleDestinations.forEach { destination ->
+                        val selected = destination == currentDestination
+                        val iconColor by animateColorAsState(
+                            targetValue = if (selected) {
+                                MaterialTheme.colorScheme.onSecondaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            animationSpec = tween(durationMillis = 200),
+                            label = "nav_icon_color"
+                        )
+
+                        val scale by animateFloatAsState(
+                            targetValue = if (selected) 1.15f else 1.0f,
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                stiffness = Spring.StiffnessMediumLow
+                            ),
+                            label = "nav_icon_scale"
+                        )
+
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .size(width = indicatorWidth, height = indicatorHeight)
+                                .clip(CircleShape)
+                                .clickable {
+                                    if (!isTimerRunning && currentDestination != destination) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        onNavigate(destination)
+                                    }
+                                }
+                        ) {
+                            Icon(
+                                imageVector = destination.icon,
+                                contentDescription = destination.label,
+                                tint = iconColor,
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .scale(scale)
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -332,6 +497,7 @@ enum class AppDestinations(
     val icon: ImageVector,
 ) {
     TIMER("Timer", Icons.Default.Home),
-    STATS("Stats", Icons.AutoMirrored.Filled.List),
+    STATS("Stats", Icons.Default.BarChart),
+    HISTORY("History", Icons.Default.History),
     SETTINGS("Settings", Icons.Default.Settings),
 }

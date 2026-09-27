@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
-    <exclude domain="database" path="database.db" />
-    <exclude domain="sharedpref" path="sharedPref.xml" />
+    <exclude domain="database" path="cubetimer.db" />
+    <exclude domain="database" path="cubetimer.db-wal" />
+    <exclude domain="database" path="cubetimer.db-shm" />
+    <!-- EncryptedSharedPreferences: its Keystore-backed key can't be restored to a new
+         device/install, so the encrypted values would be unreadable garbage anyway. -->
+    <exclude domain="sharedpref" path="cubetimer_secure_prefs.xml" />
     <exclude domain="file" path="datastore/" />
 </full-backup-content>

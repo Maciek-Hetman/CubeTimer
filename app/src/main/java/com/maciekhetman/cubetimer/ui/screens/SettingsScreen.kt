@@ -1,5 +1,11 @@
 package com.maciekhetman.cubetimer.ui.screens
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,19 +14,27 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -39,18 +53,29 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.RunningTimerDisplay
 import com.maciekhetman.cubetimer.model.TimerAverageOptions
+import com.maciekhetman.cubetimer.model.TimingDevice
+import com.maciekhetman.cubetimer.ui.bluetooth.BluetoothTimerDialog
+import com.maciekhetman.cubetimer.ui.bluetooth.bluetoothStatusLabel
 import com.maciekhetman.cubetimer.ui.components.CollapsingTopBar
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.maciekhetman.cubetimer.viewmodel.TimerViewModel
 import kotlin.math.roundToInt
+
+import com.maciekhetman.cubetimer.model.AuthState
+import com.maciekhetman.cubetimer.model.SyncStatusType
+import com.maciekhetman.cubetimer.model.SyncUiState
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,6 +83,10 @@ fun SettingsScreen(
     viewModel: TimerViewModel,
     currentMode: Mode,
     onModeSelected: (Mode) -> Unit,
+    syncUiState: SyncUiState = SyncUiState(),
+    onSyncClick: () -> Unit = {},
+    authState: AuthState = AuthState.Guest,
+    onAuthClick: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val dynamicColorEnabled by viewModel.dynamicColorEnabled.collectAsStateWithLifecycle()
@@ -72,15 +101,19 @@ fun SettingsScreen(
     val hideAveragesDuringSolve by viewModel.hideAveragesDuringSolve.collectAsStateWithLifecycle()
     val hideLastResultsDuringSolve by viewModel.hideLastResultsDuringSolve.collectAsStateWithLifecycle()
     val hideLastResultsOnTimer by viewModel.hideLastResultsOnTimer.collectAsStateWithLifecycle()
+    val hideStartHint by viewModel.hideStartHint.collectAsStateWithLifecycle()
     val focusMode by viewModel.focusMode.collectAsStateWithLifecycle()
     val hapticsEnabled by viewModel.hapticsEnabled.collectAsStateWithLifecycle()
+    val timingDevice by viewModel.timingDevice.collectAsStateWithLifecycle()
+    val bluetoothTimerState by viewModel.bluetoothTimerState.collectAsStateWithLifecycle()
     val haptic = LocalHapticFeedback.current
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
 
     var defaultModeMenuExpanded by remember { mutableStateOf(value = false) }
-    var scrambleScaleMenuExpanded by remember { mutableStateOf(value = false) }
     var runningTimerDisplayMenuExpanded by remember { mutableStateOf(value = false) }
     var timerAveragesExpanded by remember { mutableStateOf(value = false) }
+    var timingDeviceMenuExpanded by remember { mutableStateOf(value = false) }
+    var showBluetoothDialog by remember { mutableStateOf(value = false) }
 
     Scaffold(
         modifier = modifier
@@ -112,6 +145,50 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
+                SettingsSection(title = "Account") {
+                    Surface(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onSyncClick()
+                        },
+                        color = androidx.compose.ui.graphics.Color.Transparent
+                    ) {
+                        SettingsRow(title = "Cloud Sync") {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = syncStatusLabel(syncUiState),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                SyncStatusIcon(syncUiState)
+                            }
+                        }
+                    }
+                    SettingsDivider()
+                    Surface(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onAuthClick()
+                        },
+                        color = androidx.compose.ui.graphics.Color.Transparent
+                    ) {
+                        SettingsRow(title = "Account") {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = accountStatusLabel(authState),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                AccountStatusIcon(authState)
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
                 SettingsSection(title = "Appearance") {
                     SettingToggleRow(
                         title = "Dynamic color",
@@ -137,24 +214,16 @@ fun SettingsScreen(
                         onCheckedChange = { viewModel.setShowScrambleRefreshButton(it) }
                     )
                     SettingsDivider()
-                    SettingMenuRow(
+                    SettingSliderRow(
                         title = "Scramble size",
-                        valueLabel = "$scrambleScalePercent%",
-                        onClick = { scrambleScaleMenuExpanded = true },
-                        menuExpanded = scrambleScaleMenuExpanded,
-                        onDismissMenu = { scrambleScaleMenuExpanded = false }
-                    ) {
-                        ScrambleScaleOptions.forEach { percent ->
-                            DropdownMenuItem(
-                                text = { Text("$percent%") },
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            scrambleScaleMenuExpanded = false
+                        value = scrambleScalePercent,
+                        valueRange = 70f..140f,
+                        steps = 13,
+                        valueFormatter = { "$it%" },
+                        onValueChangeFinished = { percent ->
                             viewModel.setScrambleScalePercent(percent)
-                        },
-                    )
                         }
-                    }
+                    )
                 }
             }
 
@@ -180,12 +249,12 @@ fun SettingsScreen(
                         RunningTimerDisplay.entries.forEach { display ->
                             DropdownMenuItem(
                                 text = { Text(display.displayName) },
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            runningTimerDisplayMenuExpanded = false
-                            viewModel.setRunningTimerDisplay(display)
-                        },
-                    )
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    runningTimerDisplayMenuExpanded = false
+                                    viewModel.setRunningTimerDisplay(display)
+                                },
+                            )
                         }
                     }
                     SettingsDivider()
@@ -220,6 +289,12 @@ fun SettingsScreen(
                     )
                     SettingsDivider()
                     SettingToggleRow(
+                        title = "Hide start hint",
+                        checked = hideStartHint,
+                        onCheckedChange = { viewModel.setHideStartHint(it) }
+                    )
+                    SettingsDivider()
+                    SettingToggleRow(
                         title = "Haptics",
                         checked = hapticsEnabled,
                         onCheckedChange = { viewModel.setHapticsEnabled(it) }
@@ -247,6 +322,58 @@ fun SettingsScreen(
             }
 
             item {
+                SettingsSection(title = "Timing device") {
+                    SettingMenuRow(
+                        title = "Start and stop with",
+                        valueLabel = if (timingDevice == TimingDevice.EXTERNAL_TIMER) "Bluetooth timer" else "Touch",
+                        onClick = { timingDeviceMenuExpanded = true },
+                        menuExpanded = timingDeviceMenuExpanded,
+                        onDismissMenu = { timingDeviceMenuExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Touch") },
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                timingDeviceMenuExpanded = false
+                                viewModel.setTimingDevice(TimingDevice.KEYBOARD)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Bluetooth timer (GAN, QiYi)") },
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                timingDeviceMenuExpanded = false
+                                viewModel.setTimingDevice(TimingDevice.EXTERNAL_TIMER)
+                                if (!bluetoothTimerState.isConnected) showBluetoothDialog = true
+                            },
+                        )
+                    }
+                    if (timingDevice == TimingDevice.EXTERNAL_TIMER) {
+                        SettingsDivider()
+                        Surface(
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                showBluetoothDialog = true
+                            },
+                            color = androidx.compose.ui.graphics.Color.Transparent
+                        ) {
+                            SettingsRow(title = "Bluetooth timer") {
+                                Text(
+                                    text = bluetoothStatusLabel(bluetoothTimerState.status),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (bluetoothTimerState.isConnected) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
                 SettingsSection(title = "Defaults") {
                     SettingMenuRow(
                         title = "Default mode",
@@ -258,17 +385,21 @@ fun SettingsScreen(
                         Mode.entries.forEach { mode ->
                             DropdownMenuItem(
                                 text = { Text(mode.displayName) },
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            defaultModeMenuExpanded = false
-                            viewModel.setDefaultMode(mode)
-                        },
-                    )
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    defaultModeMenuExpanded = false
+                                    viewModel.setDefaultMode(mode)
+                                },
+                            )
                         }
                     }
                 }
             }
         }
+    }
+
+    if (showBluetoothDialog) {
+        BluetoothTimerDialog(viewModel = viewModel, onDismiss = { showBluetoothDialog = false })
     }
 }
 
@@ -284,14 +415,16 @@ fun SettingsSection(
             text = title.uppercase(),
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(bottom = 8.dp)
+            modifier = Modifier.padding(bottom = 8.dp, start = 8.dp)
         )
         Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surfaceContainer,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column {
+            Column(
+                modifier = Modifier.padding(vertical = 4.dp)
+            ) {
                 content()
             }
         }
@@ -300,11 +433,7 @@ fun SettingsSection(
 
 @Composable
 fun SettingsDivider() {
-    HorizontalDivider(
-        modifier = Modifier.padding(horizontal = 16.dp),
-        thickness = 0.5.dp,
-        color = MaterialTheme.colorScheme.outlineVariant
-    )
+    Spacer(modifier = Modifier.height(2.dp))
 }
 
 @Composable
@@ -316,7 +445,8 @@ fun SettingsRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(16.dp),
+            .heightIn(min = 60.dp)
+            .padding(horizontal = 16.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
@@ -335,16 +465,20 @@ fun SettingSliderRow(
     value: Int,
     valueRange: ClosedFloatingPointRange<Float>,
     steps: Int,
+    modifier: Modifier = Modifier,
+    sliderModifier: Modifier = Modifier,
+    valueFormatter: (Int) -> String = { "${it}ms" },
     onValueChangeFinished: (Int) -> Unit
 ) {
-    var sliderValue by remember(value) { mutableFloatStateOf(value.toFloat()) }
-    var lastHapticValue by remember(value) { mutableIntStateOf(value) }
+    val clampedValue = value.toFloat().coerceIn(valueRange.start, valueRange.endInclusive)
+    var sliderValue by remember(value, valueRange) { mutableFloatStateOf(clampedValue) }
+    var lastHapticValue by remember(value, valueRange) { mutableIntStateOf(clampedValue.roundToInt()) }
     val haptic = LocalHapticFeedback.current
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .padding(16.dp)
+            .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -356,13 +490,15 @@ fun SettingSliderRow(
                 style = MaterialTheme.typography.bodyLarge
             )
             Text(
-                text = "${sliderValue.roundToInt()}ms",
+                text = valueFormatter(sliderValue.roundToInt()),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.primary
             )
         }
+        Spacer(modifier = Modifier.height(4.dp))
         Slider(
-            value = sliderValue,
+            value = sliderValue.coerceIn(valueRange.start, valueRange.endInclusive),
+            modifier = sliderModifier.testTag("${title.lowercase().replace(' ', '_')}_slider"),
             onValueChange = {
                 sliderValue = it
                 val currentInt = it.roundToInt()
@@ -374,7 +510,7 @@ fun SettingSliderRow(
             valueRange = valueRange,
             steps = steps,
             onValueChangeFinished = {
-                onValueChangeFinished(sliderValue.roundToInt())
+                onValueChangeFinished(sliderValue.coerceIn(valueRange.start, valueRange.endInclusive).roundToInt())
             }
         )
     }
@@ -386,11 +522,16 @@ fun SettingToggleRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
-    SettingsRow(title = title) {
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange
-        )
+    Surface(
+        onClick = { onCheckedChange(!checked) },
+        color = androidx.compose.ui.graphics.Color.Transparent
+    ) {
+        SettingsRow(title = title) {
+            Switch(
+                checked = checked,
+                onCheckedChange = null
+            )
+        }
     }
 }
 
@@ -464,9 +605,130 @@ fun SettingMenuRow(
     }
 }
 
-val ScrambleScaleOptions = listOf(80, 90, 100, 110, 120, 130, 140)
-
 fun timerAveragesLabel(averages: Set<Int>): String {
     return if (averages.isEmpty()) "None"
     else averages.asSequence().sorted().joinToString(", ") { "Ao$it" }
+}
+
+fun syncStatusLabel(syncUiState: SyncUiState): String = when (syncUiState.status) {
+    SyncStatusType.SYNCED -> "Synced"
+    SyncStatusType.SYNCING -> "Syncing…"
+    SyncStatusType.OFFLINE -> if (syncUiState.pendingCount > 0) "Offline (${syncUiState.pendingCount} pending)" else "Offline"
+    SyncStatusType.ERROR -> "Sync error"
+}
+
+fun accountStatusLabel(authState: AuthState): String = when (authState) {
+    is AuthState.Admin -> authState.user.email
+    is AuthState.Authenticated -> authState.user.email
+    is AuthState.Guest, is AuthState.Loading -> "Guest"
+}
+
+@Composable
+private fun SyncStatusIcon(syncUiState: SyncUiState) {
+    val infiniteTransition = rememberInfiniteTransition(label = "settings_sync_spin")
+    val rotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "settings_sync_rotation"
+    )
+
+    when (syncUiState.status) {
+        SyncStatusType.SYNCED -> {
+            Icon(
+                imageVector = Icons.Default.CloudDone,
+                contentDescription = "Synced",
+                tint = if (syncUiState.isGuest) {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                } else {
+                    MaterialTheme.colorScheme.primary
+                },
+                modifier = Modifier.size(22.dp)
+            )
+        }
+        SyncStatusType.SYNCING -> {
+            Icon(
+                imageVector = Icons.Default.Sync,
+                contentDescription = "Syncing",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .size(22.dp)
+                    .rotate(rotation)
+            )
+        }
+        SyncStatusType.OFFLINE -> {
+            if (syncUiState.pendingCount > 0) {
+                BadgedBox(
+                    badge = {
+                        Badge {
+                            Text(syncUiState.pendingCount.coerceAtMost(99).toString())
+                        }
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CloudOff,
+                        contentDescription = "Offline with pending changes",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            } else {
+                Icon(
+                    imageVector = Icons.Default.CloudOff,
+                    contentDescription = "Offline",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        }
+        SyncStatusType.ERROR -> {
+            BadgedBox(
+                badge = {
+                    Badge(containerColor = MaterialTheme.colorScheme.error) {
+                        Text("!")
+                    }
+                }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.CloudOff,
+                    contentDescription = "Sync Error",
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccountStatusIcon(authState: AuthState) {
+    when (authState) {
+        is AuthState.Admin -> {
+            Icon(
+                imageVector = Icons.Default.AdminPanelSettings,
+                contentDescription = "Admin Account",
+                tint = MaterialTheme.colorScheme.error,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+        is AuthState.Authenticated -> {
+            Icon(
+                imageVector = Icons.Default.AccountCircle,
+                contentDescription = "User Profile",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+        is AuthState.Guest, is AuthState.Loading -> {
+            Icon(
+                imageVector = Icons.Default.AccountCircle,
+                contentDescription = "Sign In",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+    }
 }

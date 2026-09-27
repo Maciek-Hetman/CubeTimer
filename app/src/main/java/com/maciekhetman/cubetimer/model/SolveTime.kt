@@ -8,7 +8,9 @@ data class SolveTime(
     val penalty: Penalty = Penalty.NONE,
     val timestamp: Long = System.currentTimeMillis(),
     val scramble: String = "",
-    val mode: Mode = Mode.CUBE_3x3
+    val mode: Mode = Mode.CUBE_3x3,
+    val sessionId: String? = null,
+    val timingDevice: TimingDevice = TimingDevice.KEYBOARD
 ) {
     val displayTime: Long
         get() = when (penalty) {
