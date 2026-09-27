@@ -144,6 +144,11 @@ never become the active session. CSV import recreates missing sessions as closed
 - Room schema JSON (`app/schemas/.../<version>.json`) is committed; regenerate it whenever entities change.
 - Room doesn't split `IN (:ids)` list parameters, and SQLite on API ≤ 30 caps a statement at 999 variables. Bulk
   id operations go through the chunked helpers in `data/local/dao/ChunkedQueries.kt`.
+- The manifest removes androidx.startup's `WorkManagerInitializer` so WorkManager initializes on demand from
+  `CubeTimerApplication` (a `Configuration.Provider`). Without that, the custom `WorkerFactory` is ignored and
+  `SyncWorker` (no `(Context, WorkerParameters)` constructor) can't be created — background sync silently dies.
+- Release builds run R8. Anything created by class name needs a keep rule in `app/proguard-rules.pro` (today:
+  the SHA1PRNG `SecureRandomSpi`, and TNoodle puzzles, which `PuzzleRegistry` builds reflectively).
 - BLE: Android allows one outstanding GATT operation per connection — route every write through the
   connection's op lock. QiYi timers ignore everything until they get a hello carrying their MAC (advertised in
   manufacturer data `0x0504`, else the device address) and re-send recorded solves until acknowledged.
