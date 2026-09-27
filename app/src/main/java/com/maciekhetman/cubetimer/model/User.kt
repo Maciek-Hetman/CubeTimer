@@ -11,9 +11,6 @@ data class User(
     val userRole: UserRole = UserRole.USER,
     val createdAt: String? = null
 ) {
-    val isAdmin: Boolean
-        get() = userRole == UserRole.ADMIN
-
     val isEmailVerified: Boolean
         get() = emailVerified
 }

@@ -74,8 +74,6 @@ import kotlin.math.roundToInt
 import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.SyncStatusType
 import com.maciekhetman.cubetimer.model.SyncUiState
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 
@@ -89,7 +87,6 @@ fun SettingsScreen(
     onSyncClick: () -> Unit = {},
     authState: AuthState = AuthState.Guest,
     onAuthClick: () -> Unit = {},
-    onNavigateToAdmin: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val dynamicColorEnabled by viewModel.dynamicColorEnabled.collectAsStateWithLifecycle()
@@ -394,45 +391,6 @@ fun SettingsScreen(
                                     viewModel.setDefaultMode(mode)
                                 },
                             )
-                        }
-                    }
-                }
-            }
-
-            if (authState is AuthState.Admin) {
-                item {
-                    SettingsSection(title = "Administration") {
-                        Surface(
-                            onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                onNavigateToAdmin()
-                            },
-                            color = androidx.compose.ui.graphics.Color.Transparent
-                        ) {
-                            SettingsRow(
-                                title = "Admin Metrics Dashboard"
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    AssistChip(
-                                        onClick = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            onNavigateToAdmin()
-                                        },
-                                        shape = RoundedCornerShape(16.dp),
-                                        label = { Text("ADMIN", style = MaterialTheme.typography.labelSmall) },
-                                        colors = AssistChipDefaults.assistChipColors(
-                                            containerColor = MaterialTheme.colorScheme.errorContainer,
-                                            labelColor = MaterialTheme.colorScheme.onErrorContainer
-                                        )
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                        contentDescription = "Open Admin Dashboard",
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
                         }
                     }
                 }

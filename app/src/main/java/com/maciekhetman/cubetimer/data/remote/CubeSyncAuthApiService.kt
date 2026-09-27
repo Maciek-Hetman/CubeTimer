@@ -13,10 +13,6 @@ import com.maciekhetman.cubetimer.data.remote.dto.ResendVerificationEmailRequest
 import com.maciekhetman.cubetimer.data.remote.dto.StatusResponse
 import com.maciekhetman.cubetimer.data.remote.dto.UserDto
 import com.maciekhetman.cubetimer.data.remote.dto.VerifyEmailRequest
-import com.maciekhetman.cubetimer.data.remote.dto.AdminOverviewDto
-import com.maciekhetman.cubetimer.data.remote.dto.AdminRequestStatsDto
-import com.maciekhetman.cubetimer.data.remote.dto.AdminRequestTypeStatsDto
-import com.maciekhetman.cubetimer.data.remote.dto.ErrorLogResponseDto
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
@@ -24,7 +20,6 @@ import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.POST
 import retrofit2.http.PUT
-import retrofit2.http.Query
 
 /**
  * Retrofit interface representing the CubeSync authentication and user profile REST API endpoints.
@@ -109,33 +104,4 @@ interface CubeSyncAuthApiService {
         @Header("Authorization") authorization: String? = null,
         @Body request: com.maciekhetman.cubetimer.data.remote.dto.SnapshotRequest
     ): Response<com.maciekhetman.cubetimer.data.remote.dto.SnapshotResponse>
-
-    @GET("v1/admin/stats/overview")
-    suspend fun getAdminOverviewStats(
-        @Header("Authorization") authorization: String? = null
-    ): Response<AdminOverviewDto>
-
-    @GET("v1/admin/stats/requests")
-    suspend fun getAdminRequestStats(
-        @Header("Authorization") authorization: String? = null,
-        @Query("from") from: String? = null,
-        @Query("to") to: String? = null,
-        @Query("interval") interval: String? = null
-    ): Response<AdminRequestStatsDto>
-
-    @GET("v1/admin/stats/request-types")
-    suspend fun getAdminRequestTypeStats(
-        @Header("Authorization") authorization: String? = null,
-        @Query("from") from: String? = null,
-        @Query("to") to: String? = null,
-        @Query("interval") interval: String? = null
-    ): Response<AdminRequestTypeStatsDto>
-
-    @GET("v1/admin/stats/errors")
-    suspend fun getAdminErrorLogs(
-        @Header("Authorization") authorization: String? = null,
-        @Query("before") before: String? = null,
-        @Query("before_id") beforeId: Long? = null,
-        @Query("limit") limit: Int? = null
-    ): Response<ErrorLogResponseDto>
 }

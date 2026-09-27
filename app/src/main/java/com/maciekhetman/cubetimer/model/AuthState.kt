@@ -24,7 +24,7 @@ sealed class AuthState {
 
     /**
      * Authenticated administrator (user.userRole == UserRole.ADMIN).
-     * Grants access to Admin Metrics dashboards (/v1/admin/stats).
+     * Behaves like [Authenticated]; the role is only surfaced as a badge in the account UI.
      */
     data class Admin(val user: User) : AuthState()
 }
@@ -44,12 +44,6 @@ val AuthState.currentUser: User?
  */
 val AuthState.isAuthenticated: Boolean
     get() = this is AuthState.Authenticated || this is AuthState.Admin
-
-/**
- * True if the current state is Admin.
- */
-val AuthState.isAdmin: Boolean
-    get() = this is AuthState.Admin
 
 /**
  * True if the current state is Guest.

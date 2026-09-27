@@ -4,7 +4,6 @@ import com.maciekhetman.cubetimer.data.auth.TokenStorage
 import com.maciekhetman.cubetimer.model.AuthException
 import com.maciekhetman.cubetimer.model.User
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
@@ -12,24 +11,22 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 
 /**
- * Adversarial contract edge case tests against [MockWebServer] covering:
+ * Adversarial contract edge case tests against [MockWebServer] for the shared response handling in
+ * [CubeSyncApiClientImpl], exercised through `GET /v1/me`:
  * - 401, 403, 500, 502 HTML responses
  * - Corrupted and empty JSON responses
- * - Edge case payload deserialization (empty lists, null fields)
- * - Query parameter and Authorization header verification
  */
-class AdminContractEdgeCasesMockWebServerTest {
+class ApiClientHttpEdgeCasesMockWebServerTest {
 
     private lateinit var mockWebServer: MockWebServer
     private lateinit var apiClient: CubeSyncApiClient
-    private lateinit var fakeTokenStorage: FakeAdminTokenStorage
+    private lateinit var fakeTokenStorage: FakeTokenStorage
     private val json: Json = NetworkModule.json
 
     @Before
@@ -37,7 +34,7 @@ class AdminContractEdgeCasesMockWebServerTest {
         mockWebServer = MockWebServer()
         mockWebServer.start()
 
-        fakeTokenStorage = FakeAdminTokenStorage(accessToken = "admin-secret-jwt")
+        fakeTokenStorage = FakeTokenStorage(accessToken = "secret-jwt")
         val authInterceptor = AuthInterceptor(fakeTokenStorage)
         val okHttpClient = OkHttpClient.Builder()
             .addInterceptor(authInterceptor)
@@ -71,7 +68,7 @@ class AdminContractEdgeCasesMockWebServerTest {
         )
 
         try {
-            apiClient.getAdminOverview()
+            apiClient.getCurrentUser()
             fail("Expected AuthException.Unauthorized was not thrown")
         } catch (e: AuthException.Unauthorized) {
             assertEquals("The access token has expired", e.message)
@@ -84,14 +81,14 @@ class AdminContractEdgeCasesMockWebServerTest {
             MockResponse()
                 .setResponseCode(403)
                 .setHeader("Content-Type", "application/json")
-                .setBody("""{"error":{"code":"forbidden","message":"Requires admin privileges"}}""")
+                .setBody("""{"error":{"code":"forbidden","message":"Insufficient permissions"}}""")
         )
 
         try {
-            apiClient.getAdminRequestStats(from = null, to = null, interval = null)
+            apiClient.getCurrentUser()
             fail("Expected AuthException.Forbidden was not thrown")
         } catch (e: AuthException.Forbidden) {
-            assertEquals("Requires admin privileges", e.message)
+            assertEquals("Insufficient permissions", e.message)
         }
     }
 
@@ -105,7 +102,7 @@ class AdminContractEdgeCasesMockWebServerTest {
         )
 
         try {
-            apiClient.getAdminErrorLogs()
+            apiClient.getCurrentUser()
             fail("Expected AuthException was not thrown")
         } catch (e: AuthException) {
             assertTrue(e.message?.contains("Database replica unavailable") == true)
@@ -122,7 +119,7 @@ class AdminContractEdgeCasesMockWebServerTest {
         )
 
         try {
-            apiClient.getAdminOverview()
+            apiClient.getCurrentUser()
             fail("Expected AuthException was not thrown on 502 HTML")
         } catch (e: AuthException) {
             assertTrue("Exception must be caught as AuthException", e is AuthException)
@@ -138,7 +135,7 @@ class AdminContractEdgeCasesMockWebServerTest {
         )
 
         try {
-            apiClient.getAdminOverview()
+            apiClient.getCurrentUser()
             fail("Expected AuthException was not thrown on empty body")
         } catch (e: AuthException) {
             assertTrue(e is AuthException.SerializationError || e is AuthException.Unknown)
@@ -151,103 +148,18 @@ class AdminContractEdgeCasesMockWebServerTest {
             MockResponse()
                 .setResponseCode(200)
                 .setHeader("Content-Type", "application/json")
-                .setBody("""{"total_users": "INVALID_NUMBER_STRING",,,}""")
+                .setBody("""{"id": "u-1", "email": ,,,}""")
         )
 
         try {
-            apiClient.getAdminOverview()
+            apiClient.getCurrentUser()
             fail("Expected AuthException.SerializationError was not thrown")
         } catch (e: AuthException.SerializationError) {
             assertTrue(e.message?.contains("Failed to deserialize") == true)
         }
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // EDGE CASE PAYLOADS & DESERIALIZATION
-    // ---------------------------------------------------------------------------------------------
-
-    @Test
-    fun `request stats with 0 points array deserializes cleanly`() = runTest {
-        mockWebServer.enqueue(
-            MockResponse()
-                .setResponseCode(200)
-                .setHeader("Content-Type", "application/json")
-                .setBody("""{"from":"2026-08-29T00:00:00Z","to":"2026-08-30T00:00:00Z","interval":"hour","points":[]}""")
-        )
-
-        val result = apiClient.getAdminRequestStats(from = "2026-08-29T00:00:00Z", to = "2026-08-30T00:00:00Z", interval = "hour")
-        assertEquals(0, result.points.size)
-        assertEquals("hour", result.interval)
-        assertEquals("2026-08-29T00:00:00Z", result.from)
-    }
-
-    @Test
-    fun `request type stats with 0 types array deserializes cleanly`() = runTest {
-        mockWebServer.enqueue(
-            MockResponse()
-                .setResponseCode(200)
-                .setHeader("Content-Type", "application/json")
-                .setBody("""{"from":null,"to":null,"interval":"day","types":[]}""")
-        )
-
-        val result = apiClient.getAdminRequestTypeStats(from = null, to = null, interval = "day")
-        assertEquals(0, result.types.size)
-        assertEquals("day", result.interval)
-        assertNull(result.from)
-    }
-
-    @Test
-    fun `error logs with null user_id and null next_cursor deserialize without error`() = runTest {
-        val jsonBody = """
-{
-  "errors": [
-    {
-      "id": 99,
-      "created_at": "2026-08-30T15:30:00Z",
-      "user_id": null,
-      "method": "GET",
-      "route": "/v1/health",
-      "status": 503,
-      "code": "service_unavailable",
-      "message": "Service unhealthy"
-    }
-  ],
-  "next_cursor": null
-}
-        """.trimIndent()
-
-        mockWebServer.enqueue(
-            MockResponse()
-                .setResponseCode(200)
-                .setHeader("Content-Type", "application/json")
-                .setBody(jsonBody)
-        )
-
-        val result = apiClient.getAdminErrorLogs()
-        assertEquals(1, result.errors.size)
-        assertNull(result.errors.first().userId)
-        assertNull(result.nextCursor)
-        assertEquals(503, result.errors.first().status)
-    }
-
-    @Test
-    fun `query parameters and Bearer auth header are correctly formatted`() = runTest {
-        mockWebServer.enqueue(
-            MockResponse()
-                .setResponseCode(200)
-                .setHeader("Content-Type", "application/json")
-                .setBody("""{"errors":[],"next_cursor":null}""")
-        )
-
-        apiClient.getAdminErrorLogs(before = "cursor_abc_123")
-
-        val recorded = mockWebServer.takeRequest()
-        assertEquals("GET", recorded.method)
-        assertEquals("Bearer admin-secret-jwt", recorded.getHeader("Authorization"))
-        assertTrue(recorded.path!!.contains("/v1/admin/stats/errors?before=cursor_abc_123"))
-    }
-
-    private class FakeAdminTokenStorage(
+    private class FakeTokenStorage(
         private var accessToken: String = "test-token"
     ) : TokenStorage {
         override val accessTokenFlow = MutableStateFlow<String?>(accessToken)
@@ -255,11 +167,11 @@ class AdminContractEdgeCasesMockWebServerTest {
         override fun setAccessToken(token: String?) { accessToken = token ?: "" }
         override fun getRefreshToken(): String? = "test-refresh"
         override fun setRefreshToken(token: String?) {}
-        override fun getUserId(): String? = "admin-1"
-        override fun getUserEmail(): String? = "admin@example.com"
-        override fun getUserRole(): String? = "admin"
+        override fun getUserId(): String? = "user-1"
+        override fun getUserEmail(): String? = "user@example.com"
+        override fun getUserRole(): String? = "user"
         override fun isUserEmailVerified(): Boolean = true
-        override fun getDisplayName(): String? = "Admin"
+        override fun getDisplayName(): String? = "User"
         override fun saveAuthSession(accessToken: String, refreshToken: String, userId: String, userEmail: String, userRole: String, emailVerified: Boolean, displayName: String?) {}
         override fun saveUser(user: User) {}
         override fun clearAuthData() {}

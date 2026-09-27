@@ -50,7 +50,7 @@ so a full run takes several minutes.
 ### Dependency wiring
 No DI framework. `CubeTimerApplication` is the manual singleton graph (`database`, `tokenStorage`,
 `apiClient`, `authManager`, `syncEngine`, `sessionRepository`, `sessionManager`, `solvesRepository`,
-`syncStateManager`, `adminRepository`, `bluetoothTimerManager`), all `by lazy`. ViewModels are constructed by an anonymous
+`syncStateManager`, `bluetoothTimerManager`), all `by lazy`. ViewModels are constructed by an anonymous
 `ViewModelProvider.Factory` in `MainActivity.onCreate`. Adding a dependency to a ViewModel means editing
 both files. `SyncWorker` is built by a custom `WorkerFactory` in `workManagerConfiguration`.
 
@@ -116,8 +116,8 @@ never become the active session. CSV import recreates missing sessions as closed
 ### UI
 - Navigation is **not** `NavHost`-based despite the navigation-compose dependency: `MainActivity` keeps a
   `rememberSaveable` `AppDestinations` enum and swaps screens inside an `AnimatedContent`, with a custom bottom
-  pill nav and a `BackHandler`. The bottom bar shows TIMER / STATS / HISTORY / SETTINGS; ADMIN has no bar entry
-  and is reached from Settings only when `authState is AuthState.Admin`, and hides the bottom bar while open.
+  pill nav and a `BackHandler`. The bottom bar shows TIMER / STATS / HISTORY / SETTINGS; back from any of them
+  returns to TIMER. There is no admin dashboard — `AuthState.Admin` only drives the account badge.
 - The cloud sync status and account/admin indicators live in Settings' "Account" section
   (`SettingsScreen.kt`), not the shared top bar — `TopBar.kt`'s `TimerTopHeader`/`CollapsingTopBar` no
   longer take `syncUiState`/`authState`/click-handler params. Tapping the rows opens the same

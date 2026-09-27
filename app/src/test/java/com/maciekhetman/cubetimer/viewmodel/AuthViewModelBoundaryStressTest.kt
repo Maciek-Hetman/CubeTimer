@@ -310,7 +310,7 @@ class AuthViewModelBoundaryStressTest {
             Pair(AuthException.InvalidToken(), "Invalid or expired verification/reset token."),
             Pair(AuthException.RateLimited(), "Too many attempts. Please try again in a few moments."),
             Pair(AuthException.InvalidPassword(), "Password must be between 10 and 128 characters."),
-            Pair(AuthException.Forbidden(), "Access denied. Admin privileges required."),
+            Pair(AuthException.Forbidden(), "Access denied. You don't have permission to do that."),
             Pair(AuthException.Unauthorized(), "Session expired. Please log in again."),
             Pair(AuthException.NetworkError("No connection"), "Network connection failed. Please check your connection."),
             Pair(AuthException.ApiError("custom", "Custom server message", 500), "Custom server message")

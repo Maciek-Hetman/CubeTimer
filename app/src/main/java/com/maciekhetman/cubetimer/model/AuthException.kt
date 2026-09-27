@@ -64,7 +64,7 @@ sealed class AuthException(
     class Unauthorized(message: String = "Authentication credentials missing or invalid") :
         AuthException(message)
 
-    /** 403 forbidden: user lacks required permissions (e.g. non-admin accessing admin API) */
+    /** 403 forbidden: user lacks required permissions */
     class Forbidden(message: String = "You do not have permission to perform this action") :
         AuthException(message)
 

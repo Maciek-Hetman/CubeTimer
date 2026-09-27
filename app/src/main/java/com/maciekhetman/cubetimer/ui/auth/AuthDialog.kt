@@ -55,7 +55,6 @@ fun AuthDialog(
     authState: AuthState,
     viewModel: AuthViewModel,
     onDismiss: () -> Unit,
-    onOpenAdminDashboard: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     if (formState.dialogType == AuthDialogType.NONE) return
@@ -112,7 +111,6 @@ fun AuthDialog(
                 authState = authState,
                 viewModel = viewModel,
                 onDismiss = onDismiss,
-                onOpenAdminDashboard = onOpenAdminDashboard,
                 modifier = modifier
             )
         }
@@ -641,7 +639,6 @@ private fun UserProfileDialog(
     authState: AuthState,
     viewModel: AuthViewModel,
     onDismiss: () -> Unit,
-    onOpenAdminDashboard: (() -> Unit)?,
     modifier: Modifier = Modifier
 ) {
     AlertDialog(
@@ -680,26 +677,6 @@ private fun UserProfileDialog(
                             isVerified = authState.user.isEmailVerified,
                             isAdmin = true
                         )
-
-                        if (onOpenAdminDashboard != null) {
-                            Spacer(modifier = Modifier.height(12.dp))
-                            OutlinedButton(
-                                shape = RoundedCornerShape(20.dp),
-                                onClick = {
-                                    onDismiss()
-                                    onOpenAdminDashboard()
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.AdminPanelSettings,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Admin Metrics Dashboard")
-                            }
-                        }
                     }
                     is AuthState.Guest -> {
                         Text(

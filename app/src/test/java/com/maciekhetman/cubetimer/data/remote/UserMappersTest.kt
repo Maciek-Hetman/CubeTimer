@@ -29,7 +29,6 @@ class UserMappersTest {
         assertEquals("Max Park", domain.displayName)
         assertEquals(UserRole.ADMIN, domain.userRole)
         assertTrue(domain.emailVerified)
-        assertTrue(domain.isAdmin)
         assertEquals("2026-08-30T10:00:00Z", domain.createdAt)
     }
 

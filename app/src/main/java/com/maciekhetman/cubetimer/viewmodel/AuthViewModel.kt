@@ -309,7 +309,7 @@ class AuthViewModel(
         is AuthException.InvalidToken -> "Invalid or expired verification/reset token."
         is AuthException.RateLimited -> "Too many attempts. Please try again in a few moments."
         is AuthException.InvalidPassword -> "Password must be between 10 and 128 characters."
-        is AuthException.Forbidden -> "Access denied. Admin privileges required."
+        is AuthException.Forbidden -> "Access denied. You don't have permission to do that."
         is AuthException.Unauthorized -> "Session expired. Please log in again."
         is AuthException.NetworkError -> "Network connection failed. Please check your connection."
         else -> ex.message ?: "Authentication failed."

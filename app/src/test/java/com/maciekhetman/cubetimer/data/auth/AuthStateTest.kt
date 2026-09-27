@@ -4,7 +4,6 @@ import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.User
 import com.maciekhetman.cubetimer.model.UserRole
 import com.maciekhetman.cubetimer.model.currentUser
-import com.maciekhetman.cubetimer.model.isAdmin
 import com.maciekhetman.cubetimer.model.isAuthenticated
 import com.maciekhetman.cubetimer.model.isGuest
 import com.maciekhetman.cubetimer.model.isLoading
@@ -39,7 +38,7 @@ class AuthStateTest {
 
         assertNull(state.currentUser)
         assertFalse(state.isAuthenticated)
-        assertFalse(state.isAdmin)
+        assertFalse(state is AuthState.Admin)
         assertFalse(state.isGuest)
         assertTrue(state.isLoading)
         assertEquals("guest", state.ownerId)
@@ -51,7 +50,7 @@ class AuthStateTest {
 
         assertNull(state.currentUser)
         assertFalse(state.isAuthenticated)
-        assertFalse(state.isAdmin)
+        assertFalse(state is AuthState.Admin)
         assertTrue(state.isGuest)
         assertFalse(state.isLoading)
         assertEquals("guest", state.ownerId)
@@ -63,7 +62,7 @@ class AuthStateTest {
 
         assertEquals(regularUser, state.currentUser)
         assertTrue(state.isAuthenticated)
-        assertFalse(state.isAdmin)
+        assertFalse(state is AuthState.Admin)
         assertFalse(state.isGuest)
         assertFalse(state.isLoading)
         assertEquals("user-123", state.ownerId)
@@ -75,7 +74,7 @@ class AuthStateTest {
 
         assertEquals(adminUser, state.currentUser)
         assertTrue(state.isAuthenticated)
-        assertTrue(state.isAdmin)
+        assertTrue(state is AuthState.Admin)
         assertFalse(state.isGuest)
         assertFalse(state.isLoading)
         assertEquals("admin-456", state.ownerId)

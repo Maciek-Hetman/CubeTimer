@@ -22,7 +22,6 @@ import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.User
 import com.maciekhetman.cubetimer.model.UserRole
 import com.maciekhetman.cubetimer.model.currentUser
-import com.maciekhetman.cubetimer.model.isAdmin
 import com.maciekhetman.cubetimer.model.isAuthenticated
 import com.maciekhetman.cubetimer.model.isGuest
 import kotlinx.coroutines.Dispatchers
@@ -438,7 +437,7 @@ class AuthManagerStressTest {
         authManager.initialize()
 
         assertTrue(authManager.authState.value.isAuthenticated)
-        assertFalse(authManager.authState.value.isAdmin)
+        assertFalse(authManager.authState.value is AuthState.Admin)
         val user = authManager.currentUser
         assertNotNull(user)
         assertEquals("cached-regular-user", user?.id)
@@ -460,7 +459,7 @@ class AuthManagerStressTest {
 
         authManager.initialize()
 
-        assertTrue(authManager.authState.value.isAdmin)
+        assertTrue(authManager.authState.value is AuthState.Admin)
         assertTrue(authManager.authState.value.isAuthenticated)
         val admin = authManager.currentUser
         assertNotNull(admin)

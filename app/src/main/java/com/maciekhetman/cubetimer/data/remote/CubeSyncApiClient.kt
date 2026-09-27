@@ -64,39 +64,4 @@ interface CubeSyncApiClient {
         request: com.maciekhetman.cubetimer.data.remote.dto.SnapshotRequest,
         authToken: String? = null
     ): com.maciekhetman.cubetimer.data.remote.dto.SnapshotResponse
-
-    @Throws(AuthException::class)
-    suspend fun getAdminOverview(authToken: String? = null): com.maciekhetman.cubetimer.data.remote.dto.AdminOverviewDto =
-        throw UnsupportedOperationException("Admin API not implemented in test stub")
-
-    @Throws(AuthException::class)
-    suspend fun getAdminRequestStats(
-        from: String? = null,
-        to: String? = null,
-        interval: String? = null,
-        authToken: String? = null
-    ): com.maciekhetman.cubetimer.data.remote.dto.AdminRequestStatsDto =
-        throw UnsupportedOperationException("Admin API not implemented in test stub")
-
-    @Throws(AuthException::class)
-    suspend fun getAdminRequestTypeStats(
-        from: String? = null,
-        to: String? = null,
-        interval: String? = null,
-        authToken: String? = null
-    ): com.maciekhetman.cubetimer.data.remote.dto.AdminRequestTypeStatsDto =
-        throw UnsupportedOperationException("Admin API not implemented in test stub")
-
-    /**
-     * Keyset-paginated error log. Pass the previous page's `next_cursor` as [before] together with
-     * its `next_cursor_id` as [beforeId]; with [before] alone the page's last row repeats.
-     */
-    @Throws(AuthException::class)
-    suspend fun getAdminErrorLogs(
-        before: String? = null,
-        beforeId: Long? = null,
-        limit: Int? = null,
-        authToken: String? = null
-    ): com.maciekhetman.cubetimer.data.remote.dto.ErrorLogResponseDto =
-        throw UnsupportedOperationException("Admin API not implemented in test stub")
 }

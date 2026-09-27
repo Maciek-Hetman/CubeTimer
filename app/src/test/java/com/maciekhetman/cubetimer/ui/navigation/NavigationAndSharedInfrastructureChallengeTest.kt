@@ -1,7 +1,6 @@
 package com.maciekhetman.cubetimer.ui.navigation
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
@@ -63,9 +62,6 @@ class NavigationAndSharedInfrastructureChallengeTest {
 
         assertEquals("Settings", AppDestinations.SETTINGS.label)
         assertEquals(Icons.Default.Settings, AppDestinations.SETTINGS.icon)
-
-        assertEquals("Admin", AppDestinations.ADMIN.label)
-        assertEquals(Icons.Default.AdminPanelSettings, AppDestinations.ADMIN.icon)
     }
 
     @Test
@@ -135,7 +131,7 @@ class NavigationAndSharedInfrastructureChallengeTest {
     }
 
     @Test
-    fun `floating navigation bar index selection handles ADMIN and invalid destinations gracefully`() {
+    fun `floating navigation bar index selection covers every destination`() {
         val visibleDestinations = listOf(
             AppDestinations.TIMER,
             AppDestinations.STATS,
@@ -152,8 +148,8 @@ class NavigationAndSharedInfrastructureChallengeTest {
         assertEquals(2, resolveSelectedIndex(AppDestinations.HISTORY))
         assertEquals(3, resolveSelectedIndex(AppDestinations.SETTINGS))
 
-        // ADMIN is not in visibleDestinations, must fall back to 0 without throwing
-        assertEquals(0, resolveSelectedIndex(AppDestinations.ADMIN))
+        // Every destination has a bar entry; none relies on the index-0 fallback
+        assertEquals(AppDestinations.entries.toList(), visibleDestinations)
     }
 
     // =============================================================================================
@@ -171,12 +167,7 @@ class NavigationAndSharedInfrastructureChallengeTest {
             return BackNavigationResult(isHandled = false, nextDestination = current)
         }
 
-        val next = when (current) {
-            AppDestinations.ADMIN -> AppDestinations.SETTINGS
-            AppDestinations.HISTORY -> AppDestinations.TIMER
-            else -> AppDestinations.TIMER
-        }
-        return BackNavigationResult(isHandled = true, nextDestination = next)
+        return BackNavigationResult(isHandled = true, nextDestination = AppDestinations.TIMER)
     }
 
     @Test
@@ -212,17 +203,9 @@ class NavigationAndSharedInfrastructureChallengeTest {
         assertTrue(fromSettings.isHandled)
         assertEquals(AppDestinations.TIMER, fromSettings.nextDestination)
 
-        // ADMIN -> SETTINGS -> TIMER -> (exit)
-        val fromAdmin = simulateBackPress(current = AppDestinations.ADMIN, isTimerRunning = false)
-        assertTrue(fromAdmin.isHandled)
-        assertEquals(AppDestinations.SETTINGS, fromAdmin.nextDestination)
-
-        val fromAdminNext = simulateBackPress(current = fromAdmin.nextDestination, isTimerRunning = false)
-        assertTrue(fromAdminNext.isHandled)
-        assertEquals(AppDestinations.TIMER, fromAdminNext.nextDestination)
-
-        val fromAdminFinal = simulateBackPress(current = fromAdminNext.nextDestination, isTimerRunning = false)
-        assertFalse("Must be disabled at TIMER", fromAdminFinal.isHandled)
+        // TIMER -> (exit)
+        val fromTimer = simulateBackPress(current = fromSettings.nextDestination, isTimerRunning = false)
+        assertFalse("Must be disabled at TIMER", fromTimer.isHandled)
     }
 
     @Test

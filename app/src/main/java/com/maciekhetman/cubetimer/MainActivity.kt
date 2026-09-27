@@ -41,7 +41,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import kotlin.math.roundToInt
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
@@ -88,14 +87,12 @@ import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.ui.auth.AuthDialog
 import com.maciekhetman.cubetimer.ui.auth.AuthDialogType
-import com.maciekhetman.cubetimer.ui.screens.AdminDashboardScreen
 import com.maciekhetman.cubetimer.ui.screens.SettingsScreen
 import com.maciekhetman.cubetimer.ui.screens.HistoryScreen
 import com.maciekhetman.cubetimer.ui.screens.StatsScreen
 import com.maciekhetman.cubetimer.ui.screens.TimerScreen
 import com.maciekhetman.cubetimer.ui.sync.SyncStatusDialog
 import com.maciekhetman.cubetimer.ui.theme.CubeTimerTheme
-import com.maciekhetman.cubetimer.viewmodel.AdminViewModel
 import com.maciekhetman.cubetimer.viewmodel.AuthViewModel
 import com.maciekhetman.cubetimer.viewmodel.HistoryViewModel
 import com.maciekhetman.cubetimer.viewmodel.TimerViewModel
@@ -193,10 +190,9 @@ private object NoHapticFeedback : HapticFeedback {
 fun CubeTimerApp(
     viewModel: TimerViewModel,
     authViewModel: AuthViewModel = viewModel(),
-    // HistoryViewModel and AdminViewModel are expensive to create (eager DB queries / network calls), so
-    // they are left null here and only looked up (lazily, via viewModel()) inside the branch of AppContent
-    // that actually shows that destination. Passing an explicit instance (e.g. from a test) still works.
-    adminViewModel: AdminViewModel? = null,
+    // HistoryViewModel is expensive to create (eager DB queries), so it is left null here and only looked
+    // up (lazily, via viewModel()) inside the HISTORY branch of AppContent. Passing an explicit instance
+    // (e.g. from a test) still works.
     historyViewModel: HistoryViewModel? = null,
     syncStateManager: SyncStateManager = (LocalContext.current.applicationContext as? CubeTimerApplication)?.syncStateManager ?: SyncStateManager()
 ) {
@@ -219,11 +215,7 @@ fun CubeTimerApp(
 
     // Predictive back navigation support
     BackHandler(enabled = currentDestination != AppDestinations.TIMER && !isTimerRunning) {
-        when (currentDestination) {
-            AppDestinations.ADMIN -> currentDestination = AppDestinations.SETTINGS
-            AppDestinations.HISTORY -> currentDestination = AppDestinations.TIMER
-            else -> currentDestination = AppDestinations.TIMER
-        }
+        currentDestination = AppDestinations.TIMER
     }
 
     val onModeSelected: (Mode) -> Unit = { mode ->
@@ -302,17 +294,6 @@ fun CubeTimerApp(
                         onSyncClick = { showSyncDialog = true },
                         authState = authState,
                         onAuthClick = onAuthClick,
-                        onNavigateToAdmin = { currentDestination = AppDestinations.ADMIN },
-                        modifier = contentModifier
-                    )
-                }
-                AppDestinations.ADMIN -> {
-                    // Created lazily on first visit to this destination (issues network calls on init).
-                    val resolvedAdminViewModel = adminViewModel ?: viewModel()
-                    AdminDashboardScreen(
-                        viewModel = resolvedAdminViewModel,
-                        authState = authState,
-                        onNavigateBack = { currentDestination = AppDestinations.SETTINGS },
                         modifier = contentModifier
                     )
                 }
@@ -327,7 +308,7 @@ fun CubeTimerApp(
         Box(modifier = Modifier.fillMaxSize()) {
             AppContent(innerPadding)
 
-            if (!focusModeActive && currentDestination != AppDestinations.ADMIN) {
+            if (!focusModeActive) {
                 FloatingNavigationBar(
                     currentDestination = currentDestination,
                     onNavigate = { currentDestination = it },
@@ -343,8 +324,7 @@ fun CubeTimerApp(
         formState = authFormState,
         authState = authState,
         viewModel = authViewModel,
-        onDismiss = { authViewModel.dismissDialog() },
-        onOpenAdminDashboard = { currentDestination = AppDestinations.ADMIN }
+        onDismiss = { authViewModel.dismissDialog() }
     )
 
     if (showSyncDialog) {
@@ -524,5 +504,4 @@ enum class AppDestinations(
     STATS("Stats", Icons.Default.BarChart),
     HISTORY("History", Icons.Default.History),
     SETTINGS("Settings", Icons.Default.Settings),
-    ADMIN("Admin", Icons.Default.AdminPanelSettings),
 }

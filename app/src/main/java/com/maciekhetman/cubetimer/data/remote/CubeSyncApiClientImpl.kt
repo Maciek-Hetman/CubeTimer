@@ -91,45 +91,6 @@ class CubeSyncApiClientImpl(
             apiService.snapshot(authHeader, request)
         }
 
-    override suspend fun getAdminOverview(authToken: String?): com.maciekhetman.cubetimer.data.remote.dto.AdminOverviewDto =
-        executeSafe {
-            val authHeader = authToken?.let { if (it.startsWith("Bearer ")) it else "Bearer $it" }
-            apiService.getAdminOverviewStats(authHeader)
-        }
-
-    override suspend fun getAdminRequestStats(
-        from: String?,
-        to: String?,
-        interval: String?,
-        authToken: String?
-    ): com.maciekhetman.cubetimer.data.remote.dto.AdminRequestStatsDto =
-        executeSafe {
-            val authHeader = authToken?.let { if (it.startsWith("Bearer ")) it else "Bearer $it" }
-            apiService.getAdminRequestStats(authHeader, from, to, interval)
-        }
-
-    override suspend fun getAdminRequestTypeStats(
-        from: String?,
-        to: String?,
-        interval: String?,
-        authToken: String?
-    ): com.maciekhetman.cubetimer.data.remote.dto.AdminRequestTypeStatsDto =
-        executeSafe {
-            val authHeader = authToken?.let { if (it.startsWith("Bearer ")) it else "Bearer $it" }
-            apiService.getAdminRequestTypeStats(authHeader, from, to, interval)
-        }
-
-    override suspend fun getAdminErrorLogs(
-        before: String?,
-        beforeId: Long?,
-        limit: Int?,
-        authToken: String?
-    ): com.maciekhetman.cubetimer.data.remote.dto.ErrorLogResponseDto =
-        executeSafe {
-            val authHeader = authToken?.let { if (it.startsWith("Bearer ")) it else "Bearer $it" }
-            apiService.getAdminErrorLogs(authHeader, before, beforeId, limit)
-        }
-
     private suspend fun <T : Any> executeSafe(call: suspend () -> Response<T>): T {
         try {
             val response = call()

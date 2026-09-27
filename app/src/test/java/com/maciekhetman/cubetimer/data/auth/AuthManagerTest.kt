@@ -21,7 +21,6 @@ import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.User
 import com.maciekhetman.cubetimer.model.UserRole
 import com.maciekhetman.cubetimer.model.currentUser
-import com.maciekhetman.cubetimer.model.isAdmin
 import com.maciekhetman.cubetimer.model.isAuthenticated
 import com.maciekhetman.cubetimer.model.isGuest
 import kotlinx.coroutines.CompletableDeferred
@@ -257,7 +256,7 @@ class AuthManagerTest {
         val result = authManager.login("admin@test.com", "AdminPassword123!")
 
         assertTrue(result is AuthResult.Success)
-        assertTrue(authManager.authState.value.isAdmin)
+        assertTrue(authManager.authState.value is AuthState.Admin)
         assertEquals(UserRole.ADMIN, authManager.currentUser?.userRole)
     }
 

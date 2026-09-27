@@ -8,8 +8,6 @@ import androidx.work.WorkManager
 import androidx.work.WorkerFactory
 import androidx.work.WorkerParameters
 import com.maciekhetman.cubetimer.data.SolvesRepository
-import com.maciekhetman.cubetimer.data.admin.AdminRepository
-import com.maciekhetman.cubetimer.data.admin.AdminRepositoryImpl
 import com.maciekhetman.cubetimer.data.auth.AuthManager
 import com.maciekhetman.cubetimer.data.auth.AuthManagerImpl
 import com.maciekhetman.cubetimer.data.auth.EncryptedTokenStorage
@@ -139,10 +137,6 @@ class CubeTimerApplication : Application(), Configuration.Provider {
             database = database,
             syncTrigger = { scheduleImmediateSyncIfAuthenticated() }
         )
-    }
-
-    val adminRepository: AdminRepository by lazy {
-        AdminRepositoryImpl(apiClient)
     }
 
     /**
