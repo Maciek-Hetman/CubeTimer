@@ -55,7 +55,7 @@ import java.util.UUID
 /**
  * Adversarial Empirical Challenge Test Suite for HistoryViewModel:
  *
- * Vector 1: Combinatorial Session Filter/Sort Matrix (5 SessionSortOrder x 2 PuzzleScope x 3 SessionKindFilter = 30 permutations)
+ * Vector 1: Combinatorial Session Filter/Sort Matrix (5 SessionSortOrder x 2 PuzzleScope = 10 permutations)
  * Vector 2: Combinatorial Solve Filter/Sort Matrix (SolveSortOrder x TimeRangeFilter x PenaltyFilter x DateRangeFilter)
  * Vector 3: Inverted Time Ranges, Pathological Boundaries & DNF/Penalty Display Time Semantics
  * Vector 4: Date Range Boundary Transitions, Midnight Offsets & Local Timezones
@@ -102,7 +102,6 @@ class HistoryFilterAndCsvStressChallengeTest {
         )
         fakeAuthManager = FakeAuthManager()
         sessionManager = SessionManagerImpl(
-            context = application,
             sessionRepository = sessionRepository,
             solveDao = database.solveDao(),
             authManager = fakeAuthManager
@@ -182,10 +181,10 @@ class HistoryFilterAndCsvStressChallengeTest {
     }
 
     // =========================================================================
-    // Vector 1: Combinatorial Session Filter & Sort Matrix (30 Permutations)
+    // Vector 1: Combinatorial Session Filter & Sort Matrix (10 Permutations)
     // =========================================================================
     @Test
-    fun testSessionTabCombinatorialMatrixAll30Permutations() = runTest(testDispatcher) {
+    fun testSessionTabCombinatorialMatrixAll10Permutations() = runTest(testDispatcher) {
         // Prepare a rich matrix of 4 sessions:
         // S1: 3x3, Manual, Name "Alpha", 1 solve, started 2026-08-01
         // S2: 3x3, Automatic, Name "Bravo", 3 solves, started 2026-08-02
@@ -211,10 +210,9 @@ class HistoryFilterAndCsvStressChallengeTest {
 
         for (sort in SessionSortOrder.values()) {
             for (scope in PuzzleScope.values()) {
-                for (kind in SessionKindFilter.values()) {
+                run {
                     viewModel.setSessionSort(sort)
                     viewModel.setPuzzleScope(scope)
-                    viewModel.setSessionKindFilter(kind)
                     advanceUntilIdle()
 
                     val state = viewModel.uiState.value
@@ -233,18 +231,11 @@ class HistoryFilterAndCsvStressChallengeTest {
                         }
                     }
 
-                    // 2. Verify Kind constraint
-                    when (kind) {
-                        SessionKindFilter.ALL -> { /* Any kind allowed */ }
-                        SessionKindFilter.MANUAL_ONLY -> {
-                            assertTrue("All groups must be manual for filter $kind",
-                                groups.all { it.session.kind == SessionKind.MANUAL })
-                        }
-                        SessionKindFilter.AUTOMATIC_ONLY -> {
-                            assertTrue("All groups must be automatic for filter $kind",
-                                groups.all { it.session.kind == SessionKind.AUTOMATIC })
-                        }
-                    }
+                    // 2. No kind filtering: synced manual sessions are listed alongside automatic ones
+                    val expectedCount = if (scope == PuzzleScope.ACTIVE_PUZZLE) 2 else 4
+                    assertEquals("Session count for ($sort, $scope)", expectedCount, groups.size)
+                    assertTrue(groups.any { it.session.kind == SessionKind.MANUAL })
+                    assertTrue(groups.any { it.session.kind == SessionKind.AUTOMATIC })
 
                     // 3. Verify Sort constraint
                     when (sort) {
@@ -283,15 +274,14 @@ class HistoryFilterAndCsvStressChallengeTest {
                     // 4. Verify active badge count calculation
                     val expectedActiveSessionCount =
                         (if (sort != SessionSortOrder.MOST_RECENT) 1 else 0) +
-                        (if (scope != PuzzleScope.ACTIVE_PUZZLE) 1 else 0) +
-                        (if (kind != SessionKindFilter.ALL) 1 else 0)
-                    assertEquals("Active session filter count mismatch for ($sort, $scope, $kind)",
+                        (if (scope != PuzzleScope.ACTIVE_PUZZLE) 1 else 0)
+                    assertEquals("Active session filter count mismatch for ($sort, $scope)",
                         expectedActiveSessionCount, state.activeSessionFilterCount)
                 }
             }
         }
 
-        assertEquals(30, combinationsTested)
+        assertEquals(10, combinationsTested)
     }
 
     // =========================================================================
@@ -818,10 +808,9 @@ class HistoryFilterAndCsvStressChallengeTest {
         viewModel = createViewModel()
         advanceUntilIdle()
 
-        // Dirty all 7 filter/sort properties across both tabs
+        // Dirty all 6 filter/sort properties across both tabs
         viewModel.setSessionSort(SessionSortOrder.NAME_DESC)
         viewModel.setPuzzleScope(PuzzleScope.ALL_PUZZLES)
-        viewModel.setSessionKindFilter(SessionKindFilter.AUTOMATIC_ONLY)
         viewModel.setSolveSort(SolveSortOrder.LOWEST_TIME)
         viewModel.setPenaltyFilter(PenaltyFilter.DNF_ONLY)
         viewModel.setTimeRangeFilter(10000L, 20000L)
@@ -829,9 +818,9 @@ class HistoryFilterAndCsvStressChallengeTest {
         advanceUntilIdle()
 
         var state = viewModel.uiState.value
-        assertEquals(3, state.activeSessionFilterCount)
+        assertEquals(2, state.activeSessionFilterCount)
         assertEquals(4, state.activeSolveFilterCount)
-        assertEquals(7, state.totalActiveFilterCount)
+        assertEquals(6, state.totalActiveFilterCount)
 
         // Reset all filters simultaneously
         viewModel.resetAllFilters()
@@ -841,7 +830,6 @@ class HistoryFilterAndCsvStressChallengeTest {
         // Verify exact default restoration
         assertEquals(SessionSortOrder.MOST_RECENT, state.sessionSort)
         assertEquals(PuzzleScope.ACTIVE_PUZZLE, state.puzzleScope)
-        assertEquals(SessionKindFilter.ALL, state.sessionKindFilter)
         assertEquals(SolveSortOrder.MOST_RECENT, state.solveSort)
         assertEquals(PenaltyFilter.ALL, state.penaltyFilter)
         assertEquals(TimeRangeFilter(), state.timeRangeFilter)
@@ -909,7 +897,7 @@ class HistoryFilterAndCsvStressChallengeTest {
         override suspend fun initialize() = Unit
         override suspend fun register(email: String, password: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun login(email: String, password: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
-        override suspend fun loginWithGoogle(idToken: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
+        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun verifyEmail(token: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun resendVerificationEmail(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun requestPasswordReset(email: String): AuthResult<Unit> = AuthResult.Success(Unit)

@@ -5,6 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.maciekhetman.cubetimer.data.local.converter.CubeTypeConverters
 import com.maciekhetman.cubetimer.data.local.dao.ConflictDao
@@ -26,7 +27,7 @@ import com.maciekhetman.cubetimer.data.local.entity.SyncOutboxEntity
         SyncMetadataEntity::class,
         ConflictEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = true
 )
 @TypeConverters(CubeTypeConverters::class)
@@ -40,6 +41,17 @@ abstract class CubeDatabase : RoomDatabase() {
 
     companion object {
         private const val DATABASE_NAME = "cubetimer.db"
+
+        /**
+         * v2 adds `solves.timing_device` (CubeSync `timing_device`). Existing rows were all timed
+         * on screen, hence the "keyboard" default. Without this, fallbackToDestructiveMigration
+         * would wipe every local (including never-synced guest) solve on upgrade.
+         */
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `solves` ADD COLUMN `timing_device` TEXT NOT NULL DEFAULT 'keyboard'")
+            }
+        }
 
         @Volatile
         private var INSTANCE: CubeDatabase? = null
@@ -63,6 +75,7 @@ abstract class CubeDatabase : RoomDatabase() {
                         db.execSQL("PRAGMA foreign_keys = ON;")
                     }
                 })
+                .addMigrations(MIGRATION_1_2)
                 .fallbackToDestructiveMigration()
                 .build()
         }

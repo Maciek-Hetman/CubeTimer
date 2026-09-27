@@ -3,10 +3,13 @@ package com.maciekhetman.cubetimer.data
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.test.core.app.ApplicationProvider
+import com.maciekhetman.cubetimer.model.TimingDevice
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -59,29 +62,27 @@ class SettingsRepositoryTest {
     }
 
     @Test
-    fun hideSessionMenuInTopBar_defaultsToFalse() = runTest {
-        assertFalse(repository.hideSessionMenuInTopBarFlow.first())
+    fun timingDevice_defaultsToTouch() = runTest {
+        assertEquals(TimingDevice.KEYBOARD, repository.timingDeviceFlow.first())
     }
 
     @Test
-    fun setHideSessionMenuInTopBar_persistsValue() = runTest {
-        repository.setHideSessionMenuInTopBar(true)
-        assertTrue(repository.hideSessionMenuInTopBarFlow.first())
+    fun setTimingDevice_persistsBluetoothAndBack() = runTest {
+        repository.setTimingDevice(TimingDevice.EXTERNAL_TIMER)
+        assertEquals(TimingDevice.EXTERNAL_TIMER, repository.timingDeviceFlow.first())
 
-        repository.setHideSessionMenuInTopBar(false)
-        assertFalse(repository.hideSessionMenuInTopBarFlow.first())
+        repository.setTimingDevice(TimingDevice.KEYBOARD)
+        assertEquals(TimingDevice.KEYBOARD, repository.timingDeviceFlow.first())
     }
 
     @Test
-    fun migrateFromLegacy_copiesHideSessionMenuInTopBar() = runTest {
-        val legacyKey = booleanPreferencesKey("hide_session_menu_in_top_bar")
-        context.solvesDataStore.edit { prefs ->
-            prefs[legacyKey] = true
-        }
+    fun timingDevice_smartCubeOrGarbageFallsBackToTouch() = runTest {
+        // A smart cube is not a timer input on Android; neither is an unknown stored value.
+        repository.setTimingDevice(TimingDevice.SMART_CUBE)
+        assertEquals(TimingDevice.KEYBOARD, repository.timingDeviceFlow.first())
 
-        repository.migrateFromLegacyIfNeeded()
-
-        assertTrue(repository.hideSessionMenuInTopBarFlow.first())
+        context.settingsDataStore.edit { it[stringPreferencesKey("timing_device")] = "stackmat" }
+        assertEquals(TimingDevice.KEYBOARD, repository.timingDeviceFlow.first())
     }
 
     @Test

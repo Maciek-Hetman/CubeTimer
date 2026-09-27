@@ -86,7 +86,6 @@ private data class SolveFilterQuad(
 private data class FilterStateChunk(
     val sessionSort: SessionSortOrder,
     val puzzleScope: PuzzleScope,
-    val sessionKindFilter: SessionKindFilter,
     val solveSort: SolveSortOrder,
     val penaltyFilter: PenaltyFilter,
     val timeRangeFilter: TimeRangeFilter,
@@ -174,7 +173,6 @@ class HistoryViewModel(
             ?: SolvesRepository(application),
         sessionManager = (application as? CubeTimerApplication)?.sessionManager
             ?: SessionManagerImpl(
-                context = application,
                 sessionRepository = SessionRepositoryImpl(CubeDatabase.getInstance(application)),
                 solveDao = CubeDatabase.getInstance(application).solveDao(),
                 authManager = AuthManagerImpl.getInstance(application)
@@ -214,8 +212,6 @@ class HistoryViewModel(
     private val _puzzleScope = MutableStateFlow(PuzzleScope.ACTIVE_PUZZLE)
     val puzzleScope: StateFlow<PuzzleScope> = _puzzleScope.asStateFlow()
 
-    private val _sessionKindFilter = MutableStateFlow(SessionKindFilter.ALL)
-    val sessionKindFilter: StateFlow<SessionKindFilter> = _sessionKindFilter.asStateFlow()
 
     private val _expandedSessionIds = MutableStateFlow<Set<String>>(emptySet())
     val expandedSessionIds: StateFlow<Set<String>> = _expandedSessionIds.asStateFlow()
@@ -326,19 +322,13 @@ class HistoryViewModel(
     private val rawSessionsWithStats: Flow<List<SessionWithStats>> = combine(
         authManager.authState,
         _currentMode,
-        _puzzleScope,
-        _sessionKindFilter
-    ) { authState, mode, scope, kindFilter ->
+        _puzzleScope
+    ) { authState, mode, scope ->
         val ownerId = authState.ownerId
         val event = if (scope == PuzzleScope.ACTIVE_PUZZLE) CubeTypeConverters.fromMode(mode) else null
-        val kind = when (kindFilter) {
-            SessionKindFilter.ALL -> null
-            SessionKindFilter.MANUAL_ONLY -> "manual"
-            SessionKindFilter.AUTOMATIC_ONLY -> "automatic"
-        }
-        Triple(ownerId, event, kind)
-    }.distinctUntilChanged().flatMapLatest { (ownerId, event, kind) ->
-        effectiveSessionDao.observeSessionsWithStats(ownerId, event, kind)
+        ownerId to event
+    }.distinctUntilChanged().flatMapLatest { (ownerId, event) ->
+        effectiveSessionDao.observeSessionsWithStats(ownerId, event, null)
     }
 
     private val sessionGroupsFlow: Flow<List<SessionGroupUiModel>> = combine(
@@ -368,8 +358,8 @@ class HistoryViewModel(
             GroupStateChunk(groups, expanded, selected)
         },
         combine(
-            combine(_sessionSort, _puzzleScope, _sessionKindFilter) { sSort, pScope, sKind ->
-                Triple(sSort, pScope, sKind)
+            combine(_sessionSort, _puzzleScope) { sSort, pScope ->
+                Pair(sSort, pScope)
             },
             combine(_solveSort, _penaltyFilter, _timeRangeFilter, _dateRangeFilter) { slvSort, pFilter, tFilter, dFilter ->
                 SolveFilterQuad(slvSort, pFilter, tFilter, dFilter)
@@ -377,11 +367,10 @@ class HistoryViewModel(
             combine(_isFilterSheetOpen, _activeFilterSheetTab) { open, tab ->
                 Pair(open, tab)
             }
-        ) { (sSort, pScope, sKind), (slvSort, pFilter, tFilter, dFilter), (open, tab) ->
+        ) { (sSort, pScope), (slvSort, pFilter, tFilter, dFilter), (open, tab) ->
             FilterStateChunk(
                 sessionSort = sSort,
                 puzzleScope = pScope,
-                sessionKindFilter = sKind,
                 solveSort = slvSort,
                 penaltyFilter = pFilter,
                 timeRangeFilter = tFilter,
@@ -413,7 +402,6 @@ class HistoryViewModel(
             selectedSolveIds = groups.selectedSolveIds,
             sessionSort = filters.sessionSort,
             puzzleScope = filters.puzzleScope,
-            sessionKindFilter = filters.sessionKindFilter,
             solveSort = filters.solveSort,
             penaltyFilter = filters.penaltyFilter,
             timeRangeFilter = filters.timeRangeFilter,
@@ -1075,10 +1063,6 @@ class HistoryViewModel(
         _puzzleScope.value = scope
     }
 
-    fun setSessionKindFilter(filter: SessionKindFilter) {
-        _sessionKindFilter.value = filter
-    }
-
     fun setSolveSort(sort: SolveSortOrder) {
         _solveSort.value = sort
     }
@@ -1119,7 +1103,6 @@ class HistoryViewModel(
     fun resetAllFilters() {
         _sessionSort.value = SessionSortOrder.MOST_RECENT
         _puzzleScope.value = PuzzleScope.ACTIVE_PUZZLE
-        _sessionKindFilter.value = SessionKindFilter.ALL
         _solveSort.value = SolveSortOrder.MOST_RECENT
         _penaltyFilter.value = PenaltyFilter.ALL
         _timeRangeFilter.value = TimeRangeFilter()
@@ -1129,7 +1112,6 @@ class HistoryViewModel(
     fun resetSessionFilters() {
         _sessionSort.value = SessionSortOrder.MOST_RECENT
         _puzzleScope.value = PuzzleScope.ACTIVE_PUZZLE
-        _sessionKindFilter.value = SessionKindFilter.ALL
     }
 
     fun resetSolveFilters() {

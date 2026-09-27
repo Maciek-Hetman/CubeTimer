@@ -45,6 +45,7 @@ import org.robolectric.RobolectricTestRunner
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.UUID
+import com.maciekhetman.cubetimer.testutil.insertSession
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -86,7 +87,6 @@ class HistoryViewModelTest {
         )
         fakeAuthManager = FakeAuthManager()
         sessionManager = SessionManagerImpl(
-            context = application,
             sessionRepository = sessionRepository,
             solveDao = database.solveDao(),
             authManager = fakeAuthManager
@@ -178,8 +178,8 @@ class HistoryViewModelTest {
 
     @Test
     fun testSetFilterChangesScopeAndReloads() = runTest(testDispatcher) {
-        val session1 = sessionRepository.createManualSession("S1", Mode.CUBE_3x3, "guest")
-        val session2 = sessionRepository.createManualSession("S2", Mode.CUBE_3x3, "guest")
+        val session1 = sessionRepository.insertSession("S1", Mode.CUBE_3x3, "guest")
+        val session2 = sessionRepository.insertSession("S2", Mode.CUBE_3x3, "guest")
 
         database.solveDao().insert(
             SolveEntity(
@@ -413,7 +413,7 @@ class HistoryViewModelTest {
         ownerId: String = "guest",
         durationsMs: List<Long> = listOf(10000L, 12000L)
     ): Pair<Session, List<SolveEntity>> {
-        val session = sessionRepository.createManualSession(name, mode, ownerId)
+        val session = sessionRepository.insertSession(name, mode, ownerId)
         val entities = durationsMs.mapIndexed { index, duration ->
             SolveEntity(
                 id = "${session.id}-solve-$index",
@@ -736,7 +736,7 @@ class HistoryViewModelTest {
     }
 
     @Test
-    fun testSessionPuzzleScopeAndKindFilter() = runTest(testDispatcher) {
+    fun testSessionPuzzleScope() = runTest(testDispatcher) {
         // Create 3x3 session and 2x2 session
         val (s3x3, _) = createSessionWithSolves("Session 3x3", mode = Mode.CUBE_3x3, durationsMs = listOf(10000L))
         val (s2x2, _) = createSessionWithSolves("Session 2x2", mode = Mode.CUBE_2x2, durationsMs = listOf(5000L))
@@ -752,21 +752,11 @@ class HistoryViewModelTest {
         viewModel.setPuzzleScope(PuzzleScope.ALL_PUZZLES)
         advanceUntilIdle()
         assertEquals(2, viewModel.uiState.value.sessionGroups.size)
-
-        // Switch kind filter to MANUAL_ONLY (both are manual)
-        viewModel.setSessionKindFilter(SessionKindFilter.MANUAL_ONLY)
-        advanceUntilIdle()
-        assertEquals(2, viewModel.uiState.value.sessionGroups.size)
-
-        // Switch kind filter to AUTOMATIC_ONLY: none are automatic
-        viewModel.setSessionKindFilter(SessionKindFilter.AUTOMATIC_ONLY)
-        advanceUntilIdle()
-        assertEquals(0, viewModel.uiState.value.sessionGroups.size)
     }
 
     @Test
     fun testSolveTabSortingAndFiltering() = runTest(testDispatcher) {
-        val session = sessionRepository.createManualSession("S1", Mode.CUBE_3x3, "guest")
+        val session = sessionRepository.insertSession("S1", Mode.CUBE_3x3, "guest")
         val baseTime = Instant.parse("2026-08-30T10:00:00.000Z")
         val solveFast = SolveEntity(
             id = "solve-fast",
@@ -870,12 +860,11 @@ class HistoryViewModelTest {
         // Change session filters
         viewModel.setSessionSort(SessionSortOrder.NAME_ASC) // +1
         viewModel.setPuzzleScope(PuzzleScope.ALL_PUZZLES)   // +1
-        viewModel.setSessionKindFilter(SessionKindFilter.MANUAL_ONLY) // +1
         advanceUntilIdle()
 
-        assertEquals(3, viewModel.uiState.value.activeSessionFilterCount)
+        assertEquals(2, viewModel.uiState.value.activeSessionFilterCount)
         assertEquals(0, viewModel.uiState.value.activeSolveFilterCount)
-        assertEquals(3, viewModel.uiState.value.totalActiveFilterCount)
+        assertEquals(2, viewModel.uiState.value.totalActiveFilterCount)
 
         // Change solve filters
         viewModel.setSolveSort(SolveSortOrder.FASTEST) // +1
@@ -883,17 +872,17 @@ class HistoryViewModelTest {
         viewModel.setTimeRangeFilter(10000L, 20000L) // +1
         advanceUntilIdle()
 
-        assertEquals(3, viewModel.uiState.value.activeSessionFilterCount)
+        assertEquals(2, viewModel.uiState.value.activeSessionFilterCount)
         assertEquals(3, viewModel.uiState.value.activeSolveFilterCount)
-        assertEquals(6, viewModel.uiState.value.totalActiveFilterCount)
+        assertEquals(5, viewModel.uiState.value.totalActiveFilterCount)
 
         // Reset solve filters
         viewModel.resetSolveFilters()
         advanceUntilIdle()
 
-        assertEquals(3, viewModel.uiState.value.activeSessionFilterCount)
+        assertEquals(2, viewModel.uiState.value.activeSessionFilterCount)
         assertEquals(0, viewModel.uiState.value.activeSolveFilterCount)
-        assertEquals(3, viewModel.uiState.value.totalActiveFilterCount)
+        assertEquals(2, viewModel.uiState.value.totalActiveFilterCount)
 
         // Reset all filters
         viewModel.resetAllFilters()
@@ -1025,7 +1014,7 @@ class HistoryViewModelTest {
         override suspend fun initialize() = Unit
         override suspend fun register(email: String, password: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun login(email: String, password: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
-        override suspend fun loginWithGoogle(idToken: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
+        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun verifyEmail(token: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun resendVerificationEmail(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun requestPasswordReset(email: String): AuthResult<Unit> = AuthResult.Success(Unit)

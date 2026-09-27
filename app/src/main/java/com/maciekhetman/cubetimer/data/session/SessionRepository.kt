@@ -31,11 +31,6 @@ interface SessionRepository {
     fun observeAllSessions(ownerId: String, mode: Mode): Flow<List<Session>>
 
     /**
-     * Observe archived (non-deleted) sessions for a given owner and mode.
-     */
-    fun observeArchivedSessions(ownerId: String, mode: Mode): Flow<List<Session>>
-
-    /**
      * Observe a specific session by ID.
      */
     fun observeSessionById(id: String): Flow<Session?>
@@ -66,27 +61,7 @@ interface SessionRepository {
     suspend fun createSession(session: Session): Session
 
     /**
-     * Create a new manual session.
-     */
-    suspend fun createManualSession(name: String, mode: Mode, ownerId: String = "guest"): Session
-
-    /**
-     * Rename an existing session.
-     */
-    suspend fun renameSession(id: String, newName: String, ownerId: String = "guest"): Session?
-
-    /**
-     * Archive a session (and close it if open).
-     */
-    suspend fun archiveSession(id: String, ownerId: String = "guest"): Session?
-
-    /**
-     * Unarchive a session.
-     */
-    suspend fun unarchiveSession(id: String, ownerId: String = "guest"): Session?
-
-    /**
-     * Close an active automatic or manual session by setting ended_at.
+     * Close an open session by setting ended_at.
      */
     suspend fun closeSession(id: String, ownerId: String = "guest"): Session?
 

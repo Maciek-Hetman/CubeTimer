@@ -60,6 +60,8 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import com.maciekhetman.cubetimer.testutil.insertSession
+import com.maciekhetman.cubetimer.model.SessionKind
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -242,7 +244,6 @@ class Milestone3EmpiricalChallengeStressTest {
             syncOutboxDao = database.syncOutboxDao()
         )
         val sessionManager = SessionManagerImpl(
-            context = context,
             sessionRepository = sessionRepository,
             solveDao = database.solveDao(),
             authManager = fakeAuthManager,
@@ -250,16 +251,15 @@ class Milestone3EmpiricalChallengeStressTest {
         )
 
         // Create Sessions:
-        // Session A: Active manual session with 10 solves
-        val sessionA = sessionRepository.createManualSession("Session A (10)", Mode.CUBE_3x3, "guest")
-        sessionManager.setActiveSession("guest", Mode.CUBE_3x3, sessionA.id)
+        // Session A: the open automatic (active) session with 10 solves
+        val sessionA = sessionRepository.insertSession("Session A (10)", Mode.CUBE_3x3, "guest", kind = SessionKind.AUTOMATIC)
         sessionManager.getActiveSessionFlow("guest", Mode.CUBE_3x3).first { it?.id == sessionA.id }
 
         // Session B: Empty session with 0 solves
-        val sessionB = sessionRepository.createManualSession("Session B (0)", Mode.CUBE_3x3, "guest")
+        val sessionB = sessionRepository.insertSession("Session B (0)", Mode.CUBE_3x3, "guest")
 
         // Session C: Large session with 120 solves (requires 3 pages of 50)
-        val sessionC = sessionRepository.createManualSession("Session C (120)", Mode.CUBE_3x3, "guest")
+        val sessionC = sessionRepository.insertSession("Session C (120)", Mode.CUBE_3x3, "guest")
 
         val baseTime = Instant.parse("2026-08-30T10:00:00.000Z")
 
@@ -296,7 +296,7 @@ class Milestone3EmpiricalChallengeStressTest {
         database.solveDao().insertAll(solvesC)
 
         // Populate a 2x2 mode solve to test event isolation: 15 solves
-        val session2x2 = sessionRepository.createManualSession("Session 2x2 (15)", Mode.CUBE_2x2, "guest")
+        val session2x2 = sessionRepository.insertSession("Session 2x2 (15)", Mode.CUBE_2x2, "guest")
         val solves2x2 = (0 until 15).map { i ->
             SolveEntity(
                 id = "solve-2x2-$i",
@@ -432,15 +432,13 @@ class Milestone3EmpiricalChallengeStressTest {
             syncOutboxDao = database.syncOutboxDao()
         )
         val sessionManager = SessionManagerImpl(
-            context = context,
             sessionRepository = sessionRepository,
             solveDao = database.solveDao(),
             authManager = fakeAuthManager,
             ioDispatcher = testDispatcher
         )
 
-        val session = sessionRepository.createManualSession("Default", Mode.CUBE_3x3, "guest")
-        sessionManager.setActiveSession("guest", Mode.CUBE_3x3, session.id)
+        val session = sessionRepository.insertSession("Default", Mode.CUBE_3x3, "guest", kind = SessionKind.AUTOMATIC)
         sessionManager.getActiveSessionFlow("guest", Mode.CUBE_3x3).first { it?.id == session.id }
 
         val solve = SolveEntity(
@@ -516,15 +514,13 @@ class Milestone3EmpiricalChallengeStressTest {
             syncOutboxDao = database.syncOutboxDao()
         )
         val sessionManager = SessionManagerImpl(
-            context = context,
             sessionRepository = sessionRepository,
             solveDao = database.solveDao(),
             authManager = fakeAuthManager,
             ioDispatcher = testDispatcher
         )
 
-        val session = sessionRepository.createManualSession("Default", Mode.CUBE_3x3, "guest")
-        sessionManager.setActiveSession("guest", Mode.CUBE_3x3, session.id)
+        val session = sessionRepository.insertSession("Default", Mode.CUBE_3x3, "guest", kind = SessionKind.AUTOMATIC)
         sessionManager.getActiveSessionFlow("guest", Mode.CUBE_3x3).first { it?.id == session.id }
 
         // Seed a solve whose solved_at has .000Z (RFC3339 format)
@@ -577,7 +573,7 @@ class Milestone3EmpiricalChallengeStressTest {
         override suspend fun initialize() = Unit
         override suspend fun register(email: String, password: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun login(email: String, password: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
-        override suspend fun loginWithGoogle(idToken: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
+        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun verifyEmail(token: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun resendVerificationEmail(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun requestPasswordReset(email: String): AuthResult<Unit> = AuthResult.Success(Unit)

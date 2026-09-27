@@ -48,7 +48,6 @@ import com.maciekhetman.cubetimer.viewmodel.DateRangeFilter
 import com.maciekhetman.cubetimer.viewmodel.HistoryUiState
 import com.maciekhetman.cubetimer.viewmodel.PenaltyFilter
 import com.maciekhetman.cubetimer.viewmodel.PuzzleScope
-import com.maciekhetman.cubetimer.viewmodel.SessionKindFilter
 import com.maciekhetman.cubetimer.viewmodel.SessionSortOrder
 import com.maciekhetman.cubetimer.viewmodel.SolveSortOrder
 import com.maciekhetman.cubetimer.viewmodel.TimeRangeFilter
@@ -70,7 +69,6 @@ fun HistoryFilterSortBottomSheet(
     onSelectTab: (Int) -> Unit,
     onSessionSortChange: (SessionSortOrder) -> Unit,
     onPuzzleScopeChange: (PuzzleScope) -> Unit,
-    onSessionKindFilterChange: (SessionKindFilter) -> Unit,
     onSolveSortChange: (SolveSortOrder) -> Unit,
     onPenaltyFilterChange: (PenaltyFilter) -> Unit,
     onTimeRangeFilterChange: (TimeRangeFilter) -> Unit,
@@ -152,20 +150,6 @@ fun HistoryFilterSortBottomSheet(
                                 }
                             },
                             onSelect = onPuzzleScopeChange
-                        )
-                    }
-                    FilterGroup("Session Type") {
-                        ChoiceChips(
-                            options = SessionKindFilter.entries,
-                            selected = uiState.sessionKindFilter,
-                            label = {
-                                when (it) {
-                                    SessionKindFilter.ALL -> "All"
-                                    SessionKindFilter.MANUAL_ONLY -> "Manual"
-                                    SessionKindFilter.AUTOMATIC_ONLY -> "Automatic"
-                                }
-                            },
-                            onSelect = onSessionKindFilterChange
                         )
                     }
                 } else {

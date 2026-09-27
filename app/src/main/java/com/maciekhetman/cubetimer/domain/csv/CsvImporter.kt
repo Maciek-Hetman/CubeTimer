@@ -208,7 +208,9 @@ class CsvImporter(
                         ownerId = ownerId,
                         name = firstSolve.sessionName.ifBlank { "Imported Session" },
                         event = CubeTypeConverters.fromMode(firstSolve.puzzle),
-                        kind = SessionKind.MANUAL.value,
+                        // Imported sessions are closed (ended_at = last solve), so the automatic
+                        // session policy never picks one up as the open session to append to.
+                        kind = SessionKind.AUTOMATIC.value,
                         startedAt = CubeTypeConverters.epochMillisToIso(minTimestamp),
                         endedAt = CubeTypeConverters.epochMillisToIso(maxTimestamp),
                         archived = false,

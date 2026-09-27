@@ -54,7 +54,6 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.*
 
-import com.maciekhetman.cubetimer.model.Session
 import com.maciekhetman.cubetimer.model.StatsFilter
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -63,23 +62,15 @@ fun StatsScreen(
     viewModel: TimerViewModel,
     currentMode: Mode,
     onModeSelected: (Mode) -> Unit,
-    activeSession: Session? = null,
-    isAutomaticMode: Boolean = true,
-    onSwitchToAutomatic: () -> Unit = {},
-    sessions: List<Session> = emptyList(),
-    onSessionSelected: (Session) -> Unit = {},
-    onCreateSessionClick: () -> Unit = {},
-    onManageSessionsClick: () -> Unit = {},
-    hideSessionMenu: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val solves by viewModel.solves.collectAsStateWithLifecycle()
     val filteredSolves by viewModel.statsFilteredSolves.collectAsStateWithLifecycle()
     val statsFilter by viewModel.statsFilter.collectAsStateWithLifecycle()
-    val currentActiveSession by viewModel.activeSession.collectAsStateWithLifecycle()
-    val effectiveActiveSession = activeSession ?: currentActiveSession
+    val activeSessionState by viewModel.activeSession.collectAsStateWithLifecycle()
+    // Plain local copy so the null checks below can smart-cast it.
+    val effectiveActiveSession = activeSessionState
     val appTimeMillis by viewModel.appTimeMillis.collectAsStateWithLifecycle()
-    val hideSessionMenuInTopBar by viewModel.hideSessionMenuInTopBar.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
     val layoutDirection = LocalLayoutDirection.current
@@ -100,15 +91,7 @@ fun StatsScreen(
                 title = "Statistics",
                 currentMode = currentMode,
                 onModeSelected = onModeSelected,
-                scrollBehavior = scrollBehavior,
-                activeSession = effectiveActiveSession,
-                isAutomaticMode = isAutomaticMode,
-                onSwitchToAutomatic = onSwitchToAutomatic,
-                sessions = sessions,
-                onSessionSelected = onSessionSelected,
-                onCreateSessionClick = onCreateSessionClick,
-                onManageSessionsClick = onManageSessionsClick,
-                hideSessionMenu = hideSessionMenu || hideSessionMenuInTopBar
+                scrollBehavior = scrollBehavior
             )
         }
     ) { paddingValues ->
@@ -132,8 +115,7 @@ fun StatsScreen(
                     onFilterSelected = { viewModel.setStatsFilter(it) },
                     activeSession = effectiveActiveSession,
                     activeSessionSolvesCount = activeSessionSolvesCount,
-                    allSolvesCount = solves.size,
-                    sessions = sessions
+                    allSolvesCount = solves.size
                 )
             }
 

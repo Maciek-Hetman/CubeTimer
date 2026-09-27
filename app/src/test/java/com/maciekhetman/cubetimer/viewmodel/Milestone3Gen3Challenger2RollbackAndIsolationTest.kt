@@ -42,6 +42,8 @@ import org.robolectric.RobolectricTestRunner
 import java.io.IOException
 import java.time.Instant
 import java.time.temporal.ChronoUnit
+import com.maciekhetman.cubetimer.testutil.insertSession
+import com.maciekhetman.cubetimer.model.SessionKind
 
 /**
  * Adversarial empirical challenge test verifying:
@@ -96,7 +98,6 @@ class Milestone3Gen3Challenger2RollbackAndIsolationTest {
 
         fakeAuthManager = FakeAuthManager()
         sessionManager = SessionManagerImpl(
-            context = application,
             sessionRepository = sessionRepository,
             solveDao = failingSolveDao,
             authManager = fakeAuthManager,
@@ -394,17 +395,15 @@ class Milestone3Gen3Challenger2RollbackAndIsolationTest {
         val baseTime = Instant.parse("2026-08-30T10:00:00.000Z")
 
         // 1. Create sessions in different events
-        val sessionA = sessionRepository.createManualSession("Session A (3x3)", Mode.CUBE_3x3, "guest")
-        val sessionB = sessionRepository.createManualSession("Session B (3x3)", Mode.CUBE_3x3, "guest")
-        val sessionC = sessionRepository.createManualSession("Session C (2x2)", Mode.CUBE_2x2, "guest")
-        val sessionD = sessionRepository.createManualSession("Session D (Megaminx)", Mode.MEGAMINX, "guest")
+        // Session A is the open automatic session for 3x3 and Session C for 2x2; B and D are
+        // inert (manual) sessions that the automatic policy never makes active.
+        val sessionA = sessionRepository.insertSession("Session A (3x3)", Mode.CUBE_3x3, "guest", kind = SessionKind.AUTOMATIC)
+        val sessionB = sessionRepository.insertSession("Session B (3x3)", Mode.CUBE_3x3, "guest")
+        val sessionC = sessionRepository.insertSession("Session C (2x2)", Mode.CUBE_2x2, "guest", kind = SessionKind.AUTOMATIC)
+        val sessionD = sessionRepository.insertSession("Session D (Megaminx)", Mode.MEGAMINX, "guest")
 
-        // Set Session A active for 3x3
-        sessionManager.setActiveSession("guest", Mode.CUBE_3x3, sessionA.id)
         sessionManager.getActiveSessionFlow("guest", Mode.CUBE_3x3).first { it?.id == sessionA.id }
-
-        // Set Session C active for 2x2
-        sessionManager.setActiveSession("guest", Mode.CUBE_2x2, sessionC.id)
+        sessionManager.getActiveSessionFlow("guest", Mode.CUBE_2x2).first { it?.id == sessionC.id }
 
         // Seed Solves:
         // Session A: 10 solves (3x3)
@@ -531,8 +530,8 @@ class Milestone3Gen3Challenger2RollbackAndIsolationTest {
 
     @Test
     fun testRapidAlternatingFilterSwitchesPreservesStateConsistency() = runTest(testDispatcher) {
-        val sessionA = sessionRepository.createManualSession("S-A", Mode.CUBE_3x3, "guest")
-        val sessionB = sessionRepository.createManualSession("S-B", Mode.CUBE_3x3, "guest")
+        val sessionA = sessionRepository.insertSession("S-A", Mode.CUBE_3x3, "guest", kind = SessionKind.AUTOMATIC)
+        val sessionB = sessionRepository.insertSession("S-B", Mode.CUBE_3x3, "guest")
 
         val sA = (1..5).map { i ->
             SolveEntity("sa-$i", "guest", sessionA.id, "3x3", 10000L + i, "none", "2026-08-30T10:0$i:00Z", "R", 0L)
@@ -542,7 +541,6 @@ class Milestone3Gen3Challenger2RollbackAndIsolationTest {
         }
         realSolveDao.insertAll(sA + sB)
 
-        sessionManager.setActiveSession("guest", Mode.CUBE_3x3, sessionA.id)
         sessionManager.getActiveSessionFlow("guest", Mode.CUBE_3x3).first { it?.id == sessionA.id }
 
         val vm = createViewModel()
@@ -604,7 +602,7 @@ class Milestone3Gen3Challenger2RollbackAndIsolationTest {
         override suspend fun initialize() = Unit
         override suspend fun register(email: String, password: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun login(email: String, password: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
-        override suspend fun loginWithGoogle(idToken: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
+        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun verifyEmail(token: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun resendVerificationEmail(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun requestPasswordReset(email: String): AuthResult<Unit> = AuthResult.Success(Unit)

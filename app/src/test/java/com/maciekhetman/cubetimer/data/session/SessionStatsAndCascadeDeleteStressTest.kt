@@ -35,6 +35,7 @@ import java.util.UUID
 import kotlin.math.roundToInt
 import kotlin.random.Random
 import kotlin.system.measureTimeMillis
+import com.maciekhetman.cubetimer.testutil.insertSession
 
 /**
  * Adversarial empirical stress testing for Milestone 1:
@@ -375,7 +376,7 @@ class SessionStatsAndCascadeDeleteStressTest {
 
     @Test
     fun testDeleteSessionWithSolves_sessionWithZeroSolves_handledCleanly() = runTest {
-        val session = repository.createManualSession("Zero Solves Session", Mode.CUBE_3x3, ownerId = "guest")
+        val session = repository.insertSession("Zero Solves Session", Mode.CUBE_3x3, ownerId = "guest")
 
         // Cascade delete on session with 0 solves
         val snapshot = repository.deleteSessionWithSolves(session.id, ownerId = "guest")
@@ -396,7 +397,7 @@ class SessionStatsAndCascadeDeleteStressTest {
 
     @Test
     fun testDeleteSessionWithSolves_doubleDelete_returnsNullOnSecondAttempt() = runTest {
-        val session = repository.createManualSession("Double Delete Target", Mode.CUBE_3x3, ownerId = "guest")
+        val session = repository.insertSession("Double Delete Target", Mode.CUBE_3x3, ownerId = "guest")
         val solve = SolveEntity(
             id = "solve-dd-1",
             ownerId = "guest",
@@ -428,7 +429,7 @@ class SessionStatsAndCascadeDeleteStressTest {
     @Test
     fun testOutboxMutations_sessionUpsertPrecedesSolveUpserts_andSessionDeletePrecedesSolveDeletes() = runTest {
         val userId = "user-outbox-seq"
-        val session = repository.createManualSession("Sequencing Session", Mode.CUBE_3x3, ownerId = userId)
+        val session = repository.insertSession("Sequencing Session", Mode.CUBE_3x3, ownerId = userId)
 
         val solves = (1..5).map { i ->
             SolveEntity(

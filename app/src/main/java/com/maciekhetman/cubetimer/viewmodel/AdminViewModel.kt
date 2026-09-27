@@ -41,6 +41,7 @@ sealed interface ErrorsUiState {
     data class Success(
         val errors: List<AdminErrorLogItem>,
         val nextCursor: String?,
+        val nextCursorId: Long? = null,
         val isLoadingMore: Boolean = false,
         val filterQuery: String = ""
     ) : ErrorsUiState {
@@ -119,7 +120,7 @@ class AdminViewModel(
 
         _uiState.update { it.copy(errorsState = current.copy(isLoadingMore = true)) }
         viewModelScope.launch {
-            adminRepository.getErrorLogs(before = current.nextCursor)
+            adminRepository.getErrorLogs(before = current.nextCursor, beforeId = current.nextCursorId)
                 .onSuccess { page ->
                     _uiState.update { state ->
                         val latest = state.errorsState
@@ -128,6 +129,7 @@ class AdminViewModel(
                                 errorsState = latest.copy(
                                     errors = latest.errors + page.errors,
                                     nextCursor = page.nextCursor,
+                                    nextCursorId = page.nextCursorId,
                                     isLoadingMore = false
                                 )
                             )
@@ -184,7 +186,9 @@ class AdminViewModel(
             )
 
             val newErrors = errorsResult.fold(
-                onSuccess = { ErrorsUiState.Success(errors = it.errors, nextCursor = it.nextCursor) },
+                onSuccess = {
+                    ErrorsUiState.Success(errors = it.errors, nextCursor = it.nextCursor, nextCursorId = it.nextCursorId)
+                },
                 onFailure = { err ->
                     if (err is AuthException.Forbidden) accessDenied = true
                     ErrorsUiState.Error(

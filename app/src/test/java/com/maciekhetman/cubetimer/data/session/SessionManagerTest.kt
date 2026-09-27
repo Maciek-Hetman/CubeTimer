@@ -1,8 +1,8 @@
 package com.maciekhetman.cubetimer.data.session
 
 import android.content.Context
-import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.test.core.app.ApplicationProvider
 import app.cash.turbine.test
 import com.maciekhetman.cubetimer.data.auth.AuthManager
@@ -12,6 +12,7 @@ import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
 import com.maciekhetman.cubetimer.data.settingsDataStore
 import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.Mode
+import com.maciekhetman.cubetimer.model.Session
 import com.maciekhetman.cubetimer.model.SessionKind
 import com.maciekhetman.cubetimer.model.User
 import com.maciekhetman.cubetimer.model.currentUser
@@ -56,7 +57,6 @@ class SessionManagerTest {
         )
         fakeAuthManager = FakeAuthManager()
         sessionManager = SessionManagerImpl(
-            context = context,
             sessionRepository = sessionRepository,
             solveDao = database.solveDao(),
             authManager = fakeAuthManager
@@ -146,89 +146,65 @@ class SessionManagerTest {
     }
 
     @Test
-    fun testManualSessionModeSwitchAndFallback() = runTest {
-        sessionManager.setSessionMode(Mode.CUBE_3x3, SessionKind.MANUAL)
-        val modeKind = sessionManager.getSessionModeFlow(Mode.CUBE_3x3).first()
-        assertEquals(SessionKind.MANUAL, modeKind)
-
-        // Creating manual session
-        val manual1 = sessionManager.createManualSession("Warmup", Mode.CUBE_3x3, "guest")
-        assertEquals("Warmup", manual1.name)
-        assertEquals(SessionKind.MANUAL, manual1.kind)
-
-        // Active session should now be manual1
-        val active = sessionManager.getOrCreateActiveSession("guest", Mode.CUBE_3x3)
-        assertEquals(manual1.id, active.id)
-
-        // Create second manual session
-        val manual2 = sessionManager.createManualSession("PB Grind", Mode.CUBE_3x3, "guest")
-        val active2 = sessionManager.getOrCreateActiveSession("guest", Mode.CUBE_3x3)
-        assertEquals(manual2.id, active2.id)
-
-        // Archive active manual2 -> should fallback
-        sessionManager.archiveSession(manual2.id, Mode.CUBE_3x3, "guest")
-        val isAuto = sessionManager.isAutomaticModeFlow(Mode.CUBE_3x3).first()
-        assertTrue(isAuto)
-    }
-
-    @Test
-    fun testReactiveActiveSessionFlow() = runTest {
+    fun testReactiveActiveSessionFlowFollowsAutomaticRollover() = runTest {
         sessionManager.getActiveSessionFlow(Mode.CUBE_3x3).test {
-            // Initially null (no active sessions created yet)
+            // Initially null (no sessions created yet)
             assertNull(awaitItem())
 
-            // Create automatic session
-            val nowMs = System.currentTimeMillis()
-            val autoSession = sessionManager.getOrCreateActiveSession("guest", Mode.CUBE_3x3, nowMs)
+            val t0 = LocalDateTime.of(2026, 8, 30, 18, 0).toInstant(ZoneOffset.UTC).toEpochMilli()
+            val autoSession = sessionManager.getOrCreateActiveSession("guest", Mode.CUBE_3x3, t0)
             val emitted = awaitItem()
             assertNotNull(emitted)
             assertEquals(autoSession.id, emitted?.id)
 
-            // Switch to manual mode with new session
-            val manualSession = sessionManager.createManualSession("Speed", Mode.CUBE_3x3, "guest")
-            val emittedManual = awaitItem()
-            assertNotNull(emittedManual)
-            assertEquals(manualSession.id, emittedManual?.id)
-
             cancelAndIgnoreRemainingEvents()
         }
+
+        // A solve, then a request past the inactivity gap: the next session becomes the active one.
+        val t0 = LocalDateTime.of(2026, 8, 30, 18, 0).toInstant(ZoneOffset.UTC).toEpochMilli()
+        val first = sessionManager.getActiveSessionFlow(Mode.CUBE_3x3).first()!!
+        database.solveDao().insert(
+            SolveEntity(
+                id = "solve-rollover",
+                ownerId = "guest",
+                sessionId = first.id,
+                event = "3x3",
+                durationMs = 11000L,
+                solvedAt = Instant.ofEpochMilli(t0).toString()
+            )
+        )
+        val next = sessionManager.getOrCreateActiveSession("guest", Mode.CUBE_3x3, t0 + 90 * 60 * 1000L)
+        assertNotEquals(first.id, next.id)
+        assertEquals(next.id, sessionManager.getActiveSessionFlow(Mode.CUBE_3x3).first()?.id)
     }
 
     @Test
-    fun testSessionModeLockedToAutomaticWhenHideSessionMenuInTopBarIsTrue() = runTest {
-        val hideKey = booleanPreferencesKey("hide_session_menu_in_top_bar")
+    fun testManualSessionsFromSyncOrOldInstallsAreNeverActive() = runTest {
+        // An open manual session (synced from another client, or created by an older build) plus
+        // the per-mode selection an older build stored in DataStore.
+        val manual = sessionRepository.createSession(
+            Session(
+                id = "manual-legacy",
+                ownerId = "guest",
+                name = "PB grind",
+                event = Mode.CUBE_3x3,
+                kind = SessionKind.MANUAL,
+                startedAt = "2026-08-30T08:00:00.000Z"
+            )
+        )
+        context.settingsDataStore.edit { prefs ->
+            prefs[stringPreferencesKey("session_mode_guest_CUBE_3x3")] = "manual"
+            prefs[stringPreferencesKey("active_manual_session_guest_CUBE_3x3")] = manual.id
+        }
 
-        // Create manual session and switch to it
-        val manualSession = sessionManager.createManualSession("Speed", Mode.CUBE_3x3, "guest")
-        assertEquals(SessionKind.MANUAL, sessionManager.getSessionModeFlow(Mode.CUBE_3x3).first())
-        assertFalse(sessionManager.isAutomaticModeFlow(Mode.CUBE_3x3).first())
-        assertEquals(manualSession.id, sessionManager.getActiveSessionFlow(Mode.CUBE_3x3).first()?.id)
+        assertNull(sessionManager.getActiveSessionFlow(Mode.CUBE_3x3).first())
 
-        // Enable hide_session_menu_in_top_bar
-        context.settingsDataStore.edit { it[hideKey] = true }
-
-        // Session mode should now be locked to AUTOMATIC
-        assertEquals(SessionKind.AUTOMATIC, sessionManager.getSessionModeFlow(Mode.CUBE_3x3).first())
-        assertTrue(sessionManager.isAutomaticModeFlow(Mode.CUBE_3x3).first())
-        val lockedActive = sessionManager.getActiveSessionFlow(Mode.CUBE_3x3).first()
-        // If an automatic session existed or when created, kind is AUTOMATIC
-        val activeOrCreated = sessionManager.getOrCreateActiveSession("guest", Mode.CUBE_3x3, System.currentTimeMillis())
-        assertEquals(SessionKind.AUTOMATIC, activeOrCreated.kind)
-
-        // Manual switches should be ignored / blocked
-        sessionManager.setSessionMode(Mode.CUBE_3x3, SessionKind.MANUAL)
-        assertEquals(SessionKind.AUTOMATIC, sessionManager.getSessionModeFlow(Mode.CUBE_3x3).first())
-        assertTrue(sessionManager.isAutomaticModeFlow(Mode.CUBE_3x3).first())
-
-        sessionManager.setActiveSession("guest", Mode.CUBE_3x3, manualSession.id)
-        assertTrue(sessionManager.isAutomaticModeFlow(Mode.CUBE_3x3).first())
-
-        // Disable hide_session_menu_in_top_bar
-        context.settingsDataStore.edit { it[hideKey] = false }
-        // Can now switch manually again
-        sessionManager.setActiveSession("guest", Mode.CUBE_3x3, manualSession.id)
-        assertEquals(manualSession.id, sessionManager.getActiveSessionFlow(Mode.CUBE_3x3).first()?.id)
-        assertFalse(sessionManager.isAutomaticModeFlow(Mode.CUBE_3x3).first())
+        val active = sessionManager.getOrCreateActiveSession("guest", Mode.CUBE_3x3, System.currentTimeMillis())
+        assertEquals(SessionKind.AUTOMATIC, active.kind)
+        assertNotEquals(manual.id, active.id)
+        assertEquals(active.id, sessionManager.getActiveSessionFlow(Mode.CUBE_3x3).first()?.id)
+        // The manual session itself is left untouched (still open, not deleted).
+        assertNull(sessionRepository.getSessionById(manual.id)?.endedAt)
     }
 
     private class FakeAuthManager(
@@ -245,7 +221,7 @@ class SessionManagerTest {
         override suspend fun initialize() {}
         override suspend fun register(email: String, password: String) = AuthResult.Success(Unit)
         override suspend fun login(email: String, password: String) = AuthResult.Success(User("user-1", email, "User", true))
-        override suspend fun loginWithGoogle(idToken: String) = AuthResult.Success(User("user-1", "user@test.com", "User", true))
+        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String) = AuthResult.Success(User("user-1", "user@test.com", "User", true))
         override suspend fun verifyEmail(token: String) = AuthResult.Success(User("user-1", "user@test.com", "User", true))
         override suspend fun resendVerificationEmail(email: String) = AuthResult.Success(Unit)
         override suspend fun requestPasswordReset(email: String) = AuthResult.Success(Unit)

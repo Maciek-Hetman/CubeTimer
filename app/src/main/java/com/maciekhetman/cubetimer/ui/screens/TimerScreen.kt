@@ -54,8 +54,10 @@ import com.maciekhetman.cubetimer.model.RunningTimerDisplay
 import com.maciekhetman.cubetimer.model.SolveTime
 import com.maciekhetman.cubetimer.model.TimerAverageOptions
 import com.maciekhetman.cubetimer.model.TimerState
+import com.maciekhetman.cubetimer.model.TimingDevice
+import com.maciekhetman.cubetimer.ui.bluetooth.BluetoothTimerDialog
+import com.maciekhetman.cubetimer.ui.bluetooth.BluetoothTimerStatusChip
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.maciekhetman.cubetimer.model.Session
 import kotlinx.coroutines.launch
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.shape.CircleShape
@@ -72,14 +74,6 @@ fun TimerScreen(
     viewModel: TimerViewModel,
     currentMode: Mode,
     onModeSelected: (Mode) -> Unit,
-    activeSession: Session? = null,
-    isAutomaticMode: Boolean = true,
-    onSwitchToAutomatic: () -> Unit = {},
-    sessions: List<Session> = emptyList(),
-    onSessionSelected: (Session) -> Unit = {},
-    onCreateSessionClick: () -> Unit = {},
-    onManageSessionsClick: () -> Unit = {},
-    hideSessionMenu: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     // NOTE: `timerState` is intentionally kept as a State<TimerState> (not read with `by` here) so that
@@ -103,9 +97,13 @@ fun TimerScreen(
     val hideLastResultsDuringSolve by viewModel.hideLastResultsDuringSolve.collectAsStateWithLifecycle()
     val hideLastResultsOnTimer by viewModel.hideLastResultsOnTimer.collectAsStateWithLifecycle()
     val hideStartHint by viewModel.hideStartHint.collectAsStateWithLifecycle()
-    val hideSessionMenuInTopBar by viewModel.hideSessionMenuInTopBar.collectAsStateWithLifecycle()
     val hapticsEnabled by viewModel.hapticsEnabled.collectAsStateWithLifecycle()
     val focusMode by viewModel.focusMode.collectAsStateWithLifecycle()
+    val timingDevice by viewModel.timingDevice.collectAsStateWithLifecycle()
+    val bluetoothTimerState by viewModel.bluetoothTimerState.collectAsStateWithLifecycle()
+    // With a Bluetooth timer the screen is display-only: the timer starts/stops solves.
+    val bluetoothMode = timingDevice == TimingDevice.EXTERNAL_TIMER
+    var showBluetoothDialog by remember { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -121,8 +119,8 @@ fun TimerScreen(
         (!isSolving || (!hideLastResultsDuringSolve && !focusModeActive))
     val showBottomContent = showAverages || showLastResults
 
-    LaunchedEffect(isHolding, timerStartDelayMillis, hapticsEnabled) {
-        if (isHolding && hapticsEnabled) {
+    LaunchedEffect(isHolding, timerStartDelayMillis, hapticsEnabled, bluetoothMode) {
+        if (isHolding && hapticsEnabled && !bluetoothMode) {
             val holdDuration = timerStartDelayMillis.coerceAtLeast(200)
             val pulses = listOf(
                 0.14f to 22,
@@ -145,8 +143,8 @@ fun TimerScreen(
     }
 
     // Trigger haptic feedback only once when timer starts
-    LaunchedEffect(isTimerRunning, hapticsEnabled) {
-        if (isTimerRunning && hapticsEnabled) {
+    LaunchedEffect(isTimerRunning, hapticsEnabled, bluetoothMode) {
+        if (isTimerRunning && hapticsEnabled && !bluetoothMode) {
             val usedVibrator = vibrateOneShot(context, durationMillis = 14L, amplitude = 255)
             if (!usedVibrator) {
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -173,14 +171,14 @@ fun TimerScreen(
             TimerTopHeader(
                 currentMode = currentMode,
                 onModeSelected = onModeSelected,
-                activeSession = activeSession,
-                isAutomaticMode = isAutomaticMode,
-                onSwitchToAutomatic = onSwitchToAutomatic,
-                sessions = sessions,
-                onSessionSelected = onSessionSelected,
-                onCreateSessionClick = onCreateSessionClick,
-                onManageSessionsClick = onManageSessionsClick,
-                hideSessionMenu = hideSessionMenu || hideSessionMenuInTopBar
+                extraActions = {
+                    if (bluetoothMode) {
+                        BluetoothTimerStatusChip(
+                            status = bluetoothTimerState.status,
+                            onClick = { showBluetoothDialog = true }
+                        )
+                    }
+                }
             )
         }
 
@@ -219,10 +217,14 @@ fun TimerScreen(
                         bottom = if (showBottomContent) bottomContentHeight + 12.dp else 96.dp
                     )
                     .semantics {
-                        contentDescription = if (isSolving) "Tap to stop timer" else "Tap and hold to start timer"
+                        contentDescription = when {
+                            bluetoothMode -> "Timer controlled by Bluetooth timer"
+                            isSolving -> "Tap to stop timer"
+                            else -> "Tap and hold to start timer"
+                        }
                     }
                     .then(
-                        if (!isFinished && recordCelebration == null) {
+                        if (!isFinished && recordCelebration == null && !bluetoothMode) {
                             Modifier.pointerInput(Unit) {
                                 awaitEachGesture {
                                     val down = awaitFirstDown()
@@ -247,7 +249,10 @@ fun TimerScreen(
                     viewModel = viewModel,
                     runningTimerDisplay = runningTimerDisplay,
                     focusModeActive = focusModeActive,
-                    hideStartHint = hideStartHint
+                    hideStartHint = hideStartHint,
+                    bluetoothMode = bluetoothMode,
+                    bluetoothConnected = bluetoothTimerState.isConnected,
+                    onConnectBluetoothTimer = { showBluetoothDialog = true }
                 )
             }
 
@@ -281,6 +286,10 @@ fun TimerScreen(
                 celebration = recordCelebration
             ) { viewModel.dismissRecordCelebration() }
         }
+    }
+
+    if (showBluetoothDialog) {
+        BluetoothTimerDialog(viewModel = viewModel, onDismiss = { showBluetoothDialog = false })
     }
 }
 
@@ -322,6 +331,9 @@ private fun TimerContent(
     runningTimerDisplay: RunningTimerDisplay,
     focusModeActive: Boolean,
     hideStartHint: Boolean = false,
+    bluetoothMode: Boolean = false,
+    bluetoothConnected: Boolean = false,
+    onConnectBluetoothTimer: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     // Reading the fast-changing TimerState here (via `by`) is intentional and safe: this is the small
@@ -353,15 +365,23 @@ private fun TimerContent(
                 showDecimals = state !is TimerState.Running ||
                     runningTimerDisplay == RunningTimerDisplay.FULL
             )
-            if (state !is TimerState.Idle || !hideStartHint) {
+            if (state !is TimerState.Idle || !hideStartHint || (bluetoothMode && !bluetoothConnected)) {
                 Spacer(modifier = Modifier.height(24.dp))
             }
         }
         when (state) {
             is TimerState.Idle -> {
-                if (!hideStartHint) {
+                if (bluetoothMode && !bluetoothConnected) {
+                    // Shown even with the start hint hidden: nothing can start a solve until then.
+                    FilledTonalButton(
+                        onClick = onConnectBluetoothTimer,
+                        shape = RoundedCornerShape(20.dp)
+                    ) {
+                        Text("Connect Bluetooth timer")
+                    }
+                } else if (!hideStartHint) {
                     Text(
-                        text = "Tap and hold to start",
+                        text = if (bluetoothMode) "Place both hands on the timer" else "Tap and hold to start",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -373,14 +393,17 @@ private fun TimerContent(
                 } else {
                     MaterialTheme.colorScheme.tertiary
                 }
-                LinearProgressIndicator(
-                    progress = { state.progress },
-                    modifier = Modifier
-                        .width(200.dp)
-                        .height(4.dp),
-                    color = color,
-                )
-                Spacer(modifier = Modifier.height(16.dp))
+                if (!bluetoothMode) {
+                    // The Bluetooth timer runs its own hold countdown; there is no progress to show.
+                    LinearProgressIndicator(
+                        progress = { state.progress },
+                        modifier = Modifier
+                            .width(200.dp)
+                            .height(4.dp),
+                        color = color,
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
                 Text(
                     text = "Hold...",
                     style = MaterialTheme.typography.bodyLarge,
@@ -389,7 +412,7 @@ private fun TimerContent(
             }
             is TimerState.Ready -> {
                 Text(
-                    text = "Release to start!",
+                    text = if (bluetoothMode) "Lift your hands to start!" else "Release to start!",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.tertiary,
                     fontWeight = FontWeight.Bold
@@ -397,7 +420,7 @@ private fun TimerContent(
             }
             is TimerState.Running -> {
                 Text(
-                    text = "Tap to stop",
+                    text = if (bluetoothMode) "Stop on the timer" else "Tap to stop",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.primary
                 )

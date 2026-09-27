@@ -87,7 +87,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.maciekhetman.cubetimer.domain.TimeFormatter
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Penalty
-import com.maciekhetman.cubetimer.model.Session
 import com.maciekhetman.cubetimer.model.SolveTime
 import com.maciekhetman.cubetimer.ui.components.CollapsingTopBar
 import com.maciekhetman.cubetimer.ui.components.GroupInnerCorner
@@ -117,15 +116,7 @@ fun HistoryScreen(
     viewModel: HistoryViewModel,
     currentMode: Mode,
     onModeSelected: (Mode) -> Unit,
-    activeSession: Session? = null,
-    isAutomaticMode: Boolean = true,
-    onSwitchToAutomatic: () -> Unit = {},
-    sessions: List<Session> = emptyList(),
-    onSessionSelected: (Session) -> Unit = {},
-    onCreateSessionClick: () -> Unit = {},
-    onManageSessionsClick: () -> Unit = {},
     onSolveClick: (SolveTime, Int) -> Unit = { _, _ -> },
-    hideSessionMenu: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -235,14 +226,6 @@ fun HistoryScreen(
                         currentMode = currentMode,
                         onModeSelected = onModeSelected,
                         scrollBehavior = scrollBehavior,
-                        activeSession = activeSession,
-                        isAutomaticMode = isAutomaticMode,
-                        onSwitchToAutomatic = onSwitchToAutomatic,
-                        sessions = sessions,
-                        onSessionSelected = onSessionSelected,
-                        onCreateSessionClick = onCreateSessionClick,
-                        onManageSessionsClick = onManageSessionsClick,
-                        hideSessionMenu = hideSessionMenu,
                         extraActions = {
                             IconButton(onClick = { viewModel.openFilterSheet() }) {
                                 BadgedBox(
@@ -444,7 +427,6 @@ fun HistoryScreen(
             onSelectTab = viewModel::setActiveFilterSheetTab,
             onSessionSortChange = viewModel::setSessionSort,
             onPuzzleScopeChange = viewModel::setPuzzleScope,
-            onSessionKindFilterChange = viewModel::setSessionKindFilter,
             onSolveSortChange = viewModel::setSolveSort,
             onPenaltyFilterChange = viewModel::setPenaltyFilter,
             onTimeRangeFilterChange = { viewModel.setTimeRangeFilter(it) },

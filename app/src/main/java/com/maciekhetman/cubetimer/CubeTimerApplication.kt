@@ -14,6 +14,8 @@ import com.maciekhetman.cubetimer.data.auth.AuthManager
 import com.maciekhetman.cubetimer.data.auth.AuthManagerImpl
 import com.maciekhetman.cubetimer.data.auth.EncryptedTokenStorage
 import com.maciekhetman.cubetimer.data.auth.TokenStorage
+import com.maciekhetman.cubetimer.data.bluetooth.AndroidBluetoothTimerManager
+import com.maciekhetman.cubetimer.data.bluetooth.BluetoothTimerManager
 import com.maciekhetman.cubetimer.data.local.CubeDatabase
 import com.maciekhetman.cubetimer.data.remote.AuthInterceptor
 import com.maciekhetman.cubetimer.data.remote.CubeSyncApiClient
@@ -122,7 +124,6 @@ class CubeTimerApplication : Application(), Configuration.Provider {
 
     val sessionManager: SessionManager by lazy {
         SessionManagerImpl(
-            context = this,
             sessionRepository = sessionRepository,
             solveDao = database.solveDao(),
             authManager = authManager
@@ -150,6 +151,11 @@ class CubeTimerApplication : Application(), Configuration.Provider {
      * network client) never happens on the main thread.
      */
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    /** App-wide so a connected Bluetooth timer survives screen and ViewModel changes. */
+    val bluetoothTimerManager: BluetoothTimerManager by lazy {
+        AndroidBluetoothTimerManager(this, applicationScope)
+    }
 
     /**
      * Schedules an immediate sync only when there is a real (non-guest) owner. Used by every

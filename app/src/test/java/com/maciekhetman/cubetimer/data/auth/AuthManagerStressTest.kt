@@ -592,7 +592,7 @@ class AuthManagerStressTest {
             return googleLoginResponse ?: throw AuthException.InvalidSocialToken()
         }
 
-        override suspend fun linkGoogle(idToken: String, authToken: String?) {}
+        override suspend fun linkGoogle(request: com.maciekhetman.cubetimer.data.remote.dto.GoogleAuthRequest, authToken: String?) {}
         override suspend fun getCurrentUser(authToken: String?): UserDto = UserDto("u", "e@t.com")
         override suspend fun changePassword(request: ChangePasswordRequest, authToken: String?) {}
         override suspend fun deleteAccount(authToken: String?) {}

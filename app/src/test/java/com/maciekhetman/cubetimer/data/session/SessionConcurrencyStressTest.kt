@@ -30,6 +30,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import com.maciekhetman.cubetimer.testutil.insertSession
 import java.time.Instant
 
 @RunWith(RobolectricTestRunner::class)
@@ -61,7 +62,6 @@ class SessionConcurrencyStressTest {
         )
         fakeAuthManager = FakeAuthManager()
         sessionManager = SessionManagerImpl(
-            context = context,
             sessionRepository = sessionRepository,
             solveDao = database.solveDao(),
             authManager = fakeAuthManager
@@ -106,31 +106,17 @@ class SessionConcurrencyStressTest {
     }
 
     @Test
-    fun testSimultaneousSolveRecordingAndSessionSwitching() = runTest {
+    fun testSimultaneousSolveRecordingWhileOtherSessionsChurn() = runTest {
         val solverCount = 8
         val solvesPerCoroutine = 5
 
-        // Create 2 manual sessions
-        val manual1 = sessionManager.createManualSession("Session A", Mode.CUBE_3x3, "guest")
-        val manual2 = sessionManager.createManualSession("Session B", Mode.CUBE_3x3, "guest")
-
         coroutineScope {
-            // Task 1: Rapidly switch active session between Session A, Session B, and Automatic
-            val switcherJob = async {
-                for (i in 1..20) {
-                    when (i % 3) {
-                        0 -> sessionManager.setActiveSession("guest", Mode.CUBE_3x3, manual1.id)
-                        1 -> sessionManager.setActiveSession("guest", Mode.CUBE_3x3, manual2.id)
-                        2 -> sessionManager.clearManualSessionOverride("guest", Mode.CUBE_3x3)
-                    }
-                }
-            }
-
-            // Task 2: Concurrently create and archive temporary sessions
-            val archiverJob = async {
+            // Unrelated sessions (e.g. synced down from another client) being created and closed
+            // concurrently must never steal solves from the automatic session.
+            val churnJob = async {
                 for (i in 1..5) {
-                    val temp = sessionManager.createManualSession("Temp $i", Mode.CUBE_3x3, "guest")
-                    sessionManager.archiveSession(temp.id, Mode.CUBE_3x3, "guest")
+                    val other = sessionRepository.insertSession("Synced $i", Mode.CUBE_3x3, "guest")
+                    sessionRepository.closeSession(other.id, "guest")
                 }
             }
 
@@ -143,6 +129,7 @@ class SessionConcurrencyStressTest {
                             mode = Mode.CUBE_3x3
                         )
                         assertNotNull(active)
+                        assertEquals(SessionKind.AUTOMATIC, active.kind)
 
                         val solve = SolveTime(
                             id = "concurrent-solve-$threadIdx-$solveIdx",
@@ -158,8 +145,7 @@ class SessionConcurrencyStressTest {
                 }
             }
 
-            switcherJob.await()
-            archiverJob.await()
+            churnJob.await()
             solverJobs.awaitAll()
         }
 
@@ -167,14 +153,12 @@ class SessionConcurrencyStressTest {
         val totalSolves = database.solveDao().getAllActiveSolvesForOwner("guest")
         assertEquals(solverCount * solvesPerCoroutine, totalSolves.size)
 
-        // Verify all solves have a non-null sessionId pointing to a valid session
-        val allSessions = database.sessionDao().getAllSessionsForOwner("guest")
-        val sessionIds = allSessions.map { it.id }.toSet()
-
-        for (solve in totalSolves) {
-            assertNotNull("Solve sessionId must not be null", solve.sessionId)
-            assertTrue("Solve sessionId must correspond to an existing session", sessionIds.contains(solve.sessionId))
-        }
+        // Every solve landed in the one automatic session (all were recorded within the gap).
+        val sessionIds = totalSolves.map { it.sessionId }.toSet()
+        assertEquals(1, sessionIds.size)
+        val session = database.sessionDao().getSessionById(sessionIds.single()!!)
+        assertNotNull("Solve sessionId must correspond to an existing session", session)
+        assertEquals(SessionKind.AUTOMATIC.value, session!!.kind)
     }
 
     @Test
@@ -217,7 +201,7 @@ class SessionConcurrencyStressTest {
         override suspend fun initialize() {}
         override suspend fun register(email: String, password: String) = AuthResult.Success(Unit)
         override suspend fun login(email: String, password: String) = AuthResult.Success(User("user-1", email, "User", true))
-        override suspend fun loginWithGoogle(idToken: String) = AuthResult.Success(User("user-1", "user@test.com", "User", true))
+        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String) = AuthResult.Success(User("user-1", "user@test.com", "User", true))
         override suspend fun verifyEmail(token: String) = AuthResult.Success(User("user-1", "user@test.com", "User", true))
         override suspend fun resendVerificationEmail(email: String) = AuthResult.Success(Unit)
         override suspend fun requestPasswordReset(email: String) = AuthResult.Success(Unit)

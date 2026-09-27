@@ -31,15 +31,6 @@ enum class PuzzleScope(val displayName: String) {
 }
 
 /**
- * Filter determining whether all sessions, manual sessions only, or automatic sessions only are shown.
- */
-enum class SessionKindFilter(val displayName: String) {
-    ALL("All"),
-    MANUAL_ONLY("Manual Only"),
-    AUTOMATIC_ONLY("Automatic Only")
-}
-
-/**
  * Ordering options for individual solves displayed inside expanded session groups.
  */
 enum class SolveSortOrder(val displayName: String) {
@@ -148,7 +139,6 @@ data class HistoryUiState(
     // Filtering & Sorting - Sessions Tab
     val sessionSort: SessionSortOrder = SessionSortOrder.MOST_RECENT,
     val puzzleScope: PuzzleScope = PuzzleScope.ACTIVE_PUZZLE,
-    val sessionKindFilter: SessionKindFilter = SessionKindFilter.ALL,
 
     // Filtering & Sorting - Solves Tab
     val solveSort: SolveSortOrder = SolveSortOrder.MOST_RECENT,
@@ -177,8 +167,7 @@ data class HistoryUiState(
 ) {
     val activeSessionFilterCount: Int
         get() = (if (sessionSort != SessionSortOrder.MOST_RECENT) 1 else 0) +
-                (if (puzzleScope != PuzzleScope.ACTIVE_PUZZLE) 1 else 0) +
-                (if (sessionKindFilter != SessionKindFilter.ALL) 1 else 0)
+                (if (puzzleScope != PuzzleScope.ACTIVE_PUZZLE) 1 else 0)
 
     val activeSolveFilterCount: Int
         get() = (if (solveSort != SolveSortOrder.MOST_RECENT) 1 else 0) +

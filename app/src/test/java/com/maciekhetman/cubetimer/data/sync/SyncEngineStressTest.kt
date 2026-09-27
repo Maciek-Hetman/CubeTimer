@@ -434,6 +434,63 @@ class SyncEngineStressTest {
     }
 
     @Test
+    fun snapshotBootstrap_followsNextEntityHandOverWhenSessionPagesRunOut() = runTest {
+        // Mirrors the real /v1/snapshot: the last session page answers has_more = false with
+        // next_entity = "solve", and solve pages then start again from the zero UUID.
+        val zeroUuid = "00000000-0000-0000-0000-000000000000"
+        val requests = mutableListOf<SnapshotRequest>()
+        fakeApiClient.dynamicSnapshotHandler = { request ->
+            requests += request
+            when {
+                request.entity == "session" && request.afterId == zeroUuid -> SnapshotResponse(
+                    sessions = listOf(
+                        SessionSnapshotDto(id = "s-1", name = "one", event = "3x3", startedAt = "2026-08-30T07:00:00Z", version = 3L)
+                    ),
+                    cursor = 900L,
+                    hasMore = true,
+                    nextEntity = "session",
+                    nextAfterId = "s-1"
+                )
+                request.entity == "session" -> SnapshotResponse(
+                    sessions = listOf(
+                        SessionSnapshotDto(id = "s-2", name = "two", event = "3x3", startedAt = "2026-08-30T08:00:00Z", version = 4L)
+                    ),
+                    cursor = 900L,
+                    hasMore = false,
+                    nextEntity = "solve"
+                )
+                request.entity == "solve" && request.afterId == zeroUuid -> SnapshotResponse(
+                    solves = listOf(
+                        SolveSnapshotDto(
+                            id = "bt-solve",
+                            sessionId = "s-2",
+                            durationMs = 8765L,
+                            solvedAt = "2026-08-30T08:05:00Z",
+                            version = 5L,
+                            timingDevice = "external_timer"
+                        )
+                    ),
+                    cursor = 900L,
+                    hasMore = false
+                )
+                else -> throw AssertionError("unexpected snapshot request $request")
+            }
+        }
+
+        val cursor = syncEngine.runSnapshotBootstrap(testUserId)
+
+        assertEquals(900L, cursor)
+        assertEquals(listOf("session", "session", "solve"), requests.map { it.entity })
+        assertEquals(listOf(zeroUuid, "s-1", zeroUuid), requests.map { it.afterId })
+        assertEquals(listOf(0L, 900L, 900L), requests.map { it.cursor })
+        assertEquals(2, sessionDao.getAllActiveSessionsForOwner(testUserId).size)
+        val solve = solveDao.getSolveById("bt-solve")
+        assertNotNull("solves must be fetched after the session pages", solve)
+        assertEquals("external_timer", solve!!.timingDevice)
+        assertEquals(900L, syncMetadataDao.getMetadata(testUserId)?.cursor)
+    }
+
+    @Test
     fun snapshotRecoveryStress_preservesPendingOutboxMutationsAcross409Recovery() = runTest {
         // Enqueue 50 local mutations
         for (i in 1..50) {
@@ -796,7 +853,7 @@ class SyncEngineStressTest {
         override suspend fun requestPasswordReset(email: String): StatusResponse = throw NotImplementedError()
         override suspend fun confirmPasswordReset(token: String, newPassword: String): AuthResponse = throw NotImplementedError()
         override suspend fun loginWithGoogle(request: GoogleAuthRequest): AuthResponse = throw NotImplementedError()
-        override suspend fun linkGoogle(idToken: String, authToken: String?) = Unit
+        override suspend fun linkGoogle(request: com.maciekhetman.cubetimer.data.remote.dto.GoogleAuthRequest, authToken: String?) = Unit
         override suspend fun getCurrentUser(authToken: String?): UserDto = throw NotImplementedError()
         override suspend fun changePassword(request: ChangePasswordRequest, authToken: String?) = Unit
         override suspend fun deleteAccount(authToken: String?) = Unit
@@ -830,7 +887,7 @@ class SyncEngineStressTest {
         override suspend fun initialize() {}
         override suspend fun register(email: String, password: String) = throw NotImplementedError()
         override suspend fun login(email: String, password: String) = throw NotImplementedError()
-        override suspend fun loginWithGoogle(idToken: String) = throw NotImplementedError()
+        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String) = throw NotImplementedError()
         override suspend fun verifyEmail(token: String) = throw NotImplementedError()
         override suspend fun resendVerificationEmail(email: String) = throw NotImplementedError()
         override suspend fun requestPasswordReset(email: String) = throw NotImplementedError()

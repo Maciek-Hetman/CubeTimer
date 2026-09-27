@@ -131,5 +131,7 @@ data class AdminErrorLogItem(
  */
 data class AdminErrorLogPage(
     val errors: List<AdminErrorLogItem>,
-    val nextCursor: String?
+    val nextCursor: String?,
+    /** Id half of the keyset cursor; must accompany [nextCursor] on the next request. */
+    val nextCursorId: Long? = null
 )

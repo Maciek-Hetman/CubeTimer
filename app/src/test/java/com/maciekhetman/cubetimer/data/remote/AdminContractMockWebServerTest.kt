@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -207,6 +208,35 @@ class AdminContractMockWebServerTest {
         assertEquals("cursor_expired", errorLogs.errors[0].code)
         assertEquals("usr_999", errorLogs.errors[0].userId)
         assertEquals("cur_next_999", errorLogs.nextCursor)
+    }
+
+    @Test
+    fun testGetAdminErrorLogsSendsFullKeysetCursor() = runTest {
+        // The backend pages on (created_at, id) < (before, before_id); sending only `before`
+        // makes it default before_id to MaxInt64 and repeat the previous page's last row.
+        val jsonBody = """
+{
+  "errors": [],
+  "next_cursor": "2026-08-30T09:59:59.123456Z",
+  "next_cursor_id": 77
+}
+        """.trimIndent()
+        mockWebServer.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "application/json")
+                .setBody(jsonBody)
+        )
+
+        val page = apiClient.getAdminErrorLogs(before = "2026-08-30T10:00:00Z", beforeId = 101L, limit = 50)
+
+        val url = ("http://localhost" + mockWebServer.takeRequest().path).toHttpUrl()
+        assertEquals("/v1/admin/stats/errors", url.encodedPath)
+        assertEquals("2026-08-30T10:00:00Z", url.queryParameter("before"))
+        assertEquals("101", url.queryParameter("before_id"))
+        assertEquals("50", url.queryParameter("limit"))
+        assertEquals("2026-08-30T09:59:59.123456Z", page.nextCursor)
+        assertEquals(77L, page.nextCursorId)
     }
 
     @Test

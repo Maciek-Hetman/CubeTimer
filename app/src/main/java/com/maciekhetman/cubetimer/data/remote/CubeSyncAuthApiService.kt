@@ -134,6 +134,8 @@ interface CubeSyncAuthApiService {
     @GET("v1/admin/stats/errors")
     suspend fun getAdminErrorLogs(
         @Header("Authorization") authorization: String? = null,
-        @Query("before") before: String? = null
+        @Query("before") before: String? = null,
+        @Query("before_id") beforeId: Long? = null,
+        @Query("limit") limit: Int? = null
     ): Response<ErrorLogResponseDto>
 }

@@ -86,7 +86,7 @@ class StatsFilterTest {
             ownerId = "guest",
             name = "Session Alpha",
             event = Mode.CUBE_3x3,
-            kind = SessionKind.MANUAL,
+            kind = SessionKind.AUTOMATIC,
             startedAt = nowIso
         )
         sessionB = Session(
@@ -94,7 +94,7 @@ class StatsFilterTest {
             ownerId = "guest",
             name = "Session Beta",
             event = Mode.CUBE_3x3,
-            kind = SessionKind.MANUAL,
+            kind = SessionKind.AUTOMATIC,
             startedAt = nowIso
         )
 
@@ -180,8 +180,8 @@ class StatsFilterTest {
         assertEquals(1, timerViewModel.statsFilteredSolves.value.size)
         assertEquals(sessionAId, timerViewModel.statsFilteredSolves.value.first().sessionId)
 
-        // Switch active session to Session B
-        fakeSessionManager.setActiveSession(Mode.CUBE_3x3, sessionBId)
+        // The automatic session rolls over to Session B (e.g. after the inactivity gap)
+        fakeSessionManager.switchActiveSession(sessionBId)
         advanceUntilIdle()
 
         assertEquals(1, timerViewModel.statsFilteredSolves.value.size)
@@ -214,38 +214,16 @@ class StatsFilterTest {
         private val sessionB: Session
     ) : SessionManager {
         private val _activeSession = MutableStateFlow<Session?>(sessionA)
-        private val _sessionMode = MutableStateFlow(SessionKind.MANUAL)
 
         override fun getActiveSessionFlow(mode: Mode): Flow<Session?> = _activeSession.asStateFlow()
         override fun getActiveSessionFlow(ownerId: String, mode: Mode): Flow<Session?> = _activeSession.asStateFlow()
-        override fun getSessionModeFlow(mode: Mode): Flow<SessionKind> = _sessionMode.asStateFlow()
-        override fun isAutomaticModeFlow(mode: Mode): Flow<Boolean> = MutableStateFlow(false)
-
-        override suspend fun setSessionMode(mode: Mode, kind: SessionKind) {
-            _sessionMode.value = kind
-        }
-        override suspend fun setAutomaticMode(mode: Mode, enabled: Boolean) {
-            _sessionMode.value = if (enabled) SessionKind.AUTOMATIC else SessionKind.MANUAL
-        }
-        override suspend fun setActiveSession(mode: Mode, sessionId: String) {
-            _activeSession.value = if (sessionId == sessionA.id) sessionA else sessionB
-        }
-        override suspend fun setActiveSession(ownerId: String, mode: Mode, sessionId: String) {
-            setActiveSession(mode, sessionId)
-        }
         override suspend fun getOrCreateActiveSession(ownerId: String, mode: Mode, solveTimestamp: Long?): Session {
             return _activeSession.value ?: sessionA
         }
-        override suspend fun createManualSession(name: String, mode: Mode, ownerId: String?): Session = sessionA
-        override suspend fun renameSession(id: String, newName: String, ownerId: String?): Session? = _activeSession.value
-        override suspend fun archiveSession(id: String, mode: Mode?, ownerId: String?): Session? = _activeSession.value
-        override suspend fun unarchiveSession(id: String, ownerId: String?): Session? = _activeSession.value
-        override suspend fun deleteSession(id: String, mode: Mode?, ownerId: String?): Boolean = true
-        override suspend fun clearManualSessionOverride(mode: Mode) {
-            _sessionMode.value = SessionKind.AUTOMATIC
-        }
-        override suspend fun clearManualSessionOverride(ownerId: String, mode: Mode) {
-            _sessionMode.value = SessionKind.AUTOMATIC
+
+        /** Test control: simulate the automatic session rolling over to another session. */
+        fun switchActiveSession(sessionId: String) {
+            _activeSession.value = if (sessionId == sessionA.id) sessionA else sessionB
         }
     }
 
@@ -257,7 +235,7 @@ class StatsFilterTest {
         override suspend fun initialize() = Unit
         override suspend fun register(email: String, password: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun login(email: String, password: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
-        override suspend fun loginWithGoogle(idToken: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
+        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun verifyEmail(token: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun resendVerificationEmail(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun requestPasswordReset(email: String): AuthResult<Unit> = AuthResult.Success(Unit)

@@ -131,7 +131,7 @@ class TokenAuthenticator(
             .url(refreshUrl)
             .post(body)
             .header(AuthInterceptor.HEADER_DEVICE_ID, tokenStorage.getDeviceId())
-            .header(AuthInterceptor.HEADER_SYNC_PROTOCOL, AuthInterceptor.PROTOCOL_VERSION_2)
+            .header(AuthInterceptor.HEADER_SYNC_PROTOCOL, AuthInterceptor.SYNC_PROTOCOL_VERSION)
             .header(AuthInterceptor.HEADER_CONTENT_TYPE, AuthInterceptor.CONTENT_TYPE_JSON)
             .build()
 

@@ -16,7 +16,6 @@ import com.maciekhetman.cubetimer.data.local.mapper.toUpsertMutation
 import com.maciekhetman.cubetimer.data.remote.NetworkModule
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Session
-import com.maciekhetman.cubetimer.model.SessionKind
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -24,8 +23,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
-import java.time.Instant
-import java.util.UUID
 
 class SessionRepositoryImpl(
     private val database: CubeDatabase,
@@ -46,12 +43,6 @@ class SessionRepositoryImpl(
     override fun observeAllSessions(ownerId: String, mode: Mode): Flow<List<Session>> {
         return sessionDao.observeAllSessionsByEvent(ownerId, CubeTypeConverters.fromMode(mode))
             .map { list -> list.map { it.toDomain() } }
-            .distinctUntilChanged()
-    }
-
-    override fun observeArchivedSessions(ownerId: String, mode: Mode): Flow<List<Session>> {
-        return sessionDao.observeAllSessionsByEvent(ownerId, CubeTypeConverters.fromMode(mode))
-            .map { list -> list.filter { it.archived }.map { it.toDomain() } }
             .distinctUntilChanged()
     }
 
@@ -99,97 +90,6 @@ class SessionRepositoryImpl(
         }
         syncTrigger?.invoke()
         created
-    }
-
-    override suspend fun createManualSession(
-        name: String,
-        mode: Mode,
-        ownerId: String
-    ): Session = withContext(ioDispatcher) {
-        val trimmedName = name.trim().ifBlank { "Session" }
-        val nowIso = CubeTypeConverters.nowIso()
-        val session = Session(
-            id = UUID.randomUUID().toString(),
-            ownerId = ownerId,
-            name = trimmedName,
-            event = mode,
-            kind = SessionKind.MANUAL,
-            archived = false,
-            startedAt = nowIso,
-            endedAt = null,
-            version = 0L,
-            updatedAt = nowIso,
-            deletedAt = null
-        )
-        createSession(session)
-    }
-
-    override suspend fun renameSession(
-        id: String,
-        newName: String,
-        ownerId: String
-    ): Session? = withContext(ioDispatcher) {
-        val updated = database.withTransaction {
-            val existing = sessionDao.getSessionById(id) ?: return@withTransaction null
-            val nowIso = CubeTypeConverters.nowIso()
-            val entity = existing.copy(
-                name = newName.trim(),
-                updatedAt = nowIso
-            )
-            sessionDao.update(entity)
-
-            if (entity.ownerId != "guest") {
-                syncOutboxDao.enqueue(entity.toUpsertMutation(clientTime = nowIso, json = json))
-            }
-            entity.toDomain()
-        }
-        syncTrigger?.invoke()
-        updated
-    }
-
-    override suspend fun archiveSession(
-        id: String,
-        ownerId: String
-    ): Session? = withContext(ioDispatcher) {
-        val updated = database.withTransaction {
-            val existing = sessionDao.getSessionById(id) ?: return@withTransaction null
-            val nowIso = CubeTypeConverters.nowIso()
-            val entity = existing.copy(
-                archived = true,
-                endedAt = existing.endedAt ?: nowIso,
-                updatedAt = nowIso
-            )
-            sessionDao.update(entity)
-
-            if (entity.ownerId != "guest") {
-                syncOutboxDao.enqueue(entity.toUpsertMutation(clientTime = nowIso, json = json))
-            }
-            entity.toDomain()
-        }
-        syncTrigger?.invoke()
-        updated
-    }
-
-    override suspend fun unarchiveSession(
-        id: String,
-        ownerId: String
-    ): Session? = withContext(ioDispatcher) {
-        val updated = database.withTransaction {
-            val existing = sessionDao.getSessionById(id) ?: return@withTransaction null
-            val nowIso = CubeTypeConverters.nowIso()
-            val entity = existing.copy(
-                archived = false,
-                updatedAt = nowIso
-            )
-            sessionDao.update(entity)
-
-            if (entity.ownerId != "guest") {
-                syncOutboxDao.enqueue(entity.toUpsertMutation(clientTime = nowIso, json = json))
-            }
-            entity.toDomain()
-        }
-        syncTrigger?.invoke()
-        updated
     }
 
     override suspend fun closeSession(

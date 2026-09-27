@@ -63,13 +63,15 @@ import androidx.compose.ui.unit.dp
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.RunningTimerDisplay
 import com.maciekhetman.cubetimer.model.TimerAverageOptions
+import com.maciekhetman.cubetimer.model.TimingDevice
+import com.maciekhetman.cubetimer.ui.bluetooth.BluetoothTimerDialog
+import com.maciekhetman.cubetimer.ui.bluetooth.bluetoothStatusLabel
 import com.maciekhetman.cubetimer.ui.components.CollapsingTopBar
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.maciekhetman.cubetimer.viewmodel.TimerViewModel
 import kotlin.math.roundToInt
 
 import com.maciekhetman.cubetimer.model.AuthState
-import com.maciekhetman.cubetimer.model.Session
 import com.maciekhetman.cubetimer.model.SyncStatusType
 import com.maciekhetman.cubetimer.model.SyncUiState
 import androidx.compose.material3.AssistChip
@@ -83,19 +85,11 @@ fun SettingsScreen(
     viewModel: TimerViewModel,
     currentMode: Mode,
     onModeSelected: (Mode) -> Unit,
-    activeSession: Session? = null,
-    isAutomaticMode: Boolean = true,
-    onSwitchToAutomatic: () -> Unit = {},
-    sessions: List<Session> = emptyList(),
-    onSessionSelected: (Session) -> Unit = {},
-    onCreateSessionClick: () -> Unit = {},
-    onManageSessionsClick: () -> Unit = {},
     syncUiState: SyncUiState = SyncUiState(),
     onSyncClick: () -> Unit = {},
     authState: AuthState = AuthState.Guest,
     onAuthClick: () -> Unit = {},
     onNavigateToAdmin: () -> Unit = {},
-    hideSessionMenu: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val dynamicColorEnabled by viewModel.dynamicColorEnabled.collectAsStateWithLifecycle()
@@ -113,13 +107,16 @@ fun SettingsScreen(
     val hideStartHint by viewModel.hideStartHint.collectAsStateWithLifecycle()
     val focusMode by viewModel.focusMode.collectAsStateWithLifecycle()
     val hapticsEnabled by viewModel.hapticsEnabled.collectAsStateWithLifecycle()
-    val hideSessionMenuInTopBar by viewModel.hideSessionMenuInTopBar.collectAsStateWithLifecycle()
+    val timingDevice by viewModel.timingDevice.collectAsStateWithLifecycle()
+    val bluetoothTimerState by viewModel.bluetoothTimerState.collectAsStateWithLifecycle()
     val haptic = LocalHapticFeedback.current
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
 
     var defaultModeMenuExpanded by remember { mutableStateOf(value = false) }
     var runningTimerDisplayMenuExpanded by remember { mutableStateOf(value = false) }
     var timerAveragesExpanded by remember { mutableStateOf(value = false) }
+    var timingDeviceMenuExpanded by remember { mutableStateOf(value = false) }
+    var showBluetoothDialog by remember { mutableStateOf(value = false) }
 
     Scaffold(
         modifier = modifier
@@ -130,15 +127,7 @@ fun SettingsScreen(
                 title = "Settings",
                 currentMode = currentMode,
                 onModeSelected = onModeSelected,
-                scrollBehavior = scrollBehavior,
-                activeSession = activeSession,
-                isAutomaticMode = isAutomaticMode,
-                onSwitchToAutomatic = onSwitchToAutomatic,
-                sessions = sessions,
-                onSessionSelected = onSessionSelected,
-                onCreateSessionClick = onCreateSessionClick,
-                onManageSessionsClick = onManageSessionsClick,
-                hideSessionMenu = hideSessionMenu || hideSessionMenuInTopBar
+                scrollBehavior = scrollBehavior
             )
         }
     ) { paddingValues ->
@@ -336,6 +325,58 @@ fun SettingsScreen(
             }
 
             item {
+                SettingsSection(title = "Timing device") {
+                    SettingMenuRow(
+                        title = "Start and stop with",
+                        valueLabel = if (timingDevice == TimingDevice.EXTERNAL_TIMER) "Bluetooth timer" else "Touch",
+                        onClick = { timingDeviceMenuExpanded = true },
+                        menuExpanded = timingDeviceMenuExpanded,
+                        onDismissMenu = { timingDeviceMenuExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Touch") },
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                timingDeviceMenuExpanded = false
+                                viewModel.setTimingDevice(TimingDevice.KEYBOARD)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Bluetooth timer (GAN, QiYi)") },
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                timingDeviceMenuExpanded = false
+                                viewModel.setTimingDevice(TimingDevice.EXTERNAL_TIMER)
+                                if (!bluetoothTimerState.isConnected) showBluetoothDialog = true
+                            },
+                        )
+                    }
+                    if (timingDevice == TimingDevice.EXTERNAL_TIMER) {
+                        SettingsDivider()
+                        Surface(
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                showBluetoothDialog = true
+                            },
+                            color = androidx.compose.ui.graphics.Color.Transparent
+                        ) {
+                            SettingsRow(title = "Bluetooth timer") {
+                                Text(
+                                    text = bluetoothStatusLabel(bluetoothTimerState.status),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (bluetoothTimerState.isConnected) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
                 SettingsSection(title = "Defaults") {
                     SettingMenuRow(
                         title = "Default mode",
@@ -355,12 +396,6 @@ fun SettingsScreen(
                             )
                         }
                     }
-                    SettingsDivider()
-                    SettingToggleRow(
-                        title = "Hide session menu in top bar",
-                        checked = hideSessionMenuInTopBar,
-                        onCheckedChange = { viewModel.setHideSessionMenuInTopBar(it) }
-                    )
                 }
             }
 
@@ -403,6 +438,10 @@ fun SettingsScreen(
                 }
             }
         }
+    }
+
+    if (showBluetoothDialog) {
+        BluetoothTimerDialog(viewModel = viewModel, onDismiss = { showBluetoothDialog = false })
     }
 }
 

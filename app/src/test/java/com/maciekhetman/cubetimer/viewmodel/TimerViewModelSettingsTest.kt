@@ -14,7 +14,6 @@ import com.maciekhetman.cubetimer.data.solvesDataStore
 import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Session
-import com.maciekhetman.cubetimer.model.SessionKind
 import com.maciekhetman.cubetimer.model.User
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -88,42 +87,6 @@ class TimerViewModelSettingsTest {
     }
 
     @Test
-    fun testHideSessionMenuInTopBar_defaultsToFalse() = runTest(testDispatcher) {
-        advanceUntilIdle()
-        assertFalse(timerViewModel.hideSessionMenuInTopBar.value)
-    }
-
-    @Test
-    fun testSetHideSessionMenuInTopBar_updatesFlowAndResetsSessionModeAcrossModes() = runTest(testDispatcher) {
-        advanceUntilIdle()
-
-        timerViewModel.setHideSessionMenuInTopBar(true).join()
-        advanceUntilIdle()
-        for (i in 0..50) {
-            if (timerViewModel.hideSessionMenuInTopBar.value) break
-            kotlinx.coroutines.delay(20)
-            advanceUntilIdle()
-        }
-
-        assertTrue(timerViewModel.hideSessionMenuInTopBar.value)
-        // Verify that all modes were reset to automatic mode
-        for (mode in Mode.entries) {
-            assertTrue("Mode $mode should have cleared manual override", fakeSessionManager.clearedModes.contains(mode))
-            assertTrue("Mode $mode should be set to automatic", fakeSessionManager.automaticModes[mode] == true)
-        }
-
-        // Toggling back to false
-        timerViewModel.setHideSessionMenuInTopBar(false).join()
-        advanceUntilIdle()
-        for (i in 0..50) {
-            if (!timerViewModel.hideSessionMenuInTopBar.value) break
-            kotlinx.coroutines.delay(20)
-            advanceUntilIdle()
-        }
-        assertFalse(timerViewModel.hideSessionMenuInTopBar.value)
-    }
-
-    @Test
     fun testScrambleScalePercent_flowReactivityAndMutation() = runTest(testDispatcher) {
         advanceUntilIdle()
         assertEquals(100, timerViewModel.scrambleScalePercent.value)
@@ -158,41 +121,10 @@ class TimerViewModelSettingsTest {
     }
 
     private class FakeTrackingSessionManager : SessionManager {
-        val clearedModes = mutableSetOf<Mode>()
-        val automaticModes = mutableMapOf<Mode, Boolean>()
-        private val _sessionMode = MutableStateFlow(SessionKind.MANUAL)
-
         override fun getActiveSessionFlow(mode: Mode): Flow<Session?> = MutableStateFlow(null)
         override fun getActiveSessionFlow(ownerId: String, mode: Mode): Flow<Session?> = MutableStateFlow(null)
-        override fun getSessionModeFlow(mode: Mode): Flow<SessionKind> = _sessionMode.asStateFlow()
-        override fun isAutomaticModeFlow(mode: Mode): Flow<Boolean> = MutableStateFlow(false)
-
-        override suspend fun setSessionMode(mode: Mode, kind: SessionKind) {
-            _sessionMode.value = kind
-        }
-        override suspend fun setAutomaticMode(mode: Mode, enabled: Boolean) {
-            automaticModes[mode] = enabled
-            if (enabled) _sessionMode.value = SessionKind.AUTOMATIC
-        }
-        override suspend fun setActiveSession(mode: Mode, sessionId: String) = Unit
-        override suspend fun setActiveSession(ownerId: String, mode: Mode, sessionId: String) = Unit
         override suspend fun getOrCreateActiveSession(ownerId: String, mode: Mode, solveTimestamp: Long?): Session {
             throw UnsupportedOperationException()
-        }
-        override suspend fun createManualSession(name: String, mode: Mode, ownerId: String?): Session {
-            throw UnsupportedOperationException()
-        }
-        override suspend fun renameSession(id: String, newName: String, ownerId: String?): Session? = null
-        override suspend fun archiveSession(id: String, mode: Mode?, ownerId: String?): Session? = null
-        override suspend fun unarchiveSession(id: String, ownerId: String?): Session? = null
-        override suspend fun deleteSession(id: String, mode: Mode?, ownerId: String?): Boolean = true
-        override suspend fun clearManualSessionOverride(mode: Mode) {
-            clearedModes.add(mode)
-            _sessionMode.value = SessionKind.AUTOMATIC
-        }
-        override suspend fun clearManualSessionOverride(ownerId: String, mode: Mode) {
-            clearedModes.add(mode)
-            _sessionMode.value = SessionKind.AUTOMATIC
         }
     }
 
@@ -204,7 +136,7 @@ class TimerViewModelSettingsTest {
         override suspend fun initialize() = Unit
         override suspend fun register(email: String, password: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun login(email: String, password: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
-        override suspend fun loginWithGoogle(idToken: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
+        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun verifyEmail(token: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun resendVerificationEmail(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun requestPasswordReset(email: String): AuthResult<Unit> = AuthResult.Success(Unit)

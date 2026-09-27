@@ -42,7 +42,7 @@ interface CubeSyncApiClient {
     suspend fun loginWithGoogle(request: GoogleAuthRequest): AuthResponse
 
     @Throws(AuthException::class)
-    suspend fun linkGoogle(idToken: String, authToken: String? = null)
+    suspend fun linkGoogle(request: GoogleAuthRequest, authToken: String? = null)
 
     @Throws(AuthException::class)
     suspend fun getCurrentUser(authToken: String? = null): UserDto
@@ -87,9 +87,15 @@ interface CubeSyncApiClient {
     ): com.maciekhetman.cubetimer.data.remote.dto.AdminRequestTypeStatsDto =
         throw UnsupportedOperationException("Admin API not implemented in test stub")
 
+    /**
+     * Keyset-paginated error log. Pass the previous page's `next_cursor` as [before] together with
+     * its `next_cursor_id` as [beforeId]; with [before] alone the page's last row repeats.
+     */
     @Throws(AuthException::class)
     suspend fun getAdminErrorLogs(
         before: String? = null,
+        beforeId: Long? = null,
+        limit: Int? = null,
         authToken: String? = null
     ): com.maciekhetman.cubetimer.data.remote.dto.ErrorLogResponseDto =
         throw UnsupportedOperationException("Admin API not implemented in test stub")

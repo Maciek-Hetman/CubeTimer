@@ -127,11 +127,14 @@ class AuthManagerImpl(
         }
     }
 
-    override suspend fun loginWithGoogle(idToken: String): AuthResult<User> = withContext(ioDispatcher) {
+    override suspend fun loginWithGoogle(
+        idToken: String,
+        clientId: String,
+        nonce: String
+    ): AuthResult<User> = withContext(ioDispatcher) {
         try {
-            val deviceId = tokenStorage.getDeviceId()
             val response = apiClient.loginWithGoogle(
-                GoogleAuthRequest(idToken = idToken, clientId = deviceId)
+                GoogleAuthRequest(idToken = idToken, clientId = clientId, nonce = nonce)
             )
             val user = handleAuthSuccess(response, isNewLogin = true)
             AuthResult.Success(user)

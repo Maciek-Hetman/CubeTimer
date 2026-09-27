@@ -122,7 +122,7 @@ class SyncContractMockWebServerTest {
         assertEquals("POST", recordedRequest.method)
         assertEquals("Bearer test-bearer-token", recordedRequest.getHeader("Authorization"))
         assertEquals("device-mws-999", recordedRequest.getHeader("X-Device-Id"))
-        assertEquals("2", recordedRequest.getHeader("X-Sync-Protocol"))
+        assertEquals("1", recordedRequest.getHeader("X-Sync-Protocol"))
         assertTrue(recordedRequest.getHeader("Content-Type")?.startsWith("application/json") == true)
 
         val body = recordedRequest.body.readUtf8()
@@ -328,7 +328,7 @@ class SyncContractMockWebServerTest {
         override suspend fun initialize() {}
         override suspend fun register(email: String, password: String) = throw NotImplementedError()
         override suspend fun login(email: String, password: String) = throw NotImplementedError()
-        override suspend fun loginWithGoogle(idToken: String) = throw NotImplementedError()
+        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String) = throw NotImplementedError()
         override suspend fun verifyEmail(token: String) = throw NotImplementedError()
         override suspend fun resendVerificationEmail(email: String) = throw NotImplementedError()
         override suspend fun requestPasswordReset(email: String) = throw NotImplementedError()

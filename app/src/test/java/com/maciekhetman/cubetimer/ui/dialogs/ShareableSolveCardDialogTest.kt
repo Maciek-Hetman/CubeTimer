@@ -6,6 +6,7 @@ import androidx.core.content.FileProvider
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Penalty
 import com.maciekhetman.cubetimer.model.SolveTime
+import com.maciekhetman.cubetimer.model.TimingDevice
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -70,6 +71,22 @@ class ShareableSolveCardDialogTest {
         assertFalse(shareText.contains("[PB"))
         assertTrue(shareText.contains("Scramble: U2 R2 F2 U"))
         assertTrue(shareText.contains("Timer: Screen / Touch"))
+    }
+
+    @Test
+    fun `formatShareText names the Bluetooth timer for externally timed solves`() {
+        val solve = SolveTime(
+            id = "solve-bt",
+            timeInMillis = 9870L,
+            timestamp = 1788687000000L,
+            mode = Mode.CUBE_3x3,
+            timingDevice = TimingDevice.EXTERNAL_TIMER
+        )
+
+        val shareText = SolveShareHelper.formatShareText(solve = solve, isPb = false, pbDeltaText = null)
+
+        assertTrue(shareText.contains("Timer: Bluetooth timer"))
+        assertFalse(shareText.contains("Screen / Touch"))
     }
 
     @Test

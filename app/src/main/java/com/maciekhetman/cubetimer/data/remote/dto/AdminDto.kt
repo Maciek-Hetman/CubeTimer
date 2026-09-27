@@ -88,5 +88,6 @@ data class ErrorLogDto(
 @Serializable
 data class ErrorLogResponseDto(
     @SerialName("errors") val errors: List<ErrorLogDto> = emptyList(),
-    @SerialName("next_cursor") val nextCursor: String? = null
+    @SerialName("next_cursor") val nextCursor: String? = null,
+    @SerialName("next_cursor_id") val nextCursorId: Long? = null
 )

@@ -232,7 +232,7 @@ class AuthViewModelTest {
             return loginResult
         }
 
-        override suspend fun loginWithGoogle(idToken: String): AuthResult<User> = loginResult
+        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String): AuthResult<User> = loginResult
 
         override suspend fun verifyEmail(token: String): AuthResult<User> {
             verifyEmailCallCount++

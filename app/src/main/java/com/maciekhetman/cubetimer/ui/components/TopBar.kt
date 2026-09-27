@@ -8,12 +8,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.FlashOn
-import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material3.Badge
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -30,7 +27,6 @@ import androidx.compose.material3.MediumTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
@@ -46,22 +42,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.maciekhetman.cubetimer.model.Mode
-import com.maciekhetman.cubetimer.model.Session
-import com.maciekhetman.cubetimer.ui.session.SessionDropdownMenu
 
 @Composable
 fun TimerTopHeader(
     currentMode: Mode,
     onModeSelected: (Mode) -> Unit,
-    activeSession: Session? = null,
-    isAutomaticMode: Boolean = true,
-    onSwitchToAutomatic: () -> Unit = {},
-    sessions: List<Session> = emptyList(),
-    onSessionSelected: (Session) -> Unit = {},
-    onCreateSessionClick: () -> Unit = {},
-    onManageSessionsClick: () -> Unit = {},
-    hideSessionMenu: Boolean = false,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    extraActions: @Composable RowScope.() -> Unit = {}
 ) {
     Row(
         modifier = modifier
@@ -80,22 +67,11 @@ fun TimerTopHeader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            extraActions()
             ModeMenu(
                 currentMode = currentMode,
                 onModeSelected = onModeSelected
             )
-            if (!hideSessionMenu) {
-                SessionPillMenu(
-                    currentMode = currentMode,
-                    activeSession = activeSession,
-                    isAutomaticMode = isAutomaticMode,
-                    onSwitchToAutomatic = onSwitchToAutomatic,
-                    sessions = sessions,
-                    onSessionSelected = onSessionSelected,
-                    onCreateSessionClick = onCreateSessionClick,
-                    onManageSessionsClick = onManageSessionsClick
-                )
-            }
         }
     }
 }
@@ -107,15 +83,7 @@ fun CollapsingTopBar(
     currentMode: Mode,
     onModeSelected: (Mode) -> Unit,
     scrollBehavior: TopAppBarScrollBehavior,
-    activeSession: Session? = null,
-    isAutomaticMode: Boolean = true,
-    onSwitchToAutomatic: () -> Unit = {},
-    sessions: List<Session> = emptyList(),
-    onSessionSelected: (Session) -> Unit = {},
-    onCreateSessionClick: () -> Unit = {},
-    onManageSessionsClick: () -> Unit = {},
     titleBadgeText: String? = null,
-    hideSessionMenu: Boolean = false,
     extraActions: @Composable RowScope.() -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -148,17 +116,9 @@ fun CollapsingTopBar(
         },
         actions = {
             extraActions()
-            TopBarActionItems(
+            ModeMenu(
                 currentMode = currentMode,
-                onModeSelected = onModeSelected,
-                activeSession = activeSession,
-                isAutomaticMode = isAutomaticMode,
-                onSwitchToAutomatic = onSwitchToAutomatic,
-                sessions = sessions,
-                onSessionSelected = onSessionSelected,
-                onCreateSessionClick = onCreateSessionClick,
-                onManageSessionsClick = onManageSessionsClick,
-                hideSessionMenu = hideSessionMenu
+                onModeSelected = onModeSelected
             )
         },
         scrollBehavior = scrollBehavior,
@@ -168,118 +128,6 @@ fun CollapsingTopBar(
         ),
         modifier = modifier
     )
-}
-
-@Composable
-private fun TopBarActionItems(
-    currentMode: Mode,
-    onModeSelected: (Mode) -> Unit,
-    activeSession: Session?,
-    isAutomaticMode: Boolean,
-    onSwitchToAutomatic: () -> Unit,
-    sessions: List<Session>,
-    onSessionSelected: (Session) -> Unit,
-    onCreateSessionClick: () -> Unit,
-    onManageSessionsClick: () -> Unit,
-    hideSessionMenu: Boolean = false
-) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        // Mode Selector Dropdown
-        ModeMenu(
-            currentMode = currentMode,
-            onModeSelected = onModeSelected
-        )
-
-        // Session Selector Dropdown (if session handling is wired)
-        if (!hideSessionMenu) {
-            SessionPillMenu(
-                currentMode = currentMode,
-                activeSession = activeSession,
-                isAutomaticMode = isAutomaticMode,
-                onSwitchToAutomatic = onSwitchToAutomatic,
-                sessions = sessions,
-                onSessionSelected = onSessionSelected,
-                onCreateSessionClick = onCreateSessionClick,
-                onManageSessionsClick = onManageSessionsClick
-            )
-        }
-    }
-}
-
-@Composable
-private fun SessionPillMenu(
-    currentMode: Mode,
-    activeSession: Session?,
-    isAutomaticMode: Boolean,
-    onSwitchToAutomatic: () -> Unit,
-    sessions: List<Session>,
-    onSessionSelected: (Session) -> Unit,
-    onCreateSessionClick: () -> Unit,
-    onManageSessionsClick: () -> Unit
-) {
-    var expanded by remember { mutableStateOf(false) }
-    val haptic = LocalHapticFeedback.current
-
-    val sessionLabel = if (isAutomaticMode) {
-        "Auto"
-    } else {
-        activeSession?.name ?: "Session"
-    }
-
-    Box {
-        FilledTonalButton(
-            onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                expanded = true
-            },
-            shape = RoundedCornerShape(20.dp),
-            colors = ButtonDefaults.filledTonalButtonColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                contentColor = MaterialTheme.colorScheme.onSurface
-            ),
-            contentPadding = PaddingValues(
-                start = 10.dp,
-                top = 6.dp,
-                end = 8.dp,
-                bottom = 6.dp
-            ),
-            modifier = Modifier
-                .padding(end = 4.dp)
-                .widthIn(max = 140.dp)
-        ) {
-            Icon(
-                imageVector = if (isAutomaticMode) Icons.Default.FlashOn else Icons.Default.Folder,
-                contentDescription = null,
-                modifier = Modifier.size(16.dp),
-                tint = if (isAutomaticMode) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            Text(
-                text = sessionLabel,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.labelMedium
-            )
-            Icon(
-                imageVector = Icons.Default.ArrowDropDown,
-                contentDescription = "Select session",
-                modifier = Modifier.size(16.dp)
-            )
-        }
-
-        SessionDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            currentMode = currentMode,
-            activeSession = activeSession,
-            isAutomaticMode = isAutomaticMode,
-            onSwitchToAutomatic = onSwitchToAutomatic,
-            sessions = sessions,
-            onSessionSelected = onSessionSelected,
-            onCreateSessionClick = onCreateSessionClick,
-            onManageSessionsClick = onManageSessionsClick
-        )
-    }
 }
 
 @Composable

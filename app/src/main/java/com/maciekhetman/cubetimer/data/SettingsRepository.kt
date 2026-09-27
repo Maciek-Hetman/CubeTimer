@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.RunningTimerDisplay
 import com.maciekhetman.cubetimer.model.TimerAverageOptions
+import com.maciekhetman.cubetimer.model.TimingDevice
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -28,7 +29,7 @@ class SettingsRepository(private val context: Context) {
     private val HIDE_START_HINT_KEY = booleanPreferencesKey("hide_start_hint")
     private val FOCUS_MODE_KEY = booleanPreferencesKey("focus_mode")
     private val HAPTICS_ENABLED_KEY = booleanPreferencesKey("haptics_enabled")
-    private val HIDE_SESSION_MENU_IN_TOP_BAR_KEY = booleanPreferencesKey("hide_session_menu_in_top_bar")
+    private val TIMING_DEVICE_KEY = stringPreferencesKey("timing_device")
 
     /**
      * One-time migration: settings used to live in the solves datastore.
@@ -56,7 +57,6 @@ class SettingsRepository(private val context: Context) {
             legacy[HIDE_START_HINT_KEY]?.let { prefs[HIDE_START_HINT_KEY] = it }
             legacy[FOCUS_MODE_KEY]?.let { prefs[FOCUS_MODE_KEY] = it }
             legacy[HAPTICS_ENABLED_KEY]?.let { prefs[HAPTICS_ENABLED_KEY] = it }
-            legacy[HIDE_SESSION_MENU_IN_TOP_BAR_KEY]?.let { prefs[HIDE_SESSION_MENU_IN_TOP_BAR_KEY] = it }
         }
     }
 
@@ -126,8 +126,15 @@ class SettingsRepository(private val context: Context) {
         preferences[HAPTICS_ENABLED_KEY] ?: true
     }
 
-    val hideSessionMenuInTopBarFlow: Flow<Boolean> = context.settingsDataStore.data.map { preferences ->
-        preferences[HIDE_SESSION_MENU_IN_TOP_BAR_KEY] ?: false
+    /**
+     * What drives the timer: on-screen touch ([TimingDevice.KEYBOARD]) or a connected Bluetooth
+     * timer ([TimingDevice.EXTERNAL_TIMER]). Smart cubes aren't a timer input on Android.
+     */
+    val timingDeviceFlow: Flow<TimingDevice> = context.settingsDataStore.data.map { preferences ->
+        when (TimingDevice.fromString(preferences[TIMING_DEVICE_KEY])) {
+            TimingDevice.EXTERNAL_TIMER -> TimingDevice.EXTERNAL_TIMER
+            else -> TimingDevice.KEYBOARD
+        }
     }
 
     suspend fun setDynamicColorEnabled(enabled: Boolean) {
@@ -222,9 +229,9 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
-    suspend fun setHideSessionMenuInTopBar(hide: Boolean) {
+    suspend fun setTimingDevice(device: TimingDevice) {
         context.settingsDataStore.edit { preferences ->
-            preferences[HIDE_SESSION_MENU_IN_TOP_BAR_KEY] = hide
+            preferences[TIMING_DEVICE_KEY] = device.value
         }
     }
 

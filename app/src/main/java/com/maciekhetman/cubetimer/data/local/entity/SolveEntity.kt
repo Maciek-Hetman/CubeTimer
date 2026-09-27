@@ -59,7 +59,11 @@ data class SolveEntity(
     val updatedAt: String = solvedAt,
 
     @ColumnInfo(name = "deleted_at")
-    val deletedAt: String? = null
+    val deletedAt: String? = null,
+
+    // "keyboard" / "external_timer" / "smart_cube" (see TimingDevice). Added in schema v2.
+    @ColumnInfo(name = "timing_device", defaultValue = "keyboard")
+    val timingDevice: String = "keyboard"
 )
 
 val SolveEntity.isDnf: Boolean

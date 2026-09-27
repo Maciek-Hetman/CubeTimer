@@ -7,9 +7,13 @@ import androidx.lifecycle.viewModelScope
 import com.maciekhetman.cubetimer.data.SettingsRepository
 import com.maciekhetman.cubetimer.data.SolvesRepository
 import com.maciekhetman.cubetimer.data.auth.AuthManager
+import com.maciekhetman.cubetimer.data.bluetooth.BluetoothTimerManager
+import com.maciekhetman.cubetimer.data.bluetooth.BluetoothTimerState
+import com.maciekhetman.cubetimer.data.bluetooth.BluetoothTimerStatus
 import com.maciekhetman.cubetimer.data.session.SessionManager
 import com.maciekhetman.cubetimer.domain.AverageCalculator
 import com.maciekhetman.cubetimer.domain.ScrambleGenerator
+import com.maciekhetman.cubetimer.domain.bluetooth.SmartTimerEvent
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Penalty
 import com.maciekhetman.cubetimer.model.RecordCelebration
@@ -19,6 +23,7 @@ import com.maciekhetman.cubetimer.model.Session
 import com.maciekhetman.cubetimer.model.SolveTime
 import com.maciekhetman.cubetimer.model.StatsFilter
 import com.maciekhetman.cubetimer.model.TimerState
+import com.maciekhetman.cubetimer.model.TimingDevice
 import com.maciekhetman.cubetimer.model.ownerId
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -31,6 +36,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
@@ -46,7 +52,8 @@ class TimerViewModel(
     private val sessionManager: SessionManager,
     private val authManager: AuthManager,
     private val timeSource: () -> Long = SystemClock::uptimeMillis,
-    private val defaultDispatcher: CoroutineDispatcher = Dispatchers.Default
+    private val defaultDispatcher: CoroutineDispatcher = Dispatchers.Default,
+    private val bluetoothTimer: BluetoothTimerManager? = null
 ) : AndroidViewModel(application) {
 
     private val _timerState = MutableStateFlow<TimerState>(TimerState.Idle)
@@ -105,8 +112,14 @@ class TimerViewModel(
     val hapticsEnabled: StateFlow<Boolean> = settingsRepository.hapticsEnabledFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
-    val hideSessionMenuInTopBar: StateFlow<Boolean> = settingsRepository.hideSessionMenuInTopBarFlow
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    /** Touch timing, or a Bluetooth timer driving the timer instead of the screen. */
+    val timingDevice: StateFlow<TimingDevice> = settingsRepository.timingDeviceFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, TimingDevice.KEYBOARD)
+
+    val bluetoothTimerState: StateFlow<BluetoothTimerState> = bluetoothTimer?.state
+        ?: MutableStateFlow(BluetoothTimerState(status = BluetoothTimerStatus.Unsupported)).asStateFlow()
+
+    val bluetoothPermissions: List<String> = bluetoothTimer?.requiredPermissions.orEmpty()
 
     // Last known DB-confirmed solves per owner, used only to show the right list instantly when
     // switching owners (never merged with pending local edits - the Room flow below is always the
@@ -296,12 +309,25 @@ class TimerViewModel(
                     _appTimeMillis.value = savedTime
                 }
         }
+
+        // A connected Bluetooth timer drives the timer only while it is the selected input.
+        bluetoothTimer?.let { manager ->
+            viewModelScope.launch {
+                timingDevice
+                    .flatMapLatest { device ->
+                        if (device == TimingDevice.EXTERNAL_TIMER) manager.events else emptyFlow()
+                    }
+                    .collect { onSmartTimerEvent(it) }
+            }
+        }
     }
 
     fun onPressStart() = onPressStart(timeSource())
 
     fun onPressStart(eventUptimeMillis: Long) {
         if (eventUptimeMillis < inputBlockedUntil) return
+        // With a Bluetooth timer selected the screen is not a timer input.
+        if (timingDevice.value == TimingDevice.EXTERNAL_TIMER) return
 
         when (_timerState.value) {
             is TimerState.Idle -> {
@@ -320,6 +346,7 @@ class TimerViewModel(
     fun onPressRelease() = onPressRelease(timeSource())
 
     fun onPressRelease(eventUptimeMillis: Long) {
+        if (timingDevice.value == TimingDevice.EXTERNAL_TIMER) return
         when (_timerState.value) {
             is TimerState.Holding -> {
                 holdJob?.cancel()
@@ -412,7 +439,8 @@ class TimerViewModel(
                     scramble = capturedScramble,
                     mode = currentModeValue,
                     timestamp = nowMs,
-                    sessionId = activeSession.id
+                    sessionId = activeSession.id,
+                    timingDevice = currentState.timingDevice
                 )
 
                 val newAllSolves = (_allSolves.value.filter { it.id != newSolve.id } + newSolve).sortedBy { it.timestamp }
@@ -644,13 +672,79 @@ class TimerViewModel(
         }
     }
 
-    fun setHideSessionMenuInTopBar(hide: Boolean): Job = viewModelScope.launch {
-        settingsRepository.setHideSessionMenuInTopBar(hide)
-        if (hide) {
-            val ownerId = authManager.currentOwnerId
-            Mode.entries.forEach { mode ->
-                sessionManager.clearManualSessionOverride(ownerId, mode)
-                sessionManager.setAutomaticMode(mode, true)
+    fun setTimingDevice(device: TimingDevice) {
+        viewModelScope.launch {
+            settingsRepository.setTimingDevice(device)
+        }
+        if (device != TimingDevice.EXTERNAL_TIMER) {
+            bluetoothTimer?.disconnect()
+            // Drop a half-started Bluetooth solve; a finished one stays so it can still be saved.
+            if (_timerState.value !is TimerState.Finished) resetTimer()
+        }
+    }
+
+    fun hasBluetoothPermissions(): Boolean = bluetoothTimer?.hasPermissions() == true
+
+    fun isBluetoothEnabled(): Boolean = bluetoothTimer?.isBluetoothEnabled() == true
+
+    fun startBluetoothScan() {
+        bluetoothTimer?.startScan()
+    }
+
+    fun stopBluetoothScan() {
+        bluetoothTimer?.stopScan()
+    }
+
+    fun connectBluetoothTimer(address: String) {
+        bluetoothTimer?.connect(address)
+    }
+
+    fun disconnectBluetoothTimer() {
+        bluetoothTimer?.disconnect()
+    }
+
+    fun clearBluetoothError() {
+        bluetoothTimer?.clearError()
+    }
+
+    /**
+     * Maps Bluetooth timer events onto the same state machine touch timing uses. The timer's own
+     * measurement is authoritative: [SmartTimerEvent.Stopped] finishes with its time, not ours.
+     */
+    fun onSmartTimerEvent(event: SmartTimerEvent) {
+        val state = _timerState.value
+        when (event) {
+            SmartTimerEvent.HandsOn -> if (state is TimerState.Idle) {
+                _timerState.value = TimerState.Holding(0f)
+            }
+            SmartTimerEvent.GetSet -> if (state is TimerState.Idle || state is TimerState.Holding) {
+                holdJob?.cancel()
+                _timerState.value = TimerState.Ready
+            }
+            SmartTimerEvent.HandsOff, SmartTimerEvent.Idle, SmartTimerEvent.Inspection -> {
+                if (state is TimerState.Holding || state is TimerState.Ready) {
+                    _timerState.value = TimerState.Idle
+                }
+            }
+            SmartTimerEvent.Running -> when (state) {
+                is TimerState.Running -> Unit
+                is TimerState.Finished -> {
+                    // The next solve started on the timer before the last one was saved: keep it
+                    // (no penalty) rather than silently dropping it.
+                    saveSolveWithPenalty(Penalty.NONE)
+                    startTimer(timeSource())
+                }
+                else -> {
+                    holdJob?.cancel()
+                    startTimer(timeSource())
+                }
+            }
+            is SmartTimerEvent.Stopped -> if (state is TimerState.Running) {
+                timerJob?.cancel()
+                _timerState.value = TimerState.Finished(event.timeMs, TimingDevice.EXTERNAL_TIMER)
+            }
+            SmartTimerEvent.Disconnected -> if (state is TimerState.Holding || state is TimerState.Ready || state is TimerState.Running) {
+                resetTimer()
             }
         }
     }

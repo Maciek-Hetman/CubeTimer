@@ -100,7 +100,7 @@ class SessionAndStatsFilterStressTest {
             ownerId = "guest",
             name = "Default Session",
             event = Mode.CUBE_3x3,
-            kind = SessionKind.MANUAL,
+            kind = SessionKind.AUTOMATIC,
             startedAt = "2026-08-30T00:00:00Z"
         )
         runBlocking {
@@ -139,7 +139,7 @@ class SessionAndStatsFilterStressTest {
                 ownerId = "guest",
                 name = "Session $idx",
                 event = Mode.CUBE_3x3,
-                kind = SessionKind.MANUAL,
+                kind = SessionKind.AUTOMATIC,
                 startedAt = "2026-08-30T10:00:00Z"
             )
             database.sessionDao().upsert(session.toEntity())
@@ -176,7 +176,7 @@ class SessionAndStatsFilterStressTest {
         // Rapidly switch active session 50 times
         for (i in 0..49) {
             val targetSession = sessions[i % sessions.size]
-            fakeSessionManager.setActiveSession(Mode.CUBE_3x3, targetSession.id)
+            fakeSessionManager.switchActiveSession(targetSession.id)
             advanceUntilIdle()
 
             val filtered = timerViewModel.statsFilteredSolves.value
@@ -199,12 +199,12 @@ class SessionAndStatsFilterStressTest {
             ownerId = "guest",
             name = "Empty Session",
             event = Mode.CUBE_3x3,
-            kind = SessionKind.MANUAL,
+            kind = SessionKind.AUTOMATIC,
             startedAt = "2026-08-30T10:00:00Z"
         )
         database.sessionDao().upsert(emptySession.toEntity())
         fakeSessionManager.addSession(emptySession)
-        fakeSessionManager.setActiveSession(Mode.CUBE_3x3, emptySession.id)
+        fakeSessionManager.switchActiveSession(emptySession.id)
         advanceUntilIdle()
 
         timerViewModel.setStatsFilter(StatsFilter.ActiveSession)
@@ -229,14 +229,14 @@ class SessionAndStatsFilterStressTest {
 
     @Test
     fun `large scale 5000 solves filtering and session-scoped batch deletion`() = runTest(testDispatcher) {
-        val sessionAlpha = Session(id = "ses_alpha", ownerId = "guest", name = "Alpha", event = Mode.CUBE_3x3, kind = SessionKind.MANUAL, startedAt = "2026-08-30T00:00:00Z")
-        val sessionBeta = Session(id = "ses_beta", ownerId = "guest", name = "Beta", event = Mode.CUBE_3x3, kind = SessionKind.MANUAL, startedAt = "2026-08-30T00:00:00Z")
+        val sessionAlpha = Session(id = "ses_alpha", ownerId = "guest", name = "Alpha", event = Mode.CUBE_3x3, kind = SessionKind.AUTOMATIC, startedAt = "2026-08-30T00:00:00Z")
+        val sessionBeta = Session(id = "ses_beta", ownerId = "guest", name = "Beta", event = Mode.CUBE_3x3, kind = SessionKind.AUTOMATIC, startedAt = "2026-08-30T00:00:00Z")
 
         database.sessionDao().upsert(sessionAlpha.toEntity())
         database.sessionDao().upsert(sessionBeta.toEntity())
         fakeSessionManager.addSession(sessionAlpha)
         fakeSessionManager.addSession(sessionBeta)
-        fakeSessionManager.setActiveSession(Mode.CUBE_3x3, sessionAlpha.id)
+        fakeSessionManager.switchActiveSession(sessionAlpha.id)
         advanceUntilIdle()
 
         // Generate 3,000 solves in Alpha and 2,000 solves in Beta (5,000 total)
@@ -304,9 +304,9 @@ class SessionAndStatsFilterStressTest {
 
     @Test
     fun `rapid concurrent filter switching maintains absolute state consistency`() = runTest(testDispatcher) {
-        val s1 = Session(id = "s_rapid_1", ownerId = "guest", name = "S1", event = Mode.CUBE_3x3, kind = SessionKind.MANUAL, startedAt = "2026-08-30T00:00:00Z")
-        val s2 = Session(id = "s_rapid_2", ownerId = "guest", name = "S2", event = Mode.CUBE_3x3, kind = SessionKind.MANUAL, startedAt = "2026-08-30T00:00:00Z")
-        val s3 = Session(id = "s_rapid_3", ownerId = "guest", name = "S3", event = Mode.CUBE_3x3, kind = SessionKind.MANUAL, startedAt = "2026-08-30T00:00:00Z")
+        val s1 = Session(id = "s_rapid_1", ownerId = "guest", name = "S1", event = Mode.CUBE_3x3, kind = SessionKind.AUTOMATIC, startedAt = "2026-08-30T00:00:00Z")
+        val s2 = Session(id = "s_rapid_2", ownerId = "guest", name = "S2", event = Mode.CUBE_3x3, kind = SessionKind.AUTOMATIC, startedAt = "2026-08-30T00:00:00Z")
+        val s3 = Session(id = "s_rapid_3", ownerId = "guest", name = "S3", event = Mode.CUBE_3x3, kind = SessionKind.AUTOMATIC, startedAt = "2026-08-30T00:00:00Z")
         val sessionList = listOf(s1, s2, s3)
 
         sessionList.forEach {
@@ -346,7 +346,7 @@ class SessionAndStatsFilterStressTest {
             val filter = filters[step % filters.size]
             val activeSessionTarget = sessionList[step % sessionList.size]
 
-            fakeSessionManager.setActiveSession(Mode.CUBE_3x3, activeSessionTarget.id)
+            fakeSessionManager.switchActiveSession(activeSessionTarget.id)
             timerViewModel.setStatsFilter(filter)
             advanceUntilIdle()
 
@@ -373,10 +373,10 @@ class SessionAndStatsFilterStressTest {
 
     @Test
     fun `guest vs authenticated user session state isolation`() = runTest(testDispatcher) {
-        val guestSession = Session(id = "ses_guest", ownerId = "guest", name = "Guest Ses", event = Mode.CUBE_3x3, kind = SessionKind.MANUAL, startedAt = "2026-08-30T00:00:00Z")
+        val guestSession = Session(id = "ses_guest", ownerId = "guest", name = "Guest Ses", event = Mode.CUBE_3x3, kind = SessionKind.AUTOMATIC, startedAt = "2026-08-30T00:00:00Z")
         database.sessionDao().upsert(guestSession.toEntity())
         fakeSessionManager.addSession(guestSession)
-        fakeSessionManager.setActiveSession(Mode.CUBE_3x3, guestSession.id)
+        fakeSessionManager.switchActiveSession(guestSession.id)
         advanceUntilIdle()
 
         // 1. Guest creates solves
@@ -399,10 +399,10 @@ class SessionAndStatsFilterStressTest {
         assertEquals(0, timerViewModel.statsFilteredSolves.value.size)
 
         // User 1 creates session and solve
-        val userSession = Session(id = "ses_user1", ownerId = user1.id, name = "User 1 Ses", event = Mode.CUBE_3x3, kind = SessionKind.MANUAL, startedAt = "2026-08-30T00:00:00Z")
+        val userSession = Session(id = "ses_user1", ownerId = user1.id, name = "User 1 Ses", event = Mode.CUBE_3x3, kind = SessionKind.AUTOMATIC, startedAt = "2026-08-30T00:00:00Z")
         database.sessionDao().upsert(userSession.toEntity())
         fakeSessionManager.addSession(userSession)
-        fakeSessionManager.setActiveSession(Mode.CUBE_3x3, userSession.id)
+        fakeSessionManager.switchActiveSession(userSession.id)
         advanceUntilIdle()
 
         val userSolve = SolveTime(id = "u_solve_1", timeInMillis = 8500L, penalty = Penalty.NONE, scramble = "U", mode = Mode.CUBE_3x3, timestamp = 5000L, sessionId = userSession.id)
@@ -438,10 +438,10 @@ class SessionAndStatsFilterStressTest {
 
     @Test
     fun `statistical edge cases single solve penalties and DNF`() = runTest(testDispatcher) {
-        val edgeSession = Session(id = "ses_edge", ownerId = "guest", name = "Edge", event = Mode.CUBE_3x3, kind = SessionKind.MANUAL, startedAt = "2026-08-30T00:00:00Z")
+        val edgeSession = Session(id = "ses_edge", ownerId = "guest", name = "Edge", event = Mode.CUBE_3x3, kind = SessionKind.AUTOMATIC, startedAt = "2026-08-30T00:00:00Z")
         database.sessionDao().upsert(edgeSession.toEntity())
         fakeSessionManager.addSession(edgeSession)
-        fakeSessionManager.setActiveSession(Mode.CUBE_3x3, edgeSession.id)
+        fakeSessionManager.switchActiveSession(edgeSession.id)
         timerViewModel.setStatsFilter(StatsFilter.ActiveSession)
         advanceUntilIdle()
 
@@ -485,10 +485,10 @@ class SessionAndStatsFilterStressTest {
 
     @Test
     fun `statistical edge cases WCA DNF trimming and multi DNF invalidation`() = runTest(testDispatcher) {
-        val dnfSession = Session(id = "ses_dnf", ownerId = "guest", name = "DNF", event = Mode.CUBE_3x3, kind = SessionKind.MANUAL, startedAt = "2026-08-30T00:00:00Z")
+        val dnfSession = Session(id = "ses_dnf", ownerId = "guest", name = "DNF", event = Mode.CUBE_3x3, kind = SessionKind.AUTOMATIC, startedAt = "2026-08-30T00:00:00Z")
         database.sessionDao().upsert(dnfSession.toEntity())
         fakeSessionManager.addSession(dnfSession)
-        fakeSessionManager.setActiveSession(Mode.CUBE_3x3, dnfSession.id)
+        fakeSessionManager.switchActiveSession(dnfSession.id)
         timerViewModel.setStatsFilter(StatsFilter.ActiveSession)
         advanceUntilIdle()
 
@@ -551,7 +551,6 @@ class SessionAndStatsFilterStressTest {
     private class FakeMultiSessionManager : SessionManager {
         private val sessionsMap = mutableMapOf<String, Session>()
         private val _activeSession = MutableStateFlow<Session?>(null)
-        private val _sessionMode = MutableStateFlow(SessionKind.MANUAL)
 
         fun addSession(session: Session) {
             sessionsMap[session.id] = session
@@ -560,47 +559,15 @@ class SessionAndStatsFilterStressTest {
             }
         }
 
-        override fun getActiveSessionFlow(mode: Mode): Flow<Session?> = _activeSession.asStateFlow()
-        override fun getActiveSessionFlow(ownerId: String, mode: Mode): Flow<Session?> = _activeSession.asStateFlow()
-        override fun getSessionModeFlow(mode: Mode): Flow<SessionKind> = _sessionMode.asStateFlow()
-        override fun isAutomaticModeFlow(mode: Mode): Flow<Boolean> = MutableStateFlow(false)
-
-        override suspend fun setSessionMode(mode: Mode, kind: SessionKind) {
-            _sessionMode.value = kind
-        }
-        override suspend fun setAutomaticMode(mode: Mode, enabled: Boolean) {
-            _sessionMode.value = if (enabled) SessionKind.AUTOMATIC else SessionKind.MANUAL
-        }
-        override suspend fun setActiveSession(mode: Mode, sessionId: String) {
+        /** Test control: simulate the automatic session rolling over to another session. */
+        fun switchActiveSession(sessionId: String) {
             _activeSession.value = sessionsMap[sessionId]
         }
-        override suspend fun setActiveSession(ownerId: String, mode: Mode, sessionId: String) {
-            setActiveSession(mode, sessionId)
-        }
+
+        override fun getActiveSessionFlow(mode: Mode): Flow<Session?> = _activeSession.asStateFlow()
+        override fun getActiveSessionFlow(ownerId: String, mode: Mode): Flow<Session?> = _activeSession.asStateFlow()
         override suspend fun getOrCreateActiveSession(ownerId: String, mode: Mode, solveTimestamp: Long?): Session {
             return _activeSession.value ?: sessionsMap.values.first()
-        }
-        override suspend fun createManualSession(name: String, mode: Mode, ownerId: String?): Session {
-            val s = Session(id = UUID.randomUUID().toString(), ownerId = ownerId ?: "guest", name = name, event = mode, kind = SessionKind.MANUAL, startedAt = "2026-08-30T10:00:00Z")
-            addSession(s)
-            return s
-        }
-        override suspend fun renameSession(id: String, newName: String, ownerId: String?): Session? {
-            val s = sessionsMap[id]?.copy(name = newName)
-            if (s != null) sessionsMap[id] = s
-            return s
-        }
-        override suspend fun archiveSession(id: String, mode: Mode?, ownerId: String?): Session? = sessionsMap[id]
-        override suspend fun unarchiveSession(id: String, ownerId: String?): Session? = sessionsMap[id]
-        override suspend fun deleteSession(id: String, mode: Mode?, ownerId: String?): Boolean {
-            sessionsMap.remove(id)
-            return true
-        }
-        override suspend fun clearManualSessionOverride(mode: Mode) {
-            _sessionMode.value = SessionKind.AUTOMATIC
-        }
-        override suspend fun clearManualSessionOverride(ownerId: String, mode: Mode) {
-            _sessionMode.value = SessionKind.AUTOMATIC
         }
     }
 
@@ -616,7 +583,7 @@ class SessionAndStatsFilterStressTest {
         override suspend fun initialize() = Unit
         override suspend fun register(email: String, password: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun login(email: String, password: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
-        override suspend fun loginWithGoogle(idToken: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
+        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun verifyEmail(token: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun resendVerificationEmail(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun requestPasswordReset(email: String): AuthResult<Unit> = AuthResult.Success(Unit)

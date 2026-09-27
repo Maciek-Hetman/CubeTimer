@@ -37,7 +37,7 @@ import java.util.UUID
  * Verifies:
  * 1. Extreme SQLite bind-variable limits (>999 params) with 2,500 solves and 1,200 sessions.
  * 2. Intra-file duplicate solve IDs and cross-database collisions with conflicting payload data.
- * 3. Session auto-recreation with SessionKind.MANUAL, bounded timestamps, and strict Foreign Key enforcement.
+ * 3. Session auto-recreation as closed SessionKind.AUTOMATIC sessions, bounded timestamps, and strict Foreign Key enforcement.
  * 4. Mid-transaction rollback atomicity ensuring zero orphaned sessions or solves upon DAO failure.
  * 5. Authenticated vs Guest sync outbox mutation isolation, payload accuracy, and session-before-solve ordering.
  * 6. Fault tolerance across malformed records and corrupted data streams.
@@ -252,7 +252,7 @@ class CsvImporterStressAndDedupChallengeTest {
         val alphaSession = sessionDao.getSessionsByIds(listOf("sess-alpha")).first()
         assertEquals("Alpha Session", alphaSession.name)
         assertEquals("3x3", alphaSession.event)
-        assertEquals(SessionKind.MANUAL.value, alphaSession.kind)
+        assertEquals(SessionKind.AUTOMATIC.value, alphaSession.kind)
         assertEquals(CubeTypeConverters.epochMillisToIso(1700000001000L), alphaSession.startedAt)
         assertEquals(CubeTypeConverters.epochMillisToIso(1700000010000L), alphaSession.endedAt)
         assertFalse(alphaSession.archived)
@@ -262,22 +262,22 @@ class CsvImporterStressAndDedupChallengeTest {
         val betaSession = sessionDao.getSessionsByIds(listOf("sess-beta")).first()
         assertEquals("Beta Custom", betaSession.name)
         assertEquals("4x4", betaSession.event)
-        assertEquals(SessionKind.MANUAL.value, betaSession.kind)
+        assertEquals(SessionKind.AUTOMATIC.value, betaSession.kind)
 
         // Verify Gamma Session
         val gammaSession = sessionDao.getSessionsByIds(listOf("sess-gamma")).first()
         assertEquals("Gamma Megaminx", gammaSession.name)
         assertEquals("megaminx", gammaSession.event)
-        assertEquals(SessionKind.MANUAL.value, gammaSession.kind)
+        assertEquals(SessionKind.AUTOMATIC.value, gammaSession.kind)
 
-        // Verify blank session was assigned a fallback session with MANUAL kind and solve points to it
+        // Verify blank session was assigned a fallback session with AUTOMATIC kind and solve points to it
         val solves = solveDao.getSolvesByScope(ownerId = "guest")
         val blankSolve = solves.find { it.id == "s-6" }!!
         assertNotNull(blankSolve.sessionId)
         val fallbackSession = sessionDao.getSessionsByIds(listOf(blankSolve.sessionId!!)).firstOrNull()
         assertNotNull("Fallback session must exist in DB", fallbackSession)
         assertEquals("Imported Session", fallbackSession!!.name)
-        assertEquals(SessionKind.MANUAL.value, fallbackSession.kind)
+        assertEquals(SessionKind.AUTOMATIC.value, fallbackSession.kind)
     }
 
     // =========================================================================
@@ -423,7 +423,7 @@ class CsvImporterStressAndDedupChallengeTest {
         assertEquals("upsert", sess1.action)
         assertEquals(0L, sess1.baseVersion)
         assertTrue(sess1.payloadJson!!.contains("\"name\":\"Auth Alpha\""))
-        assertTrue(sess1.payloadJson!!.contains("\"kind\":\"manual\""))
+        assertTrue(sess1.payloadJson!!.contains("\"kind\":\"automatic\""))
 
         // Verify solve payloads
         val solve2 = solveMutations.find { it.entityId == "solve-auth-2" }!!

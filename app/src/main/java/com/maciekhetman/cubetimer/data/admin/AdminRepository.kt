@@ -21,7 +21,7 @@ import java.time.temporal.ChronoUnit
 interface AdminRepository {
     suspend fun getOverview(): Result<AdminOverview>
     suspend fun getTrafficData(range: AdminTimeRange, now: Instant = Instant.now()): Result<AdminTrafficData>
-    suspend fun getErrorLogs(before: String? = null): Result<AdminErrorLogPage>
+    suspend fun getErrorLogs(before: String? = null, beforeId: Long? = null): Result<AdminErrorLogPage>
 }
 
 /**
@@ -118,9 +118,9 @@ class AdminRepositoryImpl(
         }
     }
 
-    override suspend fun getErrorLogs(before: String?): Result<AdminErrorLogPage> = withContext(ioDispatcher) {
+    override suspend fun getErrorLogs(before: String?, beforeId: Long?): Result<AdminErrorLogPage> = withContext(ioDispatcher) {
         runCatching {
-            val response = apiClient.getAdminErrorLogs(before = before)
+            val response = apiClient.getAdminErrorLogs(before = before, beforeId = beforeId)
             val errors = response.errors.map { dto ->
                 AdminErrorLogItem(
                     id = dto.id,
@@ -135,7 +135,8 @@ class AdminRepositoryImpl(
             }
             AdminErrorLogPage(
                 errors = errors,
-                nextCursor = response.nextCursor
+                nextCursor = response.nextCursor,
+                nextCursorId = response.nextCursorId
             )
         }
     }

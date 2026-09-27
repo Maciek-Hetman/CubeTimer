@@ -23,6 +23,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.time.Instant
+import com.maciekhetman.cubetimer.testutil.insertSession
 
 @RunWith(RobolectricTestRunner::class)
 class SessionRepositoryTest {
@@ -89,7 +90,7 @@ class SessionRepositoryTest {
             ownerId = "user-abc",
             name = "Warmup 3x3",
             event = Mode.CUBE_3x3,
-            kind = SessionKind.MANUAL,
+            kind = SessionKind.AUTOMATIC,
             startedAt = nowIso
         )
 
@@ -111,56 +112,10 @@ class SessionRepositoryTest {
         assertEquals("sess-user-1", payload.id)
         assertEquals("Warmup 3x3", payload.name)
         assertEquals("3x3", payload.event)
-        assertEquals("manual", payload.kind)
+        assertEquals("automatic", payload.kind)
         assertFalse(payload.archived)
 
         assertEquals(1, syncTriggerCount)
-    }
-
-    @Test
-    fun testRenameSessionEnqueuesOutbox() = runTest {
-        val session = repository.createManualSession("Old Name", Mode.CUBE_3x3, "user-abc")
-        assertEquals(1, database.syncOutboxDao().getPendingMutations("user-abc").size)
-
-        val renamed = repository.renameSession(session.id, "New Name", "user-abc")
-        assertNotNull(renamed)
-        assertEquals("New Name", renamed?.name)
-
-        val pending = database.syncOutboxDao().getPendingMutations("user-abc")
-        assertEquals(2, pending.size)
-        val renameMutation = pending.last()
-        assertEquals("upsert", renameMutation.action)
-        assertEquals(session.version, renameMutation.baseVersion)
-
-        val payload = NetworkModule.json.decodeFromString<SessionSyncPayload>(renameMutation.payloadJson!!)
-        assertEquals("New Name", payload.name)
-    }
-
-    @Test
-    fun testArchiveAndUnarchiveSession() = runTest {
-        val session = repository.createManualSession("Grind", Mode.CUBE_3x3, "user-abc")
-
-        // Archive
-        val archived = repository.archiveSession(session.id, "user-abc")
-        assertNotNull(archived)
-        assertTrue(archived!!.archived)
-        assertNotNull(archived.endedAt)
-
-        val activeSessions = repository.getActiveSessions("user-abc", Mode.CUBE_3x3)
-        assertTrue(activeSessions.none { it.id == session.id })
-
-        val archivedFlow = repository.observeArchivedSessions("user-abc", Mode.CUBE_3x3).first()
-        assertEquals(1, archivedFlow.size)
-        assertEquals(session.id, archivedFlow[0].id)
-
-        // Unarchive
-        val unarchived = repository.unarchiveSession(session.id, "user-abc")
-        assertNotNull(unarchived)
-        assertFalse(unarchived!!.archived)
-
-        val activeAgain = repository.getActiveSessions("user-abc", Mode.CUBE_3x3)
-        assertEquals(1, activeAgain.size)
-        assertEquals(session.id, activeAgain[0].id)
     }
 
     @Test
@@ -188,7 +143,7 @@ class SessionRepositoryTest {
 
     @Test
     fun testDeleteSessionSoftDeletesAndEnqueuesDeleteMutation() = runTest {
-        val session = repository.createManualSession("Delete Me", Mode.CUBE_3x3, "user-abc")
+        val session = repository.insertSession("Delete Me", Mode.CUBE_3x3, "user-abc")
         val success = repository.deleteSession(session.id, "user-abc")
         assertTrue(success)
 

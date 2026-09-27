@@ -42,5 +42,7 @@ data class SolveSyncPayload(
     @SerialName("scramble")
     val scramble: String,
     @SerialName("event")
-    val event: String
+    val event: String,
+    @SerialName("timing_device")
+    val timingDevice: String = "keyboard"
 )

@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.TouchApp
+import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -66,6 +67,7 @@ import com.maciekhetman.cubetimer.domain.TimeFormatter
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Penalty
 import com.maciekhetman.cubetimer.model.SolveTime
+import com.maciekhetman.cubetimer.model.TimingDevice
 import com.maciekhetman.cubetimer.ui.components.Scramble2DPreview
 import com.maciekhetman.cubetimer.viewmodel.SolveDetailState
 import kotlinx.coroutines.Dispatchers
@@ -160,7 +162,7 @@ object SolveShareHelper {
                 appendLine("Scramble: ${solve.scramble}")
             }
             appendLine("Date: $formattedDate")
-            append("Timer: Screen / Touch")
+            append("Timer: ${solve.timingDevice.displayName}")
         }
     }
 
@@ -425,13 +427,17 @@ fun ShareableSolveCardDialog(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.TouchApp,
+                                    imageVector = if (solve.timingDevice == TimingDevice.KEYBOARD) {
+                                        Icons.Default.TouchApp
+                                    } else {
+                                        Icons.Default.Bluetooth
+                                    },
                                     contentDescription = null,
                                     modifier = Modifier.size(16.dp),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Text(
-                                    text = "Timer: Screen / Touch",
+                                    text = "Timer: ${solve.timingDevice.displayName}",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     fontWeight = FontWeight.Medium

@@ -86,7 +86,6 @@ import com.maciekhetman.cubetimer.data.SettingsRepository
 import com.maciekhetman.cubetimer.data.sync.SyncStateManager
 import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.Mode
-import com.maciekhetman.cubetimer.model.Session
 import com.maciekhetman.cubetimer.ui.auth.AuthDialog
 import com.maciekhetman.cubetimer.ui.auth.AuthDialogType
 import com.maciekhetman.cubetimer.ui.screens.AdminDashboardScreen
@@ -94,21 +93,15 @@ import com.maciekhetman.cubetimer.ui.screens.SettingsScreen
 import com.maciekhetman.cubetimer.ui.screens.HistoryScreen
 import com.maciekhetman.cubetimer.ui.screens.StatsScreen
 import com.maciekhetman.cubetimer.ui.screens.TimerScreen
-import com.maciekhetman.cubetimer.ui.session.CreateSessionDialog
-import com.maciekhetman.cubetimer.ui.session.DeleteSessionDialog
-import com.maciekhetman.cubetimer.ui.session.RenameSessionDialog
-import com.maciekhetman.cubetimer.ui.session.SessionManagementSheet
 import com.maciekhetman.cubetimer.ui.sync.SyncStatusDialog
 import com.maciekhetman.cubetimer.ui.theme.CubeTimerTheme
 import com.maciekhetman.cubetimer.viewmodel.AdminViewModel
 import com.maciekhetman.cubetimer.viewmodel.AuthViewModel
 import com.maciekhetman.cubetimer.viewmodel.HistoryViewModel
-import com.maciekhetman.cubetimer.viewmodel.SessionViewModel
 import com.maciekhetman.cubetimer.viewmodel.TimerViewModel
 
 class MainActivity : ComponentActivity() {
     private lateinit var timerViewModel: TimerViewModel
-    private lateinit var sessionViewModel: SessionViewModel
     private lateinit var authViewModel: AuthViewModel
     private lateinit var syncStateManager: SyncStateManager
 
@@ -127,15 +120,8 @@ class MainActivity : ComponentActivity() {
                             repository = app.solvesRepository,
                             settingsRepository = SettingsRepository(app),
                             sessionManager = app.sessionManager,
-                            authManager = app.authManager
-                        ) as T
-                    }
-                    modelClass.isAssignableFrom(SessionViewModel::class.java) -> {
-                        SessionViewModel(
-                            application = app,
-                            sessionManager = app.sessionManager,
-                            sessionRepository = app.sessionRepository,
-                            authManager = app.authManager
+                            authManager = app.authManager,
+                            bluetoothTimer = app.bluetoothTimerManager
                         ) as T
                     }
                     modelClass.isAssignableFrom(AuthViewModel::class.java) -> {
@@ -149,7 +135,6 @@ class MainActivity : ComponentActivity() {
             }
         }
         timerViewModel = ViewModelProvider(this, factory)[TimerViewModel::class.java]
-        sessionViewModel = ViewModelProvider(this, factory)[SessionViewModel::class.java]
         authViewModel = ViewModelProvider(this, factory)[AuthViewModel::class.java]
         syncStateManager = app.syncStateManager
 
@@ -167,7 +152,6 @@ class MainActivity : ComponentActivity() {
                 OptionalHapticsProvider(enabled = hapticsEnabled) {
                     CubeTimerApp(
                         viewModel = timerViewModel,
-                        sessionViewModel = sessionViewModel,
                         authViewModel = authViewModel,
                         syncStateManager = syncStateManager
                     )
@@ -208,7 +192,6 @@ private object NoHapticFeedback : HapticFeedback {
 @Composable
 fun CubeTimerApp(
     viewModel: TimerViewModel,
-    sessionViewModel: SessionViewModel = viewModel(),
     authViewModel: AuthViewModel = viewModel(),
     // HistoryViewModel and AdminViewModel are expensive to create (eager DB queries / network calls), so
     // they are left null here and only looked up (lazily, via viewModel()) inside the branch of AppContent
@@ -221,7 +204,6 @@ fun CubeTimerApp(
     val currentMode by viewModel.currentMode.collectAsStateWithLifecycle()
     val isTimerRunning by viewModel.isTimerRunning.collectAsStateWithLifecycle()
     val focusMode by viewModel.focusMode.collectAsStateWithLifecycle()
-    val hideSessionMenuInTopBar by viewModel.hideSessionMenuInTopBar.collectAsStateWithLifecycle()
     val focusModeActive = focusMode && isTimerRunning
 
     // Reactive Auth & Sync States
@@ -229,40 +211,11 @@ fun CubeTimerApp(
     val authFormState by authViewModel.formState.collectAsStateWithLifecycle()
     val syncUiState by syncStateManager.syncUiState.collectAsStateWithLifecycle()
 
-    // Reactive Session States
-    val activeSession by sessionViewModel.activeSession.collectAsStateWithLifecycle()
-    val isAutomaticMode by sessionViewModel.isAutomaticMode.collectAsStateWithLifecycle()
-    val sessionsList by sessionViewModel.sessionsList.collectAsStateWithLifecycle()
-    val archivedSessionsList by sessionViewModel.archivedSessionsList.collectAsStateWithLifecycle()
-
     // Modals visibility states
     var showSyncDialog by rememberSaveable { mutableStateOf(false) }
-    var showCreateSessionDialog by rememberSaveable { mutableStateOf(false) }
-    var showRenameSessionDialog by rememberSaveable { mutableStateOf(false) }
-    var sessionToRename by remember { mutableStateOf<Session?>(null) }
-    var showDeleteSessionDialog by rememberSaveable { mutableStateOf(false) }
-    var sessionToDelete by remember { mutableStateOf<Session?>(null) }
-    var showSessionManagementSheet by rememberSaveable { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     ApplyStatusBarColor()
-
-    // TimerViewModel applies the persisted default mode on its own at startup, and it is also the target
-    // of onModeSelected below; keep every other mode-scoped ViewModel (session list/top bar, history)
-    // in sync with it rather than only updating them from the mode picker's click handler.
-    LaunchedEffect(currentMode) {
-        sessionViewModel.setMode(currentMode)
-    }
-
-    // Surface session errors (e.g. "Session name cannot be empty") that were previously swallowed.
-    val sessionErrorMessage by sessionViewModel.errorMessage.collectAsStateWithLifecycle()
-    LaunchedEffect(sessionErrorMessage) {
-        val message = sessionErrorMessage
-        if (message != null) {
-            snackbarHostState.showSnackbar(message)
-            sessionViewModel.clearError()
-        }
-    }
 
     // Predictive back navigation support
     BackHandler(enabled = currentDestination != AppDestinations.TIMER && !isTimerRunning) {
@@ -313,14 +266,6 @@ fun CubeTimerApp(
                         viewModel = viewModel,
                         currentMode = currentMode,
                         onModeSelected = onModeSelected,
-                        activeSession = activeSession,
-                        isAutomaticMode = isAutomaticMode,
-                        onSwitchToAutomatic = { sessionViewModel.switchToAutomaticSession() },
-                        sessions = sessionsList,
-                        onSessionSelected = { session -> sessionViewModel.switchSession(session.id) },
-                        onCreateSessionClick = { showCreateSessionDialog = true },
-                        onManageSessionsClick = { showSessionManagementSheet = true },
-                        hideSessionMenu = hideSessionMenuInTopBar,
                         modifier = contentModifier
                     )
                 }
@@ -332,14 +277,6 @@ fun CubeTimerApp(
                         viewModel = viewModel,
                         currentMode = currentMode,
                         onModeSelected = onModeSelected,
-                        activeSession = activeSession,
-                        isAutomaticMode = isAutomaticMode,
-                        onSwitchToAutomatic = { sessionViewModel.switchToAutomaticSession() },
-                        sessions = sessionsList,
-                        onSessionSelected = { session -> sessionViewModel.switchSession(session.id) },
-                        onCreateSessionClick = { showCreateSessionDialog = true },
-                        onManageSessionsClick = { showSessionManagementSheet = true },
-                        hideSessionMenu = hideSessionMenuInTopBar,
                         modifier = contentModifier
                     )
                 }
@@ -353,14 +290,6 @@ fun CubeTimerApp(
                         viewModel = resolvedHistoryViewModel,
                         currentMode = currentMode,
                         onModeSelected = onModeSelected,
-                        activeSession = activeSession,
-                        isAutomaticMode = isAutomaticMode,
-                        onSwitchToAutomatic = { sessionViewModel.switchToAutomaticSession() },
-                        sessions = sessionsList,
-                        onSessionSelected = { session -> sessionViewModel.switchSession(session.id) },
-                        onCreateSessionClick = { showCreateSessionDialog = true },
-                        onManageSessionsClick = { showSessionManagementSheet = true },
-                        hideSessionMenu = hideSessionMenuInTopBar,
                         modifier = contentModifier
                     )
                 }
@@ -369,19 +298,11 @@ fun CubeTimerApp(
                         viewModel = viewModel,
                         currentMode = currentMode,
                         onModeSelected = onModeSelected,
-                        activeSession = activeSession,
-                        isAutomaticMode = isAutomaticMode,
-                        onSwitchToAutomatic = { sessionViewModel.switchToAutomaticSession() },
-                        sessions = sessionsList,
-                        onSessionSelected = { session -> sessionViewModel.switchSession(session.id) },
-                        onCreateSessionClick = { showCreateSessionDialog = true },
-                        onManageSessionsClick = { showSessionManagementSheet = true },
                         syncUiState = syncUiState,
                         onSyncClick = { showSyncDialog = true },
                         authState = authState,
                         onAuthClick = onAuthClick,
                         onNavigateToAdmin = { currentDestination = AppDestinations.ADMIN },
-                        hideSessionMenu = hideSessionMenuInTopBar,
                         modifier = contentModifier
                     )
                 }
@@ -432,71 +353,6 @@ fun CubeTimerApp(
             onTriggerSync = { syncStateManager.triggerSync() },
             onDismiss = { showSyncDialog = false },
             onLoginClick = { authViewModel.openDialog(AuthDialogType.LOGIN) }
-        )
-    }
-
-    if (showCreateSessionDialog) {
-        CreateSessionDialog(
-            onDismiss = { showCreateSessionDialog = false },
-            onConfirm = { name -> sessionViewModel.createManualSession(name) }
-        )
-    }
-
-    if (showRenameSessionDialog && sessionToRename != null) {
-        RenameSessionDialog(
-            initialName = sessionToRename!!.name,
-            onDismiss = {
-                showRenameSessionDialog = false
-                sessionToRename = null
-            },
-            onConfirm = { newName ->
-                sessionToRename?.let { session ->
-                    sessionViewModel.renameSession(session.id, newName)
-                }
-                showRenameSessionDialog = false
-                sessionToRename = null
-            }
-        )
-    }
-
-    if (showDeleteSessionDialog && sessionToDelete != null) {
-        DeleteSessionDialog(
-            sessionName = sessionToDelete!!.name,
-            onDismiss = {
-                showDeleteSessionDialog = false
-                sessionToDelete = null
-            },
-            onConfirm = {
-                sessionToDelete?.let { session ->
-                    sessionViewModel.deleteSession(session.id)
-                }
-                showDeleteSessionDialog = false
-                sessionToDelete = null
-            }
-        )
-    }
-
-    if (showSessionManagementSheet) {
-        SessionManagementSheet(
-            onDismissRequest = { showSessionManagementSheet = false },
-            currentMode = currentMode,
-            activeSession = activeSession,
-            isAutomaticMode = isAutomaticMode,
-            onSwitchToAutomatic = { sessionViewModel.switchToAutomaticSession() },
-            activeSessions = sessionsList,
-            archivedSessions = archivedSessionsList,
-            onSelectSession = { session -> sessionViewModel.switchSession(session.id) },
-            onCreateSession = { showCreateSessionDialog = true },
-            onRenameSession = { session ->
-                sessionToRename = session
-                showRenameSessionDialog = true
-            },
-            onArchiveSession = { session -> sessionViewModel.archiveSession(session.id) },
-            onUnarchiveSession = { session -> sessionViewModel.unarchiveSession(session.id) },
-            onDeleteSession = { session ->
-                sessionToDelete = session
-                showDeleteSessionDialog = true
-            }
         )
     }
 }

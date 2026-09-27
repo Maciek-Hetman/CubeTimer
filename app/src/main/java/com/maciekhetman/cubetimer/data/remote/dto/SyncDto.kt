@@ -147,7 +147,9 @@ data class SolveSnapshotDto(
     @SerialName("updated_at")
     val updatedAt: String? = null,
     @SerialName("deleted_at")
-    val deletedAt: String? = null
+    val deletedAt: String? = null,
+    @SerialName("timing_device")
+    val timingDevice: String = "keyboard"
 )
 
 @Serializable

@@ -82,16 +82,20 @@ data class PasswordResetConfirmRequest(
 )
 
 /**
- * Request payload for POST /v1/auth/federated/google and POST /v1/auth/link/google
+ * Request payload for POST /v1/auth/federated/google and POST /v1/auth/link/google.
+ *
+ * The backend requires [clientId] to be one of its configured Google OAuth client IDs (and the ID
+ * token's audience), and [nonce] to equal the token's `nonce` claim; either an [idToken] or the
+ * [code] + [redirectUri] + [codeVerifier] triple must be present.
  */
 @Serializable
 data class GoogleAuthRequest(
     @SerialName("id_token")
     val idToken: String? = null,
     @SerialName("client_id")
-    val clientId: String? = null,
+    val clientId: String,
     @SerialName("nonce")
-    val nonce: String? = null,
+    val nonce: String,
     @SerialName("code")
     val code: String? = null,
     @SerialName("redirect_uri")

@@ -49,10 +49,10 @@ class CubeSyncApiClientImpl(
     override suspend fun loginWithGoogle(request: GoogleAuthRequest): AuthResponse =
         executeSafe { apiService.loginWithGoogle(request) }
 
-    override suspend fun linkGoogle(idToken: String, authToken: String?): Unit =
+    override suspend fun linkGoogle(request: GoogleAuthRequest, authToken: String?): Unit =
         executeSafeUnit {
             val authHeader = authToken?.let { if (it.startsWith("Bearer ")) it else "Bearer $it" } ?: ""
-            apiService.linkGoogleAccount(authHeader, GoogleAuthRequest(idToken = idToken))
+            apiService.linkGoogleAccount(authHeader, request)
         }
 
     override suspend fun getCurrentUser(authToken: String?): UserDto =
@@ -119,10 +119,15 @@ class CubeSyncApiClientImpl(
             apiService.getAdminRequestTypeStats(authHeader, from, to, interval)
         }
 
-    override suspend fun getAdminErrorLogs(before: String?, authToken: String?): com.maciekhetman.cubetimer.data.remote.dto.ErrorLogResponseDto =
+    override suspend fun getAdminErrorLogs(
+        before: String?,
+        beforeId: Long?,
+        limit: Int?,
+        authToken: String?
+    ): com.maciekhetman.cubetimer.data.remote.dto.ErrorLogResponseDto =
         executeSafe {
             val authHeader = authToken?.let { if (it.startsWith("Bearer ")) it else "Bearer $it" }
-            apiService.getAdminErrorLogs(authHeader, before)
+            apiService.getAdminErrorLogs(authHeader, before, beforeId, limit)
         }
 
     private suspend fun <T : Any> executeSafe(call: suspend () -> Response<T>): T {

@@ -410,7 +410,7 @@ class AdminViewModelStressTest {
             return trafficResult
         }
 
-        override suspend fun getErrorLogs(before: String?): Result<AdminErrorLogPage> {
+        override suspend fun getErrorLogs(before: String?, beforeId: Long?): Result<AdminErrorLogPage> {
             getErrorLogsCallCount++
             return errorsResult
         }

@@ -334,11 +334,21 @@ class AuthManagerTest {
             user = UserDto(id = "user-g", email = "g@gmail.com", userRole = "user", emailVerified = true)
         )
 
-        val result = authManager.loginWithGoogle("id-token-xyz")
+        val result = authManager.loginWithGoogle(
+            idToken = "id-token-xyz",
+            clientId = "123-abc.apps.googleusercontent.com",
+            nonce = "nonce-1"
+        )
 
         assertTrue(result is AuthResult.Success)
         assertTrue(authManager.authState.value.isAuthenticated)
         assertEquals("user-g", authManager.currentUser?.id)
+        // The backend checks client_id against its allow-list and the token's aud, and nonce
+        // against the token's nonce claim; the device id is not a valid client_id.
+        val request = requireNotNull(fakeApiClient.lastGoogleRequest)
+        assertEquals("id-token-xyz", request.idToken)
+        assertEquals("123-abc.apps.googleusercontent.com", request.clientId)
+        assertEquals("nonce-1", request.nonce)
     }
 
     @Test
@@ -460,6 +470,7 @@ class AuthManagerTest {
 
         var googleLoginResponse: AuthResponse? = null
         var googleLoginError: AuthException? = null
+        var lastGoogleRequest: GoogleAuthRequest? = null
 
         override suspend fun register(request: RegisterRequest): StatusResponse {
             registerError?.let { throw it }
@@ -494,11 +505,12 @@ class AuthManagerTest {
         }
 
         override suspend fun loginWithGoogle(request: GoogleAuthRequest): AuthResponse {
+            lastGoogleRequest = request
             googleLoginError?.let { throw it }
             return googleLoginResponse ?: throw AuthException.InvalidSocialToken()
         }
 
-        override suspend fun linkGoogle(idToken: String, authToken: String?) {}
+        override suspend fun linkGoogle(request: com.maciekhetman.cubetimer.data.remote.dto.GoogleAuthRequest, authToken: String?) {}
         override suspend fun getCurrentUser(authToken: String?): UserDto = UserDto("u", "e@t.com")
         override suspend fun changePassword(request: ChangePasswordRequest, authToken: String?) {}
         override suspend fun deleteAccount(authToken: String?) {}

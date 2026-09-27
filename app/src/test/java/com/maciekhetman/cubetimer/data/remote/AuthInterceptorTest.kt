@@ -56,7 +56,7 @@ class AuthInterceptorTest {
         val recordedRequest = mockWebServer.takeRequest()
         assertEquals("Bearer test-jwt-access-token", recordedRequest.getHeader(AuthInterceptor.HEADER_AUTHORIZATION))
         assertEquals("device-uuid-12345", recordedRequest.getHeader(AuthInterceptor.HEADER_DEVICE_ID))
-        assertEquals("2", recordedRequest.getHeader(AuthInterceptor.HEADER_SYNC_PROTOCOL))
+        assertEquals("1", recordedRequest.getHeader(AuthInterceptor.HEADER_SYNC_PROTOCOL))
     }
 
     @Test
@@ -77,7 +77,7 @@ class AuthInterceptorTest {
         val recordedRequest = mockWebServer.takeRequest()
         assertNull(recordedRequest.getHeader(AuthInterceptor.HEADER_AUTHORIZATION))
         assertEquals("device-uuid-67890", recordedRequest.getHeader(AuthInterceptor.HEADER_DEVICE_ID))
-        assertEquals("2", recordedRequest.getHeader(AuthInterceptor.HEADER_SYNC_PROTOCOL))
+        assertEquals("1", recordedRequest.getHeader(AuthInterceptor.HEADER_SYNC_PROTOCOL))
     }
 
     @Test

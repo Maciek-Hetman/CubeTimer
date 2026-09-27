@@ -77,7 +77,8 @@ class CsvImporterTest {
         val s1 = sessions.find { it.id == "sess-1" }!!
         assertEquals("Session One", s1.name)
         assertEquals("3x3", s1.event)
-        assertEquals(SessionKind.MANUAL.value, s1.kind)
+        assertEquals(SessionKind.AUTOMATIC.value, s1.kind)
+        assertNotNull("imported sessions are created closed", s1.endedAt)
 
         // Verify solves in DB
         val solves = solveDao.getSolvesByScope(ownerId = "guest")

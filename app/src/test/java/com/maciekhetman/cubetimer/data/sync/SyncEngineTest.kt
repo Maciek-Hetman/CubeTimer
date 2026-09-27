@@ -527,7 +527,7 @@ class SyncEngineTest {
         override suspend fun requestPasswordReset(email: String) = throw NotImplementedError()
         override suspend fun confirmPasswordReset(token: String, newPassword: String) = throw NotImplementedError()
         override suspend fun loginWithGoogle(request: com.maciekhetman.cubetimer.data.remote.dto.GoogleAuthRequest) = throw NotImplementedError()
-        override suspend fun linkGoogle(idToken: String, authToken: String?) = Unit
+        override suspend fun linkGoogle(request: com.maciekhetman.cubetimer.data.remote.dto.GoogleAuthRequest, authToken: String?) = Unit
         override suspend fun getCurrentUser(authToken: String?) = throw NotImplementedError()
         override suspend fun changePassword(request: com.maciekhetman.cubetimer.data.remote.dto.ChangePasswordRequest, authToken: String?) = Unit
         override suspend fun deleteAccount(authToken: String?) = Unit
@@ -560,7 +560,7 @@ class SyncEngineTest {
         override suspend fun initialize() {}
         override suspend fun register(email: String, password: String) = throw NotImplementedError()
         override suspend fun login(email: String, password: String) = throw NotImplementedError()
-        override suspend fun loginWithGoogle(idToken: String) = throw NotImplementedError()
+        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String) = throw NotImplementedError()
         override suspend fun verifyEmail(token: String) = throw NotImplementedError()
         override suspend fun resendVerificationEmail(email: String) = throw NotImplementedError()
         override suspend fun requestPasswordReset(email: String) = throw NotImplementedError()

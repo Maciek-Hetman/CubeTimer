@@ -214,7 +214,8 @@ class ConflictResolverImpl(
                     event = dto.event,
                     version = conflict.serverVersion.coerceAtLeast(dto.version),
                     updatedAt = dto.updatedAt ?: serverUpdated,
-                    deletedAt = dto.deletedAt
+                    deletedAt = dto.deletedAt,
+                    timingDevice = dto.timingDevice
                 )
                 solveDao.upsert(entity)
             } else {

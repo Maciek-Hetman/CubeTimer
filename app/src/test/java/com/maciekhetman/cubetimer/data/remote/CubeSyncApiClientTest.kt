@@ -296,19 +296,34 @@ class CubeSyncApiClientTest {
                 """.trimIndent())
         )
 
-        val auth = apiClient.loginWithGoogle(GoogleAuthRequest(idToken = "google-id-token-xyz"))
+        val auth = apiClient.loginWithGoogle(
+            GoogleAuthRequest(idToken = "google-id-token-xyz", clientId = "client-1", nonce = "nonce-1")
+        )
         assertEquals("acc-google", auth.accessToken)
         assertEquals("googleuser@gmail.com", auth.user.email)
+
+        val req = mockWebServer.takeRequest()
+        assertEquals("/v1/auth/federated/google", req.path)
+        val body = req.body.readUtf8()
+        assertTrue(body.contains("\"id_token\":\"google-id-token-xyz\""))
+        assertTrue(body.contains("\"client_id\":\"client-1\""))
+        assertTrue(body.contains("\"nonce\":\"nonce-1\""))
     }
 
     @Test
     fun `linkGoogle attaches authorization header and succeeds`() = runTest {
         mockWebServer.enqueue(MockResponse().setResponseCode(200).setBody("{}"))
 
-        apiClient.linkGoogle("id-token-link", authToken = "Bearer jwt-session-token")
+        apiClient.linkGoogle(
+            GoogleAuthRequest(idToken = "id-token-link", clientId = "client-1", nonce = "nonce-1"),
+            authToken = "Bearer jwt-session-token"
+        )
         val req = mockWebServer.takeRequest()
         assertEquals("/v1/auth/link/google", req.path)
         assertEquals("Bearer jwt-session-token", req.getHeader("Authorization"))
+        val body = req.body.readUtf8()
+        assertTrue(body.contains("\"client_id\":\"client-1\""))
+        assertTrue(body.contains("\"nonce\":\"nonce-1\""))
     }
 
     @Test

@@ -21,6 +21,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import com.maciekhetman.cubetimer.testutil.insertSession
 
 @RunWith(RobolectricTestRunner::class)
 class SessionCascadeDeleteRepositoryTest {
@@ -59,7 +60,7 @@ class SessionCascadeDeleteRepositoryTest {
 
     @Test
     fun testDeleteSessionWithSolves_guest_softDeletesSessionAndSolvesAtomically() = runTest {
-        val session = repository.createManualSession("Afternoon Practice", Mode.CUBE_3x3, ownerId = "guest")
+        val session = repository.insertSession("Afternoon Practice", Mode.CUBE_3x3, ownerId = "guest")
 
         val s1 = SolveTime(id = "s-1", timeInMillis = 10000L, mode = Mode.CUBE_3x3, sessionId = session.id)
         val s2 = SolveTime(id = "s-2", timeInMillis = 11000L, mode = Mode.CUBE_3x3, sessionId = session.id)
@@ -91,7 +92,7 @@ class SessionCascadeDeleteRepositoryTest {
 
     @Test
     fun testRestoreSessionWithSolves_guest_restoresBothSessionAndSolves() = runTest {
-        val session = repository.createManualSession("Undo Target", Mode.CUBE_3x3, ownerId = "guest")
+        val session = repository.insertSession("Undo Target", Mode.CUBE_3x3, ownerId = "guest")
         val solve = SolveTime(
             id = "solve-restore-1",
             timeInMillis = 9500L,
@@ -131,7 +132,7 @@ class SessionCascadeDeleteRepositoryTest {
     @Test
     fun testCascadeDeleteAndRestoreForAuthenticatedUser_generatesCorrectOutboxMutations() = runTest {
         val userId = "user-auth-m1"
-        val session = repository.createManualSession("Online Session", Mode.CUBE_3x3, ownerId = userId)
+        val session = repository.insertSession("Online Session", Mode.CUBE_3x3, ownerId = userId)
 
         val s1 = SolveTime(id = "s-auth-1", timeInMillis = 10000L, mode = Mode.CUBE_3x3, sessionId = session.id)
         val s2 = SolveTime(id = "s-auth-2", timeInMillis = 11000L, mode = Mode.CUBE_3x3, sessionId = session.id)
@@ -185,7 +186,7 @@ class SessionCascadeDeleteRepositoryTest {
 
     @Test
     fun testDeleteSessionWithSolves_emptySessionReturnsEmptySolvesSnapshot() = runTest {
-        val session = repository.createManualSession("Empty Sess", Mode.CUBE_3x3, ownerId = "guest")
+        val session = repository.insertSession("Empty Sess", Mode.CUBE_3x3, ownerId = "guest")
         val snapshot = repository.deleteSessionWithSolves(session.id, ownerId = "guest")
         assertNotNull(snapshot)
         assertEquals(session.id, snapshot?.session?.id)

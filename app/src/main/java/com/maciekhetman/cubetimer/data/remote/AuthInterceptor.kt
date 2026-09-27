@@ -19,8 +19,10 @@ class AuthInterceptor(
         // 1. Attach Device ID
         builder.header(HEADER_DEVICE_ID, tokenStorage.getDeviceId())
 
-        // 2. Attach Sync Protocol Version
-        builder.header(HEADER_SYNC_PROTOCOL, PROTOCOL_VERSION_2)
+        // 2. Attach Sync Protocol Version. Deliberately v1: v2 replaces a conflict outcome's
+        // `current` entity with an {id, version, updated_at} stub, but ConflictResolver needs the
+        // full server record to apply "keep server".
+        builder.header(HEADER_SYNC_PROTOCOL, SYNC_PROTOCOL_VERSION)
 
         // 3. Attach Content-Type for mutating requests if not specified
         if (originalRequest.body != null && originalRequest.header(HEADER_CONTENT_TYPE) == null) {
@@ -42,7 +44,7 @@ class AuthInterceptor(
         const val HEADER_SYNC_PROTOCOL = "X-Sync-Protocol"
         const val HEADER_CONTENT_TYPE = "Content-Type"
 
-        const val PROTOCOL_VERSION_2 = "2"
+        const val SYNC_PROTOCOL_VERSION = "1"
         const val CONTENT_TYPE_JSON = "application/json"
     }
 }

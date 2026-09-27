@@ -52,6 +52,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.time.Instant
 import java.util.UUID
+import com.maciekhetman.cubetimer.testutil.insertSession
 
 @RunWith(RobolectricTestRunner::class)
 class SessionOutboxIntegrityStressTest {
@@ -88,10 +89,7 @@ class SessionOutboxIntegrityStressTest {
     @Test
     fun testAllGuestSessionAndSolveOperationsProduceZeroOutboxRecords() = runTest {
         // 1. Guest Session Lifecycle
-        val guestSession = sessionRepository.createManualSession("Guest Session 1", Mode.CUBE_3x3, ownerId = "guest")
-        sessionRepository.renameSession(guestSession.id, "Guest Session Renamed", ownerId = "guest")
-        sessionRepository.archiveSession(guestSession.id, ownerId = "guest")
-        sessionRepository.unarchiveSession(guestSession.id, ownerId = "guest")
+        val guestSession = sessionRepository.insertSession("Guest Session 1", Mode.CUBE_3x3, ownerId = "guest")
         sessionRepository.closeSession(guestSession.id, ownerId = "guest")
         sessionRepository.deleteSession(guestSession.id, ownerId = "guest")
 
@@ -121,8 +119,8 @@ class SessionOutboxIntegrityStressTest {
     fun testAuthenticatedSessionCrudProducesValidSyncOutboxRecords() = runTest {
         val userId = "user-auth-123"
 
-        // 1. Create Manual Session
-        val created = sessionRepository.createManualSession("Match Prep", Mode.CUBE_3x3, ownerId = userId)
+        // 1. Create the automatic session
+        val created = sessionRepository.insertSession("Match Prep", Mode.CUBE_3x3, ownerId = userId, kind = SessionKind.AUTOMATIC)
         var pending = database.syncOutboxDao().getPendingMutations(userId)
         assertEquals(1, pending.size)
         val m1 = pending[0]
@@ -134,65 +132,38 @@ class SessionOutboxIntegrityStressTest {
         assertEquals(created.id, p1.id)
         assertEquals("Match Prep", p1.name)
         assertEquals("3x3", p1.event)
-        assertEquals("manual", p1.kind)
+        assertEquals("automatic", p1.kind)
         assertFalse(p1.archived)
         assertNull(p1.endedAt)
 
-        // 2. Rename Session
-        sessionRepository.renameSession(created.id, "Main Event Practice", ownerId = userId)
+        // 2. Close Session (on open session)
+        sessionRepository.closeSession(created.id, ownerId = userId)
         pending = database.syncOutboxDao().getPendingMutations(userId)
         assertEquals(2, pending.size)
         val m2 = pending[1]
         assertEquals("upsert", m2.action)
         val p2 = json.decodeFromString<SessionSyncPayload>(m2.payloadJson!!)
-        assertEquals("Main Event Practice", p2.name)
+        assertNotNull(p2.endedAt)
 
-        // 3. Close Session (on open session)
+        // 2b. Verify closeSession is idempotent (does not enqueue duplicate mutation if already ended)
         sessionRepository.closeSession(created.id, ownerId = userId)
+        assertEquals(2, database.syncOutboxDao().getPendingMutations(userId).size)
+
+        // 3. Delete Session
+        sessionRepository.deleteSession(created.id, ownerId = userId)
         pending = database.syncOutboxDao().getPendingMutations(userId)
         assertEquals(3, pending.size)
         val m3 = pending[2]
-        assertEquals("upsert", m3.action)
-        val p3 = json.decodeFromString<SessionSyncPayload>(m3.payloadJson!!)
-        assertNotNull(p3.endedAt)
-
-        // 3b. Verify closeSession is idempotent (does not enqueue duplicate mutation if already ended)
-        sessionRepository.closeSession(created.id, ownerId = userId)
-        assertEquals(3, database.syncOutboxDao().getPendingMutations(userId).size)
-
-        // 4. Archive Session
-        sessionRepository.archiveSession(created.id, ownerId = userId)
-        pending = database.syncOutboxDao().getPendingMutations(userId)
-        assertEquals(4, pending.size)
-        val m4 = pending[3]
-        assertEquals("upsert", m4.action)
-        val p4 = json.decodeFromString<SessionSyncPayload>(m4.payloadJson!!)
-        assertTrue(p4.archived)
-        assertNotNull(p4.endedAt)
-
-        // 5. Unarchive Session
-        sessionRepository.unarchiveSession(created.id, ownerId = userId)
-        pending = database.syncOutboxDao().getPendingMutations(userId)
-        assertEquals(5, pending.size)
-        val m5 = pending[4]
-        val p5 = json.decodeFromString<SessionSyncPayload>(m5.payloadJson!!)
-        assertFalse(p5.archived)
-
-        // 6. Delete Session
-        sessionRepository.deleteSession(created.id, ownerId = userId)
-        pending = database.syncOutboxDao().getPendingMutations(userId)
-        assertEquals(6, pending.size)
-        val m6 = pending[5]
-        assertEquals("delete", m6.action)
-        assertEquals("session", m6.entityType)
-        assertEquals(created.id, m6.entityId)
-        assertNull(m6.payloadJson)
+        assertEquals("delete", m3.action)
+        assertEquals("session", m3.entityType)
+        assertEquals(created.id, m3.entityId)
+        assertNull(m3.payloadJson)
     }
 
     @Test
     fun testAuthenticatedSolveCrudProducesValidSyncOutboxRecords() = runTest {
         val userId = "user-auth-solves"
-        val session = sessionRepository.createManualSession("Speed Session", Mode.CUBE_4x4, ownerId = userId)
+        val session = sessionRepository.insertSession("Speed Session", Mode.CUBE_4x4, ownerId = userId)
 
         val solve = SolveTime(
             id = "solve-auth-4x4-1",
@@ -389,7 +360,7 @@ class SessionOutboxIntegrityStressTest {
         coroutineScope {
             val sessionTasks = (1..sessionCount).map { sessionIdx ->
                 async {
-                    val session = sessionRepository.createManualSession(
+                    val session = sessionRepository.insertSession(
                         name = "Stress Session $sessionIdx",
                         mode = Mode.CUBE_3x3,
                         ownerId = userId
@@ -450,7 +421,7 @@ class SessionOutboxIntegrityStressTest {
         override suspend fun requestPasswordReset(email: String): StatusResponse = throw NotImplementedError()
         override suspend fun confirmPasswordReset(token: String, newPassword: String): AuthResponse = throw NotImplementedError()
         override suspend fun logout(refreshToken: String) = Unit
-        override suspend fun linkGoogle(idToken: String, authToken: String?) = Unit
+        override suspend fun linkGoogle(request: com.maciekhetman.cubetimer.data.remote.dto.GoogleAuthRequest, authToken: String?) = Unit
         override suspend fun getCurrentUser(authToken: String?): UserDto = throw NotImplementedError()
         override suspend fun changePassword(request: ChangePasswordRequest, authToken: String?) = Unit
         override suspend fun deleteAccount(authToken: String?) = Unit

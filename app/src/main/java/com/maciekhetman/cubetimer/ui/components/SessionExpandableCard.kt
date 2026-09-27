@@ -41,7 +41,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.maciekhetman.cubetimer.model.SessionKind
 import com.maciekhetman.cubetimer.model.SolveTime
 import com.maciekhetman.cubetimer.ui.screens.HistorySolveCard
 import com.maciekhetman.cubetimer.viewmodel.SessionGroupUiModel
@@ -214,7 +213,6 @@ fun SessionCardHeader(
 
     val session = sessionGroup.session
     val solveCountText = "${sessionGroup.solveCount} ${if (sessionGroup.solveCount == 1) "solve" else "solves"}"
-    val kindText = if (session.kind == SessionKind.MANUAL) "Manual" else "Auto"
 
     Surface(
         onClick = onClick,
@@ -240,7 +238,7 @@ fun SessionCardHeader(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "$solveCountText · ${session.event.displayName} · $kindText",
+                    text = "$solveCountText · ${session.event.displayName}",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

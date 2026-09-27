@@ -232,7 +232,7 @@ class AdminViewModelTest {
             return Result.success(trafficData)
         }
 
-        override suspend fun getErrorLogs(before: String?): Result<AdminErrorLogPage> {
+        override suspend fun getErrorLogs(before: String?, beforeId: Long?): Result<AdminErrorLogPage> {
             getErrorLogsCallCount++
             if (shouldThrowForbidden) return Result.failure(AuthException.Forbidden())
             return Result.success(errorLogsPage)

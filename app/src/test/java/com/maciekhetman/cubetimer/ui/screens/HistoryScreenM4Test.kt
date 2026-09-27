@@ -4,9 +4,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -27,7 +29,6 @@ import com.maciekhetman.cubetimer.viewmodel.HistoryUiState
 import com.maciekhetman.cubetimer.viewmodel.PenaltyFilter
 import com.maciekhetman.cubetimer.viewmodel.PuzzleScope
 import com.maciekhetman.cubetimer.viewmodel.SessionGroupUiModel
-import com.maciekhetman.cubetimer.viewmodel.SessionKindFilter
 import com.maciekhetman.cubetimer.viewmodel.SessionSortOrder
 import com.maciekhetman.cubetimer.viewmodel.SolveSortOrder
 import com.maciekhetman.cubetimer.viewmodel.TimeRangeFilter
@@ -177,7 +178,7 @@ class HistoryScreenM4Test {
 
         // Header: name, "count · event · kind" summary, best and average
         composeTestRule.onNodeWithText("Main Practice 3x3").assertIsDisplayed()
-        composeTestRule.onNodeWithText("25 solves · 3x3 · Manual").assertIsDisplayed()
+        composeTestRule.onNodeWithText("25 solves · 3x3").assertIsDisplayed()
         composeTestRule.onNodeWithText("8.42").assertIsDisplayed()
         composeTestRule.onNodeWithText("11.35").assertIsDisplayed()
 
@@ -291,7 +292,6 @@ class HistoryScreenM4Test {
             activeFilterSheetTab = 0,
             sessionSort = SessionSortOrder.MOST_RECENT,
             puzzleScope = PuzzleScope.ACTIVE_PUZZLE,
-            sessionKindFilter = SessionKindFilter.ALL,
             solveSort = SolveSortOrder.MOST_RECENT,
             penaltyFilter = PenaltyFilter.ALL,
             timeRangeFilter = TimeRangeFilter(),
@@ -309,7 +309,6 @@ class HistoryScreenM4Test {
                     onSelectTab = { tab -> selectedTab = tab },
                     onSessionSortChange = {},
                     onPuzzleScopeChange = {},
-                    onSessionKindFilterChange = {},
                     onSolveSortChange = {},
                     onPenaltyFilterChange = {},
                     onTimeRangeFilterChange = {},
@@ -324,7 +323,7 @@ class HistoryScreenM4Test {
         composeTestRule.onNodeWithText("Solves").assertIsDisplayed()
         composeTestRule.onNodeWithText("Sort by").assertIsDisplayed()
         composeTestRule.onNodeWithText("Puzzle").performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithText("Session Type").performScrollTo().assertIsDisplayed()
+        composeTestRule.onAllNodesWithText("Session Type").assertCountEquals(0)
 
         // Tab selection
         composeTestRule.onNodeWithText("Solves").performClick()
@@ -340,7 +339,6 @@ class HistoryScreenM4Test {
 
         var changedSort: SessionSortOrder? = null
         var changedScope: PuzzleScope? = null
-        var changedKind: SessionKindFilter? = null
 
         composeTestRule.setContent {
             MaterialTheme {
@@ -350,7 +348,6 @@ class HistoryScreenM4Test {
                     onSelectTab = {},
                     onSessionSortChange = { changedSort = it },
                     onPuzzleScopeChange = { changedScope = it },
-                    onSessionKindFilterChange = { changedKind = it },
                     onSolveSortChange = {},
                     onPenaltyFilterChange = {},
                     onTimeRangeFilterChange = {},
@@ -365,9 +362,6 @@ class HistoryScreenM4Test {
 
         composeTestRule.onNodeWithText("All Puzzles").performScrollTo().performClick()
         assertEquals(PuzzleScope.ALL_PUZZLES, changedScope)
-
-        composeTestRule.onNodeWithText("Manual").performScrollTo().performClick()
-        assertEquals(SessionKindFilter.MANUAL_ONLY, changedKind)
     }
 
     @Test
@@ -389,7 +383,6 @@ class HistoryScreenM4Test {
                     onSelectTab = {},
                     onSessionSortChange = {},
                     onPuzzleScopeChange = {},
-                    onSessionKindFilterChange = {},
                     onSolveSortChange = { changedSort = it },
                     onPenaltyFilterChange = { changedPenalty = it },
                     onTimeRangeFilterChange = {},

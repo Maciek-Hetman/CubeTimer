@@ -5,6 +5,7 @@ import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Penalty
 import com.maciekhetman.cubetimer.model.SolveTime
+import com.maciekhetman.cubetimer.model.TimingDevice
 
 import com.maciekhetman.cubetimer.data.remote.dto.SolveSyncPayload
 
@@ -17,7 +18,8 @@ fun SolveEntity.toSolveTime(): SolveTime {
         timestamp = epochMillis,
         scramble = this.scramble,
         mode = CubeTypeConverters.toMode(this.event),
-        sessionId = this.sessionId
+        sessionId = this.sessionId,
+        timingDevice = TimingDevice.fromString(this.timingDevice)
     )
 }
 
@@ -39,7 +41,8 @@ fun SolveTime.toSolveEntity(
         scramble = this.scramble,
         version = version,
         updatedAt = iso,
-        deletedAt = deletedAt
+        deletedAt = deletedAt,
+        timingDevice = this.timingDevice.value
     )
 }
 
@@ -50,7 +53,8 @@ fun SolveEntity.toSyncPayload(): SolveSyncPayload = SolveSyncPayload(
     penalty = this.penalty,
     solvedAt = this.solvedAt,
     scramble = this.scramble,
-    event = this.event
+    event = this.event,
+    timingDevice = this.timingDevice
 )
 
 fun SolveTime.toSyncPayload(): SolveSyncPayload = SolveSyncPayload(
@@ -60,7 +64,8 @@ fun SolveTime.toSyncPayload(): SolveSyncPayload = SolveSyncPayload(
     penalty = CubeTypeConverters.fromPenalty(this.penalty),
     solvedAt = CubeTypeConverters.epochMillisToIso(this.timestamp),
     scramble = this.scramble,
-    event = CubeTypeConverters.fromMode(this.mode)
+    event = CubeTypeConverters.fromMode(this.mode),
+    timingDevice = this.timingDevice.value
 )
 
 fun Mode.toEventString(): String = CubeTypeConverters.fromMode(this)

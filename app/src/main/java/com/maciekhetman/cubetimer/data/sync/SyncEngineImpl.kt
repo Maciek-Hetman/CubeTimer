@@ -475,7 +475,8 @@ class SyncEngineImpl(
                         event = dto.event,
                         version = change.version.coerceAtLeast(dto.version),
                         updatedAt = dto.updatedAt ?: change.changedAt ?: dto.solvedAt,
-                        deletedAt = dto.deletedAt
+                        deletedAt = dto.deletedAt,
+                        timingDevice = dto.timingDevice
                     )
                     solveDao.upsert(entity)
                     changesApplied++
@@ -506,7 +507,7 @@ class SyncEngineImpl(
     override suspend fun runSnapshotBootstrap(ownerId: String): Long = withContext(ioDispatcher) {
         var watermarkCursor = 0L
         var currentEntity = "session"
-        var afterId = "00000000-0000-0000-0000-000000000000"
+        var afterId = ZERO_UUID
         var hasMore = true
         var pageCount = 0
         val maxPages = 100
@@ -575,7 +576,8 @@ class SyncEngineImpl(
                             event = dto.event,
                             version = dto.version,
                             updatedAt = dto.updatedAt ?: dto.solvedAt,
-                            deletedAt = dto.deletedAt
+                            deletedAt = dto.deletedAt,
+                            timingDevice = dto.timingDevice
                         )
                     }
                     if (entities.isNotEmpty()) {
@@ -584,9 +586,21 @@ class SyncEngineImpl(
                 }
             }
 
+            // The server streams every session page, then every solve page. When the session pages
+            // run out it answers has_more = false with next_entity = "solve": that is a hand-over to
+            // the solve pages (starting again from the zero UUID), not the end of the bootstrap.
+            val nextEntity = response.nextEntity
             if (response.hasMore) {
-                currentEntity = response.nextEntity ?: if (!response.sessions.isNullOrEmpty()) "session" else "solve"
-                afterId = response.nextAfterId ?: "00000000-0000-0000-0000-000000000000"
+                val entity = nextEntity ?: currentEntity
+                afterId = if (entity == currentEntity) {
+                    response.nextAfterId ?: ZERO_UUID
+                } else {
+                    ZERO_UUID
+                }
+                currentEntity = entity
+            } else if (nextEntity != null && nextEntity != currentEntity) {
+                currentEntity = nextEntity
+                afterId = ZERO_UUID
             } else {
                 hasMore = false
             }
@@ -595,5 +609,9 @@ class SyncEngineImpl(
         val nowIso = CubeTypeConverters.nowIso()
         updateCursor(ownerId, watermarkCursor, nowIso)
         watermarkCursor
+    }
+
+    private companion object {
+        const val ZERO_UUID = "00000000-0000-0000-0000-000000000000"
     }
 }

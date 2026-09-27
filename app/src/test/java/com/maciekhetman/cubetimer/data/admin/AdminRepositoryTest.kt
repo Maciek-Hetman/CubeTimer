@@ -175,6 +175,8 @@ class AdminRepositoryTest {
 
         override suspend fun getAdminErrorLogs(
             before: String?,
+            beforeId: Long?,
+            limit: Int?,
             authToken: String?
         ): ErrorLogResponseDto = errorLogResponseDto
 
@@ -187,7 +189,7 @@ class AdminRepositoryTest {
         override suspend fun requestPasswordReset(email: String) = throw NotImplementedError()
         override suspend fun confirmPasswordReset(token: String, newPassword: String) = throw NotImplementedError()
         override suspend fun loginWithGoogle(request: com.maciekhetman.cubetimer.data.remote.dto.GoogleAuthRequest) = throw NotImplementedError()
-        override suspend fun linkGoogle(idToken: String, authToken: String?) = throw NotImplementedError()
+        override suspend fun linkGoogle(request: com.maciekhetman.cubetimer.data.remote.dto.GoogleAuthRequest, authToken: String?) = throw NotImplementedError()
         override suspend fun getCurrentUser(authToken: String?) = throw NotImplementedError()
         override suspend fun changePassword(request: com.maciekhetman.cubetimer.data.remote.dto.ChangePasswordRequest, authToken: String?) = throw NotImplementedError()
         override suspend fun deleteAccount(authToken: String?) = throw NotImplementedError()

@@ -48,6 +48,7 @@ import org.robolectric.RobolectricTestRunner
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.UUID
+import com.maciekhetman.cubetimer.testutil.insertSession
 
 /**
  * Adversarial Concurrency and Coroutine Lifecycle Stress Harness for Reworked History Module.
@@ -102,7 +103,6 @@ class HistoryConcurrencyAndLifecycleStressTest {
         )
         fakeAuthManager = FakeAuthManager()
         sessionManager = SessionManagerImpl(
-            context = application,
             sessionRepository = sessionRepository,
             solveDao = database.solveDao(),
             authManager = fakeAuthManager
@@ -137,7 +137,7 @@ class HistoryConcurrencyAndLifecycleStressTest {
         ownerId: String = "guest",
         durationsMs: List<Long> = listOf(10000L, 12000L, 15000L)
     ): Pair<Session, List<SolveEntity>> {
-        val session = sessionRepository.createManualSession(name, mode, ownerId)
+        val session = sessionRepository.insertSession(name, mode, ownerId)
         val entities = durationsMs.mapIndexed { index, duration ->
             SolveEntity(
                 id = "${session.id}-solve-$index",
@@ -458,7 +458,7 @@ class HistoryConcurrencyAndLifecycleStressTest {
         override suspend fun initialize() = Unit
         override suspend fun register(email: String, password: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun login(email: String, password: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
-        override suspend fun loginWithGoogle(idToken: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
+        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun verifyEmail(token: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun resendVerificationEmail(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun requestPasswordReset(email: String): AuthResult<Unit> = AuthResult.Success(Unit)

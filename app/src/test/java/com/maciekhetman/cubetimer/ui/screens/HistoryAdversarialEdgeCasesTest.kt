@@ -17,8 +17,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -118,7 +120,6 @@ class HistoryAdversarialEdgeCasesTest {
         )
         fakeAuthManager = FakeAuthManager()
         sessionManager = SessionManagerImpl(
-            context = application,
             sessionRepository = sessionRepository,
             solveDao = database.solveDao(),
             authManager = fakeAuthManager
@@ -479,7 +480,7 @@ class HistoryAdversarialEdgeCasesTest {
         }
 
         // Check that essential elements are displayed without layout overflow crash
-        composeTestRule.onNodeWithText("999 solves · 3x3 · Manual").assertIsDisplayed()
+        composeTestRule.onNodeWithText("999 solves · 3x3").assertIsDisplayed()
         composeTestRule.onNodeWithContentDescription("Collapse session").assertIsDisplayed()
         composeTestRule.onNodeWithText("Export").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText("Delete").performScrollTo().assertIsDisplayed()
@@ -528,7 +529,7 @@ class HistoryAdversarialEdgeCasesTest {
             }
         }
 
-        composeTestRule.onNodeWithText("12 solves · 4x4 · Auto").assertIsDisplayed()
+        composeTestRule.onNodeWithText("12 solves · 4x4").assertIsDisplayed()
     }
 
     @Test
@@ -618,7 +619,6 @@ class HistoryAdversarialEdgeCasesTest {
                             onSelectTab = {},
                             onSessionSortChange = {},
                             onPuzzleScopeChange = {},
-                            onSessionKindFilterChange = {},
                             onSolveSortChange = {},
                             onPenaltyFilterChange = {},
                             onTimeRangeFilterChange = {},
@@ -636,7 +636,7 @@ class HistoryAdversarialEdgeCasesTest {
         composeTestRule.onNodeWithText("Solves").assertIsDisplayed()
         composeTestRule.onNodeWithText("Sort by").assertIsDisplayed()
         composeTestRule.onNodeWithText("Puzzle").performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithText("Session Type").performScrollTo().assertIsDisplayed()
+        composeTestRule.onAllNodesWithText("Session Type").assertCountEquals(0)
         composeTestRule.onNodeWithText("Done").performScrollTo().assertIsDisplayed()
     }
 
@@ -649,7 +649,7 @@ class HistoryAdversarialEdgeCasesTest {
         override suspend fun initialize() = Unit
         override suspend fun register(email: String, password: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun login(email: String, password: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
-        override suspend fun loginWithGoogle(idToken: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
+        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun verifyEmail(token: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun resendVerificationEmail(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun requestPasswordReset(email: String): AuthResult<Unit> = AuthResult.Success(Unit)

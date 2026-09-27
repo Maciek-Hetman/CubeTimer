@@ -42,10 +42,12 @@ interface AuthManager {
     suspend fun login(email: String, password: String): AuthResult<User>
 
     /**
-     * Authenticate using Google Federated Sign-in ID token.
+     * Authenticate using a Google Sign-in ID token.
+     * [clientId] is the OAuth client ID the token was issued for (its `aud`) and [nonce] the value
+     * passed to Google when requesting it; the backend rejects the token if either doesn't match.
      * Adopts guest data and sets active user session.
      */
-    suspend fun loginWithGoogle(idToken: String): AuthResult<User>
+    suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String): AuthResult<User>
 
     /**
      * Verify an email verification token received via email.
