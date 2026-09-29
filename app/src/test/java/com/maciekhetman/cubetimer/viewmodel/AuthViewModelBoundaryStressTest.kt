@@ -313,7 +313,7 @@ class AuthViewModelBoundaryStressTest {
             Pair(AuthException.Forbidden(), "Access denied. You don't have permission to do that."),
             Pair(AuthException.Unauthorized(), "Session expired. Please log in again."),
             Pair(AuthException.NetworkError("No connection"), "Network connection failed. Please check your connection."),
-            Pair(AuthException.ApiError("custom", "Custom server message", 500), "Custom server message")
+            Pair(AuthException.ApiError("custom", "Custom server message", 500), "Something went wrong on the server. Please try again later.")
         )
 
         for ((exception, expectedMsg) in exceptionsAndExpected) {

@@ -263,6 +263,61 @@ class TokenAuthenticatorTest {
         assertFalse(sessionExpiredCalled.get())
     }
 
+    @Test
+    fun `skips refresh when 401 occurs on the Google sign-in endpoint`() {
+        fakeTokenStorage.storedAccessToken = "current-access-token"
+        fakeTokenStorage.storedRefreshToken = "valid-refresh-token"
+        mockWebServer.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":{"code":"invalid_social_token","message":"bad token"}}"""))
+        // Consumed only if the authenticator wrongly goes on to POST /v1/auth/refresh.
+        mockWebServer.enqueue(MockResponse().setResponseCode(500))
+
+        val request = Request.Builder()
+            .url(mockWebServer.url("/v1/auth/federated/google"))
+            .post("{}".toRequestBody("application/json".toMediaType()))
+            .build()
+
+        val response = okHttpClient.newCall(request).execute()
+        response.close()
+
+        assertEquals(401, response.code)
+        assertEquals(1, mockWebServer.requestCount)
+        assertFalse(sessionExpiredCalled.get())
+        assertEquals("valid-refresh-token", fakeTokenStorage.storedRefreshToken)
+    }
+
+    @Test
+    fun `still refreshes when 401 occurs on the authenticated Google link endpoint`() {
+        fakeTokenStorage.storedAccessToken = "expired-token"
+        fakeTokenStorage.storedRefreshToken = "valid-refresh-token"
+        mockWebServer.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":{"code":"unauthorized","message":"expired"}}"""))
+        mockWebServer.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """
+                {
+                    "access_token": "fresh-access-token",
+                    "refresh_token": "rotated-refresh-token",
+                    "token_type": "Bearer",
+                    "expires_in": 900,
+                    "user": {"id": "user-42", "email": "cuber@example.com", "user_role": "user", "email_verified": true}
+                }
+                """.trimIndent()
+            )
+        )
+        mockWebServer.enqueue(MockResponse().setResponseCode(204))
+
+        val request = Request.Builder()
+            .url(mockWebServer.url("/v1/auth/link/google"))
+            .post("{}".toRequestBody("application/json".toMediaType()))
+            .build()
+
+        val response = okHttpClient.newCall(request).execute()
+        response.close()
+
+        assertEquals(204, response.code)
+        assertEquals(3, mockWebServer.requestCount)
+        assertEquals("fresh-access-token", fakeTokenStorage.storedAccessToken)
+    }
+
     private class FakeTokenStorage : TokenStorage {
         var storedAccessToken: String? = null
         var storedRefreshToken: String? = null

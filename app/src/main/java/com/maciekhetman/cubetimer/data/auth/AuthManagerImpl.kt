@@ -1,5 +1,6 @@
 package com.maciekhetman.cubetimer.data.auth
 
+import android.util.Log
 import com.maciekhetman.cubetimer.data.local.converter.CubeTypeConverters
 import androidx.room.withTransaction
 import com.maciekhetman.cubetimer.data.local.CubeDatabase
@@ -28,6 +29,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -411,6 +413,55 @@ class AuthManagerImpl(
         AuthResult.Success(Unit)
     }
 
+    override suspend fun deleteAccount(): AuthResult<Unit> = withContext(ioDispatcher) {
+        val user = currentUser
+            ?: return@withContext AuthResult.Error(AuthException.Unauthorized("Not signed in"))
+
+        try {
+            apiClient.deleteAccount()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: AuthException) {
+            return@withContext AuthResult.Error(e)
+        } catch (e: Exception) {
+            return@withContext AuthResult.Error(AuthException.NetworkError("Account deletion failed: ${e.localizedMessage}", e))
+        }
+
+        // The account no longer exists server-side, so signing out must complete even if the caller
+        // is cancelled from here on; the tokens are useless and the local data has to be released.
+        withContext(NonCancellable) {
+            try {
+                keepLocalDataAsGuest(user.id)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Signing out still matters more than the re-own: the tokens are dead either way.
+                Log.e(TAG, "Failed to keep local data after account deletion", e)
+            } finally {
+                tokenStorage.clearAuthData()
+                _authState.value = AuthState.Guest
+            }
+        }
+
+        AuthResult.Success(Unit)
+    }
+
+    /**
+     * Re-owns the deleted user's solves and sessions to the guest owner and drops everything that
+     * only makes sense for a synced account, in one transaction. The bulk owner rewrite is the one
+     * [adoptGuestData] uses, pointed the other way; it resets `version` to 0 as guest rows require.
+     */
+    private suspend fun keepLocalDataAsGuest(userId: String) {
+        val nowIso = CubeTypeConverters.nowIso()
+        database.withTransaction {
+            database.solveDao().adoptGuestSolves(guestOwnerId = userId, targetOwnerId = "guest", updatedAt = nowIso)
+            database.sessionDao().adoptGuestSessions(guestOwnerId = userId, targetOwnerId = "guest", updatedAt = nowIso)
+            database.syncOutboxDao().clearOutbox(userId)
+            database.conflictDao().deleteForOwner(userId)
+            database.syncMetadataDao().deleteForOwner(userId)
+        }
+    }
+
     override fun onSessionExpired() {
         tokenStorage.clearAuthData()
         _authState.value = AuthState.Guest
@@ -492,6 +543,7 @@ class AuthManagerImpl(
     }
 
     companion object {
+        private const val TAG = "AuthManager"
         private val DEFINITIVE_REFRESH_STATUS_CODES = setOf(400, 401, 403, 409)
 
         @Volatile

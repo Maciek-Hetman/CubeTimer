@@ -91,12 +91,6 @@ sealed class AuthException(
         cause: Throwable? = null
     ) : AuthException(message, cause)
 
-    /** 500 server_error: internal server failure */
-    class ServerError(
-        message: String = "An internal server error occurred",
-        cause: Throwable? = null
-    ) : AuthException(message, cause)
-
     /** Unknown / generic error */
     class Unknown(
         message: String = "An unexpected error occurred",

@@ -1,5 +1,6 @@
 package com.maciekhetman.cubetimer.data.auth
 
+import com.maciekhetman.cubetimer.model.AuthException
 import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.User
 import kotlinx.coroutines.flow.StateFlow
@@ -99,6 +100,18 @@ interface AuthManager {
      * wipe local token storage, and revert to guest state.
      */
     suspend fun logout(): AuthResult<Unit>
+
+    /**
+     * Permanently deletes the signed-in user's account and its synced data on the server, then
+     * signs out like [logout]. The user's solves and sessions stay on the device as guest data
+     * (never synced, pending mutations, conflicts and sync cursor discarded).
+     *
+     * On failure (offline, rejected by the server) the user stays signed in and nothing changes
+     * locally. The default reports failure so implementations that don't support deletion (test
+     * fakes) need not override it.
+     */
+    suspend fun deleteAccount(): AuthResult<Unit> =
+        AuthResult.Error(AuthException.Unknown("Account deletion is not supported"))
 
     /**
      * Atomically reassigns all guest solves and guest sessions to the newly authenticated user

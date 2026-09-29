@@ -10,7 +10,8 @@ enum class AuthDialogType {
     FORGOT_PASSWORD,
     RESET_PASSWORD,
     EMAIL_VERIFICATION,
-    USER_PROFILE
+    USER_PROFILE,
+    DELETE_ACCOUNT
 }
 
 /**
