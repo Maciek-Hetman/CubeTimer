@@ -44,7 +44,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.viewmodel.AuthViewModel
@@ -109,8 +108,17 @@ fun AuthDialog(
         AuthDialogType.USER_PROFILE -> {
             UserProfileDialog(
                 authState = authState,
+                formState = formState,
                 viewModel = viewModel,
                 onDismiss = onDismiss,
+                modifier = modifier
+            )
+        }
+        AuthDialogType.DELETE_ACCOUNT -> {
+            DeleteAccountDialog(
+                formState = formState,
+                viewModel = viewModel,
+                onCancel = { viewModel.openDialog(AuthDialogType.USER_PROFILE) },
                 modifier = modifier
             )
         }
@@ -637,6 +645,7 @@ private fun EmailVerificationDialog(
 @Composable
 private fun UserProfileDialog(
     authState: AuthState,
+    formState: AuthFormState,
     viewModel: AuthViewModel,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
@@ -696,6 +705,20 @@ private fun UserProfileDialog(
                 ) {
                     Text("Import Unsynced Local Solves")
                 }
+
+                if (authState is AuthState.Authenticated || authState is AuthState.Admin) {
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedButton(
+                        shape = RoundedCornerShape(20.dp),
+                        onClick = { viewModel.openDialog(AuthDialogType.DELETE_ACCOUNT) },
+                        enabled = !formState.isLoading,
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Delete account")
+                    }
+                }
             }
         },
         confirmButton = {
@@ -716,6 +739,77 @@ private fun UserProfileDialog(
                 onClick = onDismiss
             ) {
                 Text("Close")
+            }
+        },
+        modifier = modifier
+    )
+}
+
+@Composable
+private fun DeleteAccountDialog(
+    formState: AuthFormState,
+    viewModel: AuthViewModel,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    AlertDialog(
+        // An in-flight deletion must not be dismissed from under its own result (or error).
+        onDismissRequest = { if (!formState.isLoading) onCancel() },
+        shape = RoundedCornerShape(24.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        title = { Text("Delete account?") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+            ) {
+                if (formState.errorMessage != null) {
+                    ErrorBanner(formState.errorMessage)
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+
+                Text(
+                    text = "Your account and all of its synced data will be permanently deleted from the " +
+                        "server. This can't be undone.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Your solves and sessions stay on this device.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                shape = RoundedCornerShape(20.dp),
+                onClick = viewModel::submitDeleteAccount,
+                enabled = !formState.isLoading,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError
+                )
+            ) {
+                if (formState.isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onError
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Text("Delete permanently")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                shape = RoundedCornerShape(20.dp),
+                onClick = onCancel,
+                enabled = !formState.isLoading
+            ) {
+                Text("Cancel")
             }
         },
         modifier = modifier

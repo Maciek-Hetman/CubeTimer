@@ -2,6 +2,7 @@ package com.maciekhetman.cubetimer.domain.csv
 
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Penalty
+import com.maciekhetman.cubetimer.model.TimingDevice
 
 /**
  * Decoded solve record representing one CSV row.
@@ -14,7 +15,9 @@ data class CsvSolveRecord(
     val timestamp: Long,
     val time: Long,
     val penalty: Penalty,
-    val scramble: String
+    val scramble: String,
+    /** Null when the file has no `timing_device` column, so a restored row keeps the device it already had. */
+    val timingDevice: TimingDevice? = null
 )
 
 /**
@@ -26,10 +29,7 @@ sealed interface CsvImportStatus {
         val duplicateCount: Int,
         val malformedCount: Int,
         val sessionsCreatedCount: Int
-    ) : CsvImportStatus {
-        val hasImports: Boolean get() = importedCount > 0
-        val totalProcessed: Int get() = importedCount + duplicateCount + malformedCount
-    }
+    ) : CsvImportStatus
 
     data class InvalidFile(val reason: String) : CsvImportStatus
     data object EmptyFile : CsvImportStatus

@@ -1,5 +1,7 @@
 package com.maciekhetman.cubetimer.ui.screens
 
+import kotlinx.coroutines.test.TestScope
+import com.maciekhetman.cubetimer.testutil.keepUiStateActive
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import com.maciekhetman.cubetimer.data.SolvesRepository
@@ -11,23 +13,15 @@ import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
 import com.maciekhetman.cubetimer.data.session.SessionManagerImpl
 import com.maciekhetman.cubetimer.data.session.SessionRepositoryImpl
 import com.maciekhetman.cubetimer.model.AuthState
-import com.maciekhetman.cubetimer.model.Mode
-import com.maciekhetman.cubetimer.model.Penalty
 import com.maciekhetman.cubetimer.model.Session
-import com.maciekhetman.cubetimer.model.SessionKind
-import com.maciekhetman.cubetimer.model.SolveTime
 import com.maciekhetman.cubetimer.model.User
-import com.maciekhetman.cubetimer.viewmodel.HistoryUiEffect
 import com.maciekhetman.cubetimer.viewmodel.HistoryViewModel
 import com.maciekhetman.cubetimer.viewmodel.PenaltyFilter
 import com.maciekhetman.cubetimer.viewmodel.PuzzleScope
 import com.maciekhetman.cubetimer.viewmodel.SessionSortOrder
 import com.maciekhetman.cubetimer.viewmodel.SolveSortOrder
-import com.maciekhetman.cubetimer.viewmodel.TimeRangeFilter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -44,13 +38,11 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import java.util.UUID
 
 /**
  * Adversarial Concurrency and Stress Verification Suite for Milestone 4 History UI.
@@ -113,8 +105,8 @@ class HistoryConcurrencyAndStressChallengeTest {
         Dispatchers.resetMain()
     }
 
-    private fun createViewModel(): HistoryViewModel {
-        return HistoryViewModel(
+    private fun TestScope.createViewModel(): HistoryViewModel {
+        return keepUiStateActive(HistoryViewModel(
             application = application,
             solvesRepository = solvesRepository,
             sessionManager = sessionManager,
@@ -126,7 +118,7 @@ class HistoryConcurrencyAndStressChallengeTest {
             syncOutboxDao = database.syncOutboxDao(),
             defaultDispatcher = testDispatcher,
             ioDispatcher = testDispatcher
-        )
+        ))
     }
 
     // =========================================================================
@@ -332,7 +324,6 @@ class HistoryConcurrencyAndStressChallengeTest {
 
         val state = viewModel.uiState.value
         assertTrue(state.sessionGroups.isEmpty())
-        assertEquals(0, state.totalCount)
         assertFalse(state.isLoading)
 
         // Filter operations on empty state should be completely safe

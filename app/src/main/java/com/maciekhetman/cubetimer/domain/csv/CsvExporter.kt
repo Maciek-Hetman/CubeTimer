@@ -18,6 +18,8 @@ object CsvExporter {
      *
      * Writes Line 1 magic comment (# Source: CubeTimer), Line 2 header, and
      * each solve formatted with RFC 4180 escaped fields and CRLF line endings.
+     * Free-text fields that start like a spreadsheet formula are prefixed with a single quote
+     * (see [CsvFormat.escapeFormula]); [CsvImporter] strips it again.
      *
      * Flushes the buffer upon completion without closing the underlying stream.
      *
@@ -47,16 +49,19 @@ object CsvExporter {
             val puzzle = CubeTypeConverters.fromMode(solve.mode)
             val penaltyStr = CsvFormat.formatPenalty(solve.penalty)
 
+            // Text fields may hold spreadsheet formulas (session names sync in from other clients),
+            // so they are neutralized; the numeric, puzzle, penalty and device columns are fixed vocabularies.
             val row = CsvFormat.formatRow(
                 listOf(
-                    solve.id,
-                    sessionId,
-                    sessionName,
+                    CsvFormat.escapeFormula(solve.id),
+                    CsvFormat.escapeFormula(sessionId),
+                    CsvFormat.escapeFormula(sessionName),
                     puzzle,
                     solve.timestamp.toString(),
                     solve.timeInMillis.toString(),
                     penaltyStr,
-                    solve.scramble
+                    CsvFormat.escapeFormula(solve.scramble),
+                    solve.timingDevice.value
                 )
             )
             writer.write(row)

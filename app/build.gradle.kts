@@ -91,7 +91,6 @@ dependencies {
 
     // Network (OkHttp & Retrofit)
     implementation(libs.okhttp)
-    implementation(libs.okhttp.logging.interceptor)
     implementation(libs.retrofit)
     implementation(libs.retrofit.kotlinx.serialization.converter)
 
@@ -105,13 +104,6 @@ dependencies {
     testImplementation(libs.mockwebserver)
     testImplementation(libs.androidx.test.core.ktx)
     testImplementation(libs.androidx.compose.ui.test.junit4)
-
-    // Instrumentation Testing
-    androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(libs.androidx.espresso.core)
-    androidTestImplementation(platform(libs.androidx.compose.bom))
-    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
-    androidTestImplementation(libs.androidx.room.testing)
 
     // Debug
     debugImplementation(libs.androidx.compose.ui.tooling)

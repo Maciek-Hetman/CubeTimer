@@ -23,13 +23,6 @@ interface ConflictDao {
         WHERE owner_id = :ownerId 
         ORDER BY created_at DESC
     """)
-    fun observeAllConflicts(ownerId: String): Flow<List<ConflictEntity>>
-
-    @Query("""
-        SELECT * FROM sync_conflicts 
-        WHERE owner_id = :ownerId 
-        ORDER BY created_at DESC
-    """)
     suspend fun getAll(ownerId: String): List<ConflictEntity>
 
     @Query("SELECT * FROM sync_conflicts WHERE conflict_id = :id LIMIT 1")
@@ -53,13 +46,6 @@ interface ConflictDao {
         WHERE conflict_id = :conflictId
     """)
     suspend fun resolveConflict(conflictId: String, resolvedAt: String): Int
-
-    @Query("""
-        UPDATE sync_conflicts 
-        SET resolved = 1, resolved_at = :resolvedAt 
-        WHERE conflict_id = :id
-    """)
-    suspend fun markResolved(id: String, resolvedAt: String): Int
 
     @Query("DELETE FROM sync_conflicts WHERE conflict_id = :id")
     suspend fun deleteById(id: String): Int

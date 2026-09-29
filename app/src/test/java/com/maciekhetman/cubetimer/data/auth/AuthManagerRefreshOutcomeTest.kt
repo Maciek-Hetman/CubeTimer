@@ -30,7 +30,6 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.SocketPolicy
@@ -114,7 +113,6 @@ class AuthManagerRefreshOutcomeTest {
         val transientFailures = listOf<Throwable>(
             AuthException.NetworkError("offline"),
             IOException("timeout"),
-            AuthException.ServerError(),
             AuthException.RateLimited(),
             AuthException.ApiError(errorCode = "internal_error", message = "boom", httpStatusCode = 500),
             AuthException.SerializationError()
@@ -191,7 +189,8 @@ class AuthManagerRefreshOutcomeTest {
 
     @Test
     fun initialize_onServerErrorOrRateLimit_keepsTheCachedSession() = runTest {
-        for (failure in listOf<Throwable>(AuthException.ServerError(), AuthException.RateLimited())) {
+        val serverError = AuthException.ApiError(errorCode = "internal_error", message = "boom", httpStatusCode = 500)
+        for (failure in listOf<Throwable>(serverError, AuthException.RateLimited())) {
             storage.seed(accessToken = null, refreshToken = "refresh-1", user = user)
             apiClient.onRefresh = { throw failure }
             val authManager = newAuthManager()

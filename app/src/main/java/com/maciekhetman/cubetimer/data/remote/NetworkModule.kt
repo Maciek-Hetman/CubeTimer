@@ -3,7 +3,6 @@ package com.maciekhetman.cubetimer.data.remote
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
-import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import java.util.concurrent.TimeUnit
@@ -19,8 +18,7 @@ object NetworkModule {
 
     fun provideOkHttpClient(
         authInterceptor: okhttp3.Interceptor? = null,
-        authenticator: okhttp3.Authenticator? = null,
-        enableLogging: Boolean = false
+        authenticator: okhttp3.Authenticator? = null
     ): OkHttpClient {
         val builder = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
@@ -29,13 +27,6 @@ object NetworkModule {
 
         if (authInterceptor != null) {
             builder.addInterceptor(authInterceptor)
-        }
-
-        if (enableLogging) {
-            val logging = HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.BODY
-            }
-            builder.addInterceptor(logging)
         }
 
         if (authenticator != null) {

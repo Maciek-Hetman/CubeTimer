@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -43,7 +42,6 @@ import kotlinx.coroutines.withContext
 import org.worldcubeassociation.tnoodle.scrambles.PuzzleRegistry
 import org.worldcubeassociation.tnoodle.svglite.Element
 import org.worldcubeassociation.tnoodle.svglite.Group
-import org.worldcubeassociation.tnoodle.svglite.PathIterator
 import org.worldcubeassociation.tnoodle.svglite.Rectangle
 import org.worldcubeassociation.tnoodle.svglite.Svg
 import org.worldcubeassociation.tnoodle.svglite.Text as SvgText

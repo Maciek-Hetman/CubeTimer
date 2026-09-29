@@ -1,5 +1,6 @@
 package com.maciekhetman.cubetimer.ui.dialogs
 
+import android.content.ClipData
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,13 +30,14 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -44,12 +46,12 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.ui.components.Scramble2DPreview
+import kotlinx.coroutines.launch
 
 /**
  * Modal dialog displaying the 2D visual puzzle net and full scramble text
  * when tapping the scramble card on the Timer screen.
  */
-@Suppress("DEPRECATION")
 @Composable
 fun ScramblePreviewDialog(
     scramble: String,
@@ -59,7 +61,8 @@ fun ScramblePreviewDialog(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val clipboardManager = LocalClipboardManager.current
+    val clipboard = LocalClipboard.current
+    val coroutineScope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
 
     val eventTitle = when (mode) {
@@ -161,8 +164,10 @@ fun ScramblePreviewDialog(
                             IconButton(
                                 onClick = {
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    clipboardManager.setText(AnnotatedString(scramble))
-                                    Toast.makeText(context, "Scramble copied!", Toast.LENGTH_SHORT).show()
+                                    coroutineScope.launch {
+                                        clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("Scramble", scramble)))
+                                        Toast.makeText(context, "Scramble copied!", Toast.LENGTH_SHORT).show()
+                                    }
                                 },
                                 modifier = Modifier.size(36.dp)
                             ) {

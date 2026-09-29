@@ -330,7 +330,10 @@ class SyncEngineRejectedRequestTest {
             Pair(AuthException.RateLimited(), { r: SyncResult -> r is SyncResult.Error }),
             Pair(AuthException.Unauthorized(), { r: SyncResult -> r is SyncResult.AuthError }),
             Pair(AuthException.Forbidden(), { r: SyncResult -> r is SyncResult.Error }),
-            Pair(AuthException.ServerError(), { r: SyncResult -> r is SyncResult.Error }),
+            Pair(
+                AuthException.ApiError(errorCode = "internal_error", message = "boom", httpStatusCode = 500),
+                { r: SyncResult -> r is SyncResult.Error }
+            ),
             Pair(AuthException.NetworkError("offline"), { r: SyncResult -> r is SyncResult.Offline }),
             Pair(IOException("connection reset"), { r: SyncResult -> r is SyncResult.Offline })
         )

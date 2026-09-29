@@ -9,9 +9,7 @@ import com.maciekhetman.cubetimer.data.remote.dto.SessionSyncPayload
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Session
 import com.maciekhetman.cubetimer.model.SessionKind
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.json.Json
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -162,6 +160,33 @@ class SessionRepositoryTest {
         assertEquals("session", deleteMutation.entityType)
         assertEquals(session.id, deleteMutation.entityId)
         assertNull(deleteMutation.payloadJson)
+    }
+
+    @Test
+    fun testGetActiveSessionsExcludesArchivedDeletedAndOtherModeOrOwner() = runTest {
+        fun session(id: String, ownerId: String = "user-abc", event: Mode = Mode.CUBE_3x3, archived: Boolean = false) = Session(
+            id = id,
+            ownerId = ownerId,
+            name = id,
+            event = event,
+            kind = SessionKind.MANUAL,
+            startedAt = Instant.now().toString(),
+            archived = archived
+        )
+        listOf(
+            session("active-a"),
+            session("active-b"),
+            session("archived", archived = true),
+            session("deleted"),
+            session("other-mode", event = Mode.CUBE_2x2),
+            session("other-owner", ownerId = "user-other")
+        ).forEach { repository.createSession(it) }
+        repository.deleteSession("deleted", "user-abc")
+
+        val active = repository.getActiveSessions("user-abc", Mode.CUBE_3x3)
+
+        assertEquals(setOf("active-a", "active-b"), active.map { it.id }.toSet())
+        assertEquals(2, active.size)
     }
 
     @Test

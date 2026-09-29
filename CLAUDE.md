@@ -55,13 +55,18 @@ both files. `SyncWorker` is built by a custom `WorkerFactory` in `workManagerCon
 
 ### Layers
 - `data/local` — Room (`CubeDatabase`, v2, `exportSchema` to `app/schemas/`, no destructive-migration fallback,
-  WAL, `PRAGMA foreign_keys = ON`). Entities: `solves`, `sessions`, `sync_outbox`, `sync_metadata`, `conflicts`.
+  WAL, `PRAGMA foreign_keys = ON`). Tables: `solves`, `sessions`, `sync_outbox`, `sync_metadata`, `sync_conflicts`.
   Every version bump needs a real `Migration` (v1→v2 adds `solves.timing_device`); there is deliberately no
   destructive fallback, so a missing one fails loudly instead of wiping never-synced guest data.
   `CubeDatabaseMigrationTest` replays `1.json`.
 - `data/remote` — Retrofit + OkHttp + kotlinx.serialization; `AuthInterceptor` attaches the access token,
-  `TokenAuthenticator` refreshes on 401 and notifies `AuthManager` via `SessionExpirationListener`.
-- `data/auth` — `AuthManagerImpl` owns `AuthState` (Guest / Authenticated / Admin) and `adoptGuestData`.
+  `TokenAuthenticator` refreshes on 401 and notifies `AuthManager` via `SessionExpirationListener`. Every
+  refresh (the authenticator's and `AuthManagerImpl`'s) goes through the one `TokenRefresher`: the server
+  rotates refresh tokens with reuse detection, so two concurrent refreshes log the user out.
+- `data/auth` — `AuthManagerImpl` owns `AuthState` (Guest / Authenticated / Admin), `adoptGuestData` and
+  `deleteAccount` (on success the user's rows are re-owned to `"guest"`; their outbox/conflicts/cursor are
+  dropped). `EncryptedTokenStorage` never falls back to plaintext: if Keystore is unusable it resets the file,
+  then keeps tokens in memory only. The device id lives in `cubetimer_device_prefs` (excluded from backup).
 - `data/session` — `SessionRepositoryImpl` (persistence) + `SessionManagerImpl` (automatic-session policy; no
   persisted state of its own).
 - `data/sync` — `SyncEngineImpl`, `ConflictResolverImpl`, `SyncStateManager` (UI-facing sync status), `work/SyncWorker`.
@@ -87,6 +92,8 @@ both files. `SyncWorker` is built by a custom `WorkerFactory` in `workManagerCon
   (`isoToEpochMillis` / `epochMillisToIso`), not by hand.
 - **Enum ↔ column strings**: `Mode` persists as `"3x3"`, `"megaminx"`, … and `Penalty` as
   `"none"/"plus_two"/"dnf"`, via `CubeTypeConverters` and `data/local/mapper/*`. The DB never stores enum names.
+  An event string with no `Mode` (e.g. `"skewb"` from another client) reads as 3x3; writes over an existing row
+  go through `CubeTypeConverters.eventForRewrite` so the stored string survives.
 - **`version`** is the optimistic-concurrency base version used by the sync protocol; bump/propagate it
   through the mappers rather than setting it ad hoc.
 - **`timing_device`**: `solves.timing_device` / `SolveTime.timingDevice` (`TimingDevice`: `"keyboard"` = touch,
@@ -100,7 +107,9 @@ schedules an immediate `SyncWorker` (periodic 15 min otherwise) → `SyncEngineI
 the cursor in `sync_metadata`, and loops while `has_more`. A 409 `cursor_expired` falls back to
 `runSnapshotBootstrap` against `POST /v1/snapshot`, which pages all sessions, then all solves: the last session
 page answers `has_more: false, next_entity: "solve"` — that is a hand-over, not the end. Conflicts are persisted
-as `ConflictEntity` and resolved by `ConflictResolver` (or by the user via keep-local / keep-server).
+as `ConflictEntity` and resolved by `ConflictResolver` (or by the user via keep-local / keep-server in
+`SyncStatusDialog`). A mutation the server rejects on its own is marked `status = 'dead'` and never resent;
+a remote solve whose session isn't available locally is skipped rather than failing the page's FK check.
 The client pins `X-Sync-Protocol: 1`: v2 slims a conflict's `current` to an `{id, version, updated_at}` stub,
 which would leave keep-server with nothing to apply. `CubeTimerApplication.BASE_URL` is still a placeholder host.
 
@@ -114,14 +123,14 @@ exists because the backend syncs it (other clients, older builds); such sessions
 never become the active session. CSV import recreates missing sessions as closed automatic sessions.
 
 ### UI
-- Navigation is **not** `NavHost`-based despite the navigation-compose dependency: `MainActivity` keeps a
+- Navigation is **not** `NavHost`-based (there is no navigation-compose dependency): `MainActivity` keeps a
   `rememberSaveable` `AppDestinations` enum and swaps screens inside an `AnimatedContent`, with a custom bottom
   pill nav and a `BackHandler`. The bottom bar shows TIMER / STATS / HISTORY / SETTINGS; back from any of them
   returns to TIMER. There is no admin dashboard — `AuthState.Admin` only drives the account badge.
 - The cloud sync status and account/admin indicators live in Settings' "Account" section
   (`SettingsScreen.kt`), not the shared top bar — `TopBar.kt`'s `TimerTopHeader`/`CollapsingTopBar` no
   longer take `syncUiState`/`authState`/click-handler params. Tapping the rows opens the same
-  `SyncStatusDialog` / `AuthDialog` (`UserProfileDialog`) as before.
+  `SyncStatusDialog` / `AuthDialog` (`UserProfileDialog`, which also offers "Delete account") as before.
 - The top bar only carries the mode picker (plus screen-specific actions via `extraActions`); there is no
   session picker.
 - Timing input is a setting (`SettingsRepository.timingDeviceFlow`), switchable from Settings → "Timing device"
@@ -132,8 +141,10 @@ never become the active session. CSV import recreates missing sessions as closed
   is saved with the solve. `BluetoothTimerDialog` handles permissions, enabling Bluetooth, scanning and connecting.
 - Preferences live in two DataStores (`AppDataStore.kt`): `solves` (legacy, source of the one-time
   Room migration in `DataStoreMigration`) and `settings` (`SettingsRepository`).
-- Theming: `CubeTimerTheme(dynamicColor, amoled)`; haptics are globally disabled by overriding
-  `LocalHapticFeedback` with a no-op.
+- Theming: `CubeTimerTheme(dynamicColor, amoled)`; haptics follow the `haptics_enabled` setting
+  (`OptionalHapticsProvider` in `MainActivity` swaps `LocalHapticFeedback` for a no-op when it's off).
+- CSV export/import (`domain/csv`) carries `timing_device` as an optional last column, and quote-prefixes text
+  cells that start with `=`, `+`, `-` or `@` (spreadsheet formula injection); the importer strips that prefix.
 
 ## Gotchas
 

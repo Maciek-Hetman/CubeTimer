@@ -32,7 +32,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
-import java.time.Instant
 
 class SolvesRepository(
     private val context: Context,
@@ -90,12 +89,6 @@ class SolvesRepository(
     }
 
     /**
-     * Backwards-compatible reactive stream of all active (non-deleted) guest solves.
-     */
-    val solvesFlow: Flow<List<SolveTime>> = solveDao.observeAllSolves(ownerId = "guest")
-        .map { entities -> entities.map { it.toSolveTime() } }
-
-    /**
      * Observe all active solves for a specific owner.
      */
     fun getAllSolvesFlow(ownerId: String = "guest"): Flow<List<SolveTime>> {
@@ -108,14 +101,6 @@ class SolvesRepository(
      */
     suspend fun getAllActiveSolves(ownerId: String = "guest"): List<SolveTime> = withContext(ioDispatcher) {
         solveDao.getAllActiveSolvesForOwner(ownerId).map { it.toSolveTime() }
-    }
-
-    /**
-     * Observe active solves for a specific puzzle mode / event and owner.
-     */
-    fun getSolvesFlow(mode: Mode, ownerId: String = "guest"): Flow<List<SolveTime>> {
-        return solveDao.observeSolvesByEvent(ownerId = ownerId, event = mode.toEventString())
-            .map { entities -> entities.map { it.toSolveTime() } }
     }
 
     /**
@@ -254,7 +239,7 @@ class SolvesRepository(
                 existing.copy(
                     ownerId = ownerId,
                     sessionId = sessionId ?: solve.sessionId,
-                    event = CubeTypeConverters.fromMode(solve.mode),
+                    event = CubeTypeConverters.eventForRewrite(existing.event, solve.mode),
                     durationMs = solve.timeInMillis,
                     penalty = CubeTypeConverters.fromPenalty(solve.penalty),
                     solvedAt = CubeTypeConverters.epochMillisToIso(solve.timestamp),
@@ -356,53 +341,6 @@ class SolvesRepository(
     }
 
     /**
-     * Backwards-compatible batch save/sync solves method.
-     */
-    suspend fun saveSolves(
-        solves: List<SolveTime>,
-        ownerId: String = "guest"
-    ) = withContext(ioDispatcher) {
-        val nowIso = CubeTypeConverters.nowIso()
-        if (solves.isEmpty()) {
-            val existing = solveDao.getAllActiveSolvesForOwner(ownerId)
-            if (existing.isNotEmpty()) {
-                val targetIds = existing.map { it.id }
-                runInTransaction {
-                    solveDao.softDeleteAllChunked(targetIds, deletedAt = nowIso, updatedAt = nowIso)
-                    if (ownerId != "guest") {
-                        syncOutboxDao.enqueueAll(existing.map { it.toDeleteMutation(ownerId = ownerId, clientTime = nowIso) })
-                    }
-                }
-            }
-            syncTrigger?.invoke()
-            return@withContext
-        }
-
-        val currentSolves = solveDao.getAllActiveSolvesForOwner(ownerId)
-        val currentIds = currentSolves.map { it.id }.toSet()
-        val newIds = solves.map { it.id }.toSet()
-
-        val removedIds = currentIds - newIds
-        val removedEntities = currentSolves.filter { it.id in removedIds }
-        val entities = solves.map { it.toSolveEntity(ownerId = ownerId) }
-
-        runInTransaction {
-            if (removedEntities.isNotEmpty()) {
-                solveDao.softDeleteAllChunked(removedEntities.map { it.id }, deletedAt = nowIso, updatedAt = nowIso)
-                if (ownerId != "guest") {
-                    syncOutboxDao.enqueueAll(removedEntities.map { it.toDeleteMutation(ownerId = ownerId, clientTime = nowIso) })
-                }
-            }
-
-            solveDao.upsertAll(entities)
-            if (ownerId != "guest") {
-                syncOutboxDao.enqueueAll(entities.map { it.toUpsertMutation(ownerId = ownerId, clientTime = nowIso, json = json) })
-            }
-        }
-        syncTrigger?.invoke()
-    }
-
-    /**
      * Clear all active solves within the given puzzle mode scope (or all modes if mode is null).
      * Enqueues delete outbox mutations if ownerId != "guest", triggers sync,
      * and returns the complete list of deleted [SolveTime]s for undo snapshotting.
@@ -464,7 +402,7 @@ class SolvesRepository(
                     existing.copy(
                         ownerId = ownerId,
                         sessionId = solve.sessionId,
-                        event = CubeTypeConverters.fromMode(solve.mode),
+                        event = CubeTypeConverters.eventForRewrite(existing.event, solve.mode),
                         durationMs = solve.timeInMillis,
                         penalty = CubeTypeConverters.fromPenalty(solve.penalty),
                         solvedAt = CubeTypeConverters.epochMillisToIso(solve.timestamp),

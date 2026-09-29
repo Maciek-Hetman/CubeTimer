@@ -1,8 +1,6 @@
 package com.maciekhetman.cubetimer.viewmodel
 
 import android.app.Application
-import androidx.arch.core.executor.ArchTaskExecutor
-import androidx.arch.core.executor.TaskExecutor
 import androidx.datastore.preferences.core.edit
 import androidx.test.core.app.ApplicationProvider
 import com.maciekhetman.cubetimer.data.SettingsRepository
@@ -24,7 +22,6 @@ import com.maciekhetman.cubetimer.model.SolveTime
 import com.maciekhetman.cubetimer.model.StatsFilter
 import com.maciekhetman.cubetimer.model.User
 import com.maciekhetman.cubetimer.model.currentUser
-import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.runBlocking
@@ -40,7 +37,6 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -48,7 +44,6 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import java.util.UUID
 
 /**
  * Adversarial stress and performance tests for Session switching and StatsFilter covering:
@@ -228,7 +223,7 @@ class SessionAndStatsFilterStressTest {
     // ---------------------------------------------------------------------------------------------
 
     @Test
-    fun `large scale 5000 solves filtering and session-scoped batch deletion`() = runTest(testDispatcher) {
+    fun `large scale 5000 solves session filtering`() = runTest(testDispatcher) {
         val sessionAlpha = Session(id = "ses_alpha", ownerId = "guest", name = "Alpha", event = Mode.CUBE_3x3, kind = SessionKind.AUTOMATIC, startedAt = "2026-08-30T00:00:00Z")
         val sessionBeta = Session(id = "ses_beta", ownerId = "guest", name = "Beta", event = Mode.CUBE_3x3, kind = SessionKind.AUTOMATIC, startedAt = "2026-08-30T00:00:00Z")
 
@@ -281,21 +276,6 @@ class SessionAndStatsFilterStressTest {
         timerViewModel.setStatsFilter(StatsFilter.SpecificSession(sessionBeta.id, "Beta"))
         advanceUntilIdle()
         assertEquals(2000, timerViewModel.statsFilteredSolves.value.size)
-
-        // 4. Batch delete filtered solves (deletes only Session Beta solves)
-        timerViewModel.clearFilteredSolves()
-        advanceUntilIdle()
-
-        // After deleting Beta, AllSessions should have exactly 3,000 solves left (Alpha only)
-        timerViewModel.setStatsFilter(StatsFilter.AllSessions)
-        advanceUntilIdle()
-        assertEquals(3000, timerViewModel.statsFilteredSolves.value.size)
-        assertTrue(timerViewModel.statsFilteredSolves.value.all { it.sessionId == sessionAlpha.id })
-
-        // SpecificSession Beta is now empty
-        timerViewModel.setStatsFilter(StatsFilter.SpecificSession(sessionBeta.id, "Beta"))
-        advanceUntilIdle()
-        assertEquals(0, timerViewModel.statsFilteredSolves.value.size)
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -382,8 +362,7 @@ class SessionAndStatsFilterStressTest {
         // 1. Guest creates solves
         val guestSolve1 = SolveTime(id = "g_solve_1", timeInMillis = 15000L, penalty = Penalty.NONE, scramble = "U", mode = Mode.CUBE_3x3, timestamp = 1000L, sessionId = guestSession.id)
         val guestSolve2 = SolveTime(id = "g_solve_2", timeInMillis = 16000L, penalty = Penalty.NONE, scramble = "U", mode = Mode.CUBE_3x3, timestamp = 2000L, sessionId = guestSession.id)
-        timerViewModel.addSolve(guestSolve1)
-        timerViewModel.addSolve(guestSolve2)
+        timerViewModel.restoreSolves(listOf(guestSolve1, guestSolve2))
         advanceUntilIdle()
 
         assertEquals(2, timerViewModel.solves.value.size)
@@ -406,7 +385,7 @@ class SessionAndStatsFilterStressTest {
         advanceUntilIdle()
 
         val userSolve = SolveTime(id = "u_solve_1", timeInMillis = 8500L, penalty = Penalty.NONE, scramble = "U", mode = Mode.CUBE_3x3, timestamp = 5000L, sessionId = userSession.id)
-        timerViewModel.addSolve(userSolve)
+        timerViewModel.restoreSolves(listOf(userSolve))
         advanceUntilIdle()
 
         assertEquals(1, timerViewModel.solves.value.size)
@@ -447,7 +426,7 @@ class SessionAndStatsFilterStressTest {
 
         // Single clean solve: 11250ms
         val singleClean = SolveTime(id = "s_clean", timeInMillis = 11250L, penalty = Penalty.NONE, scramble = "U", mode = Mode.CUBE_3x3, timestamp = 1000L, sessionId = edgeSession.id)
-        timerViewModel.addSolve(singleClean)
+        timerViewModel.restoreSolves(listOf(singleClean))
         advanceUntilIdle()
 
         val list1 = timerViewModel.statsFilteredSolves.value

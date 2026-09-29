@@ -3,12 +3,12 @@ package com.maciekhetman.cubetimer.viewmodel
 import android.app.Application
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.maciekhetman.cubetimer.CubeTimerApplication
 import com.maciekhetman.cubetimer.data.SolvesRepository
 import com.maciekhetman.cubetimer.data.auth.AuthManager
-import com.maciekhetman.cubetimer.data.auth.AuthManagerImpl
 import com.maciekhetman.cubetimer.data.local.CubeDatabase
 import com.maciekhetman.cubetimer.data.local.converter.CubeTypeConverters
 import com.maciekhetman.cubetimer.data.local.dao.SessionDao
@@ -16,16 +16,13 @@ import com.maciekhetman.cubetimer.data.local.dao.SolveDao
 import com.maciekhetman.cubetimer.data.local.dao.SyncOutboxDao
 import com.maciekhetman.cubetimer.data.local.dao.getSolvesByIdsChunked
 import com.maciekhetman.cubetimer.data.local.dto.SessionWithStats
-import com.maciekhetman.cubetimer.data.local.entity.SessionEntity
 import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
 import com.maciekhetman.cubetimer.data.local.mapper.*
 import com.maciekhetman.cubetimer.data.session.DeletedSessionSnapshot
 import com.maciekhetman.cubetimer.data.session.SessionManager
-import com.maciekhetman.cubetimer.data.session.SessionManagerImpl
 import com.maciekhetman.cubetimer.data.session.SessionRepository
 import com.maciekhetman.cubetimer.data.session.SessionRepositoryImpl
 import com.maciekhetman.cubetimer.domain.HistoricalPbCalculator
-import com.maciekhetman.cubetimer.domain.HistoricalPbResult
 import com.maciekhetman.cubetimer.domain.csv.CsvExporter
 import com.maciekhetman.cubetimer.domain.csv.CsvImportStatus
 import com.maciekhetman.cubetimer.domain.csv.CsvImporter
@@ -40,7 +37,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
@@ -84,6 +80,13 @@ private data class SolveFilterQuad(
     val dateRangeFilter: DateRangeFilter
 )
 
+private data class ContextChunk(
+    val currentMode: Mode,
+    val activeSession: Session?,
+    val sessions: List<Session>,
+    val selectedSolve: SolveDetailState?
+)
+
 private data class FilterStateChunk(
     val sessionSort: SessionSortOrder,
     val puzzleScope: PuzzleScope,
@@ -93,27 +96,6 @@ private data class FilterStateChunk(
     val dateRangeFilter: DateRangeFilter,
     val isFilterSheetOpen: Boolean,
     val activeFilterSheetTab: Int
-)
-
-private data class FilterScope(
-    val mode: Mode,
-    val filter: StatsFilter,
-    val activeSessionId: String?,
-    val ownerId: String
-)
-
-private data class Chunk1(
-    val solves: List<SolveTime>,
-    val isLoading: Boolean,
-    val isLoadingMore: Boolean,
-    val hasMore: Boolean,
-    val totalCount: Int
-)
-
-private data class Chunk2(
-    val currentMode: Mode,
-    val currentFilter: StatsFilter,
-    val errorMessage: String?
 )
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -132,10 +114,6 @@ class HistoryViewModel(
     private val defaultDispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : AndroidViewModel(application) {
-
-    companion object {
-        const val PAGE_SIZE = 50
-    }
 
     constructor(
         application: Application,
@@ -168,18 +146,10 @@ class HistoryViewModel(
 
     constructor(application: Application) : this(
         application = application,
-        solvesRepository = (application as? CubeTimerApplication)?.solvesRepository
-            ?: SolvesRepository(application),
-        sessionManager = (application as? CubeTimerApplication)?.sessionManager
-            ?: SessionManagerImpl(
-                sessionRepository = SessionRepositoryImpl(CubeDatabase.getInstance(application)),
-                solveDao = CubeDatabase.getInstance(application).solveDao(),
-                authManager = AuthManagerImpl.getInstance(application)
-            ),
-        sessionRepository = (application as? CubeTimerApplication)?.sessionRepository
-            ?: SessionRepositoryImpl(CubeDatabase.getInstance(application)),
-        authManager = (application as? CubeTimerApplication)?.authManager
-            ?: AuthManagerImpl.getInstance(application)
+        solvesRepository = (application as CubeTimerApplication).solvesRepository,
+        sessionManager = application.sessionManager,
+        sessionRepository = application.sessionRepository,
+        authManager = application.authManager
     )
 
     private val effectiveDatabase: CubeDatabase = database
@@ -244,52 +214,21 @@ class HistoryViewModel(
     private val _loadingSessionSolves = MutableStateFlow<Set<String>>(emptySet())
     private val expandedSessionJobs = ConcurrentHashMap<String, Job>()
 
-    // --- Preserved Flat Solves & Legacy State ---
     private val _currentMode = MutableStateFlow(Mode.CUBE_3x3)
     val currentMode: StateFlow<Mode> = _currentMode.asStateFlow()
 
-    private val _currentFilter = MutableStateFlow<StatsFilter>(StatsFilter.AllSessions)
-    val currentFilter: StateFlow<StatsFilter> = _currentFilter.asStateFlow()
-
-    private val _solves = MutableStateFlow<List<SolveTime>>(emptyList())
-    val solves: StateFlow<List<SolveTime>> = _solves.asStateFlow()
-
-    private val _isLoading = MutableStateFlow(true)
-    val isInitialLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
-
-    private val _isLoadingMore = MutableStateFlow(false)
-    val isLoadingMore: StateFlow<Boolean> = _isLoadingMore.asStateFlow()
-
-    private val _hasMore = MutableStateFlow(false)
-    val hasMore: StateFlow<Boolean> = _hasMore.asStateFlow()
-
-    private val _totalCount = MutableStateFlow(0)
-    val totalCount: StateFlow<Int> = _totalCount.asStateFlow()
-
-    private val _errorMessage = MutableStateFlow<String?>(null)
-    val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
-
     private val _effectsChannel = Channel<HistoryUiEffect>(Channel.BUFFERED)
     val effects: Flow<HistoryUiEffect> = _effectsChannel.receiveAsFlow()
-    val uiEffect: Flow<HistoryUiEffect> get() = effects
 
     private val _selectedSolveDetail = MutableStateFlow<SolveDetailState?>(null)
-    val selectedSolveDetail: StateFlow<SolveDetailState?> = _selectedSolveDetail.asStateFlow()
-    val selectedSolve: StateFlow<SolveDetailState?> = _selectedSolveDetail.asStateFlow()
 
     private val currentOwnerId: String get() = authManager.currentOwnerId
 
     // Undo caches
     private var lastDeletedSolve: SolveTime? = null
-    private var lastDeletedIndex: Int? = null
     private var lastBatchDeletedSolves: List<SolveTime>? = null
     private var lastDeletedSessionSnapshot: DeletedSessionSnapshot? = null
     private var lastClearedAllSolves: List<SolveTime>? = null
-
-    // Pagination & observer jobs
-    private var paginationJob: Job? = null
-    private var countObservationJob: Job? = null
-    private var currentOffset: Int = 0
 
     val activeSession: StateFlow<Session?> = combine(
         _currentMode,
@@ -372,23 +311,10 @@ class HistoryViewModel(
                 activeFilterSheetTab = tab
             )
         },
-        combine(
-            combine(_solves, _isLoading, _isLoadingMore, _hasMore, _totalCount) { s, l, lm, hm, tc ->
-                Chunk1(s, l, lm, hm, tc)
-            },
-            combine(_currentMode, _currentFilter, _errorMessage) { cm, cf, em ->
-                Chunk2(cm, cf, em)
-            },
-            combine(activeSession, sessions, _selectedSolveDetail) { asess, sessList, selSolve ->
-                Triple(asess, sessList, selSolve)
-            }
-        ) { c1, c2, c3 ->
-            Triple(c1, c2, c3)
+        combine(_currentMode, activeSession, sessions, _selectedSolveDetail) { mode, asess, sessList, selSolve ->
+            ContextChunk(mode, asess, sessList, selSolve)
         }
-    ) { groups: GroupStateChunk, filters: FilterStateChunk, legacy: Triple<Chunk1, Chunk2, Triple<Session?, List<Session>, SolveDetailState?>> ->
-        val c1 = legacy.first
-        val c2 = legacy.second
-        val (asess, sessList, selSolve) = legacy.third
+    ) { groups: GroupStateChunk, filters: FilterStateChunk, context: ContextChunk ->
         HistoryUiState(
             sessionGroups = groups.sessionGroups,
             expandedSessionIds = groups.expandedSessionIds,
@@ -401,42 +327,17 @@ class HistoryViewModel(
             dateRangeFilter = filters.dateRangeFilter,
             isFilterSheetOpen = filters.isFilterSheetOpen,
             activeFilterSheetTab = filters.activeFilterSheetTab,
-            // Legacy backwards-compatible fields
-            solves = c1.solves,
-            isLoading = c1.isLoading,
-            isLoadingMore = c1.isLoadingMore,
-            hasMore = c1.hasMore,
-            totalCount = c1.totalCount,
-            currentMode = c2.currentMode,
-            currentFilter = c2.currentFilter,
-            activeSession = asess,
-            sessions = sessList,
-            errorMessage = c2.errorMessage,
-            selectedSolve = selSolve
+            // The combine only emits once the session list has been read, so loading is over.
+            isLoading = false,
+            currentMode = context.currentMode,
+            activeSession = context.activeSession,
+            sessions = context.sessions,
+            selectedSolve = context.selectedSolve
         )
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, HistoryUiState())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HistoryUiState())
 
     init {
         observeExpandedSessions()
-        viewModelScope.launch {
-            combine(
-                _currentMode,
-                _currentFilter,
-                activeSession,
-                authManager.authState
-            ) { mode, filter, activeSes, authState ->
-                FilterScope(
-                    mode = mode,
-                    filter = filter,
-                    activeSessionId = activeSes?.id,
-                    ownerId = authState.ownerId
-                )
-            }.distinctUntilChanged()
-                .collectLatest { scope ->
-                    observeCounts(scope)
-                    reloadFirstPage(scope)
-                }
-        }
     }
 
     private fun observeExpandedSessions() {
@@ -640,8 +541,7 @@ class HistoryViewModel(
     }
 
     fun selectAllSolves() {
-        // Only solves the user can actually see (expanded, filtered session groups). No fallback to
-        // the flat paged list: History doesn't render it, so it would select solves off-screen.
+        // Only solves the user can actually see: the expanded, filtered session groups.
         val visibleSolves = uiState.value.sessionGroups
             .filter { it.isExpanded }
             .flatMap { it.solves }
@@ -666,10 +566,7 @@ class HistoryViewModel(
     fun getSelectedSolves(): List<SolveTime> {
         val ids = _selectedSolveIds.value
         if (ids.isEmpty()) return emptyList()
-        val cached = _sessionSolvesCache.value.values.flatten().filter { it.id in ids }
-        val trackedSessionIds = _sessionSolvesCache.value.keys
-        val flat = _solves.value.filter { it.id in ids && (it.sessionId == null || it.sessionId !in trackedSessionIds) }
-        return (cached + flat).distinctBy { it.id }
+        return _sessionSolvesCache.value.values.flatten().filter { it.id in ids }.distinctBy { it.id }
     }
 
     // --- Batch Solve Deletion & Undo ---
@@ -690,8 +587,6 @@ class HistoryViewModel(
                 val deleted = solvesRepository.deleteSolvesByIds(selectedIds, ownerId)
                 if (deleted.isNotEmpty()) {
                     lastBatchDeletedSolves = deleted
-                    _solves.update { list -> list.filter { it.id !in selectedIds } }
-                    _totalCount.update { (it - deleted.size).coerceAtLeast(0) }
                     _sessionSolvesCache.update { cache ->
                         cache.mapValues { (_, sList) -> sList.filter { it.id !in selectedIds } }
                     }
@@ -700,7 +595,7 @@ class HistoryViewModel(
                     _effectsChannel.send(HistoryUiEffect.ShowMessage("No solves were deleted"))
                 }
             } catch (e: Exception) {
-                _effectsChannel.send(HistoryUiEffect.ShowMessage("Failed to delete solves: ${e.message}"))
+                reportFailure("Failed to delete solves", e)
             }
         }
     }
@@ -714,9 +609,6 @@ class HistoryViewModel(
             try {
                 val ownerId = currentOwnerId
                 solvesRepository.restoreSolves(toRestore, ownerId)
-                val restoreIds = toRestore.map { it.id }.toSet()
-                _solves.update { list -> toRestore + list.filter { it.id !in restoreIds } }
-                _totalCount.update { it + toRestore.size }
                 _sessionSolvesCache.update { cache ->
                     var newCache = cache
                     val grouped = toRestore.filter { it.sessionId != null }.groupBy { it.sessionId!! }
@@ -732,7 +624,7 @@ class HistoryViewModel(
                 }
                 _effectsChannel.send(HistoryUiEffect.ShowMessage("Restored ${toRestore.size} solves"))
             } catch (e: Exception) {
-                _effectsChannel.send(HistoryUiEffect.ShowMessage("Failed to restore solves: ${e.message}"))
+                reportFailure("Failed to restore solves", e)
             }
         }
     }
@@ -769,7 +661,7 @@ class HistoryViewModel(
                     _effectsChannel.send(HistoryUiEffect.ShowMessage("Session not found or already deleted"))
                 }
             } catch (e: Exception) {
-                _effectsChannel.send(HistoryUiEffect.ShowMessage("Failed to delete session: ${e.message}"))
+                reportFailure("Failed to delete session", e)
             }
         }
     }
@@ -784,7 +676,7 @@ class HistoryViewModel(
                 }
                 _effectsChannel.send(HistoryUiEffect.ShowMessage("Restored session '${snapshot.session.name}'"))
             } catch (e: Exception) {
-                _effectsChannel.send(HistoryUiEffect.ShowMessage("Failed to restore session: ${e.message}"))
+                reportFailure("Failed to restore session", e)
             }
         }
     }
@@ -801,18 +693,10 @@ class HistoryViewModel(
 
         val previousSelectedSolveIds = _selectedSolveIds.value
         val previousSelectedDetail = _selectedSolveDetail.value
-        val previousSolves = _solves.value
-        val previousTotalCount = _totalCount.value
-        val previousHasMore = _hasMore.value
-        val previousOffset = currentOffset
         val previousCache = _sessionSolvesCache.value
 
         _selectedSolveIds.value = emptySet()
         _selectedSolveDetail.value = null
-        _solves.value = emptyList()
-        _totalCount.value = 0
-        _hasMore.value = false
-        currentOffset = 0
         _sessionSolvesCache.value = emptyMap()
 
         viewModelScope.launch {
@@ -827,12 +711,8 @@ class HistoryViewModel(
             } catch (e: Exception) {
                 _selectedSolveIds.value = previousSelectedSolveIds
                 _selectedSolveDetail.value = previousSelectedDetail
-                _solves.value = previousSolves
-                _totalCount.value = previousTotalCount
-                _hasMore.value = previousHasMore
-                currentOffset = previousOffset
                 _sessionSolvesCache.value = previousCache
-                _effectsChannel.send(HistoryUiEffect.ShowMessage("Failed to clear history: ${e.message}"))
+                reportFailure("Failed to clear history", e)
             }
         }
     }
@@ -846,13 +726,9 @@ class HistoryViewModel(
             try {
                 val ownerId = currentOwnerId
                 solvesRepository.restoreSolves(toRestore, ownerId)
-                _solves.value = toRestore
-                _totalCount.value = toRestore.size
-                currentOffset = toRestore.size
-                _hasMore.value = toRestore.size >= PAGE_SIZE
                 _effectsChannel.send(HistoryUiEffect.ShowMessage("Restored ${toRestore.size} solves"))
             } catch (e: Exception) {
-                _effectsChannel.send(HistoryUiEffect.ShowMessage("Failed to restore solves: ${e.message}"))
+                reportFailure("Failed to restore solves", e)
             }
         }
     }
@@ -910,7 +786,7 @@ class HistoryViewModel(
                     _effectsChannel.send(HistoryUiEffect.ShowMessage("No solves to export in current scope"))
                 }
             } catch (e: Exception) {
-                _effectsChannel.send(HistoryUiEffect.ShowMessage("Failed to export solves: ${e.message}"))
+                reportFailure("Failed to export solves", e)
             }
         }
     }
@@ -948,7 +824,7 @@ class HistoryViewModel(
                     _effectsChannel.send(HistoryUiEffect.ShowMessage("No solves to export for session '${session.name}'"))
                 }
             } catch (e: Exception) {
-                _effectsChannel.send(HistoryUiEffect.ShowMessage("Failed to export session: ${e.message}"))
+                reportFailure("Failed to export session", e)
             }
         }
     }
@@ -993,7 +869,7 @@ class HistoryViewModel(
                     _effectsChannel.send(HistoryUiEffect.ShowMessage("Selected solves not found"))
                 }
             } catch (e: Exception) {
-                _effectsChannel.send(HistoryUiEffect.ShowMessage("Failed to export selected solves: ${e.message}"))
+                reportFailure("Failed to export selected solves", e)
             }
         }
     }
@@ -1026,7 +902,6 @@ class HistoryViewModel(
                             }
                         }
                         _effectsChannel.send(HistoryUiEffect.ShowMessage(message))
-                        refresh()
                     }
                     is CsvImportStatus.EmptyFile -> {
                         _effectsChannel.send(HistoryUiEffect.ShowMessage("CSV file is empty"))
@@ -1035,11 +910,11 @@ class HistoryViewModel(
                         _effectsChannel.send(HistoryUiEffect.ShowMessage("Invalid CSV file: ${status.reason}"))
                     }
                     is CsvImportStatus.Error -> {
-                        _effectsChannel.send(HistoryUiEffect.ShowMessage("CSV import error: ${status.throwable.message}"))
+                        reportFailure("CSV import failed", status.throwable)
                     }
                 }
             } catch (e: Exception) {
-                _effectsChannel.send(HistoryUiEffect.ShowMessage("Failed to import solves: ${e.message}"))
+                reportFailure("Failed to import solves", e)
             }
         }
     }
@@ -1111,140 +986,9 @@ class HistoryViewModel(
         _dateRangeFilter.value = DateRangeFilter()
     }
 
-    // --- Legacy / Flat Solves Actions & Pagination ---
     fun setMode(mode: Mode) {
         if (_currentMode.value != mode) {
             _currentMode.value = mode
-        }
-    }
-
-    fun setFilter(filter: StatsFilter) {
-        if (_currentFilter.value != filter) {
-            _currentFilter.value = filter
-        }
-    }
-
-    fun refresh() {
-        val scope = FilterScope(
-            mode = _currentMode.value,
-            filter = _currentFilter.value,
-            activeSessionId = activeSession.value?.id,
-            ownerId = currentOwnerId
-        )
-        viewModelScope.launch {
-            reloadFirstPage(scope)
-        }
-    }
-
-    private suspend fun reloadFirstPage(scope: FilterScope) {
-        paginationJob?.cancel()
-        _isLoading.value = true
-        currentOffset = 0
-        try {
-            val initialBatch = fetchPage(scope, limit = PAGE_SIZE, offset = 0)
-            _solves.value = initialBatch
-            currentOffset = initialBatch.size
-            _hasMore.value = initialBatch.size >= PAGE_SIZE && (_totalCount.value == 0 || _solves.value.size < _totalCount.value)
-        } catch (e: Exception) {
-            _errorMessage.value = "Failed to load solves: ${e.message}"
-        } finally {
-            _isLoading.value = false
-        }
-    }
-
-    fun loadMore() {
-        if (_isLoading.value || _isLoadingMore.value || !_hasMore.value) {
-            return
-        }
-
-        val currentScope = FilterScope(
-            mode = _currentMode.value,
-            filter = _currentFilter.value,
-            activeSessionId = activeSession.value?.id,
-            ownerId = currentOwnerId
-        )
-
-        _isLoadingMore.value = true
-        paginationJob = viewModelScope.launch {
-            try {
-                val nextBatch = fetchPage(currentScope, limit = PAGE_SIZE, offset = currentOffset)
-                if (nextBatch.isNotEmpty()) {
-                    val currentIds = _solves.value.map { it.id }.toSet()
-                    val newUnique = nextBatch.filter { it.id !in currentIds }
-                    _solves.value = _solves.value + newUnique
-                    currentOffset += nextBatch.size
-                    _hasMore.value = nextBatch.size >= PAGE_SIZE && (_totalCount.value == 0 || _solves.value.size < _totalCount.value)
-                } else {
-                    _hasMore.value = false
-                }
-            } catch (e: Exception) {
-                _errorMessage.value = "Failed to load more solves: ${e.message}"
-            } finally {
-                _isLoadingMore.value = false
-            }
-        }
-    }
-
-    private suspend fun fetchPage(scope: FilterScope, limit: Int, offset: Int): List<SolveTime> {
-        return when (val filter = scope.filter) {
-            is StatsFilter.ActiveSession -> {
-                val sId = scope.activeSessionId
-                if (sId != null) {
-                    solvesRepository.getSolvesPagedBySession(
-                        sessionId = sId,
-                        ownerId = scope.ownerId,
-                        limit = limit,
-                        offset = offset
-                    )
-                } else {
-                    solvesRepository.getSolvesPagedByEvent(
-                        mode = scope.mode,
-                        ownerId = scope.ownerId,
-                        limit = limit,
-                        offset = offset
-                    )
-                }
-            }
-            is StatsFilter.AllSessions -> {
-                solvesRepository.getSolvesPagedByEvent(
-                    mode = scope.mode,
-                    ownerId = scope.ownerId,
-                    limit = limit,
-                    offset = offset
-                )
-            }
-            is StatsFilter.SpecificSession -> {
-                solvesRepository.getSolvesPagedBySession(
-                    sessionId = filter.sessionId,
-                    ownerId = scope.ownerId,
-                    limit = limit,
-                    offset = offset
-                )
-            }
-        }
-    }
-
-    /**
-     * Observes the one solve count the current filter needs for [totalCount] / [hasMore]. This used
-     * to keep up to three count queries live (each re-run on every solves write), two of them only
-     * feeding count fields that nothing displayed.
-     */
-    private fun observeCounts(scope: FilterScope) {
-        countObservationJob?.cancel()
-        val countFlow = when (val filter = scope.filter) {
-            is StatsFilter.SpecificSession ->
-                solvesRepository.observeSolveCountBySession(filter.sessionId, scope.ownerId)
-            is StatsFilter.ActiveSession -> scope.activeSessionId
-                ?.let { solvesRepository.observeSolveCountBySession(it, scope.ownerId) }
-                ?: solvesRepository.observeSolveCountByEvent(scope.mode, scope.ownerId)
-            is StatsFilter.AllSessions ->
-                solvesRepository.observeSolveCountByEvent(scope.mode, scope.ownerId)
-        }
-        countObservationJob = viewModelScope.launch {
-            countFlow.collect { count ->
-                _totalCount.value = count
-                _hasMore.value = _solves.value.size < count
-            }
         }
     }
 
@@ -1253,9 +997,6 @@ class HistoryViewModel(
         if (previousPenalty == penalty) return
 
         val updatedSolve = solve.copy(penalty = penalty)
-        _solves.value = _solves.value.map { existing ->
-            if (existing.id == solve.id) updatedSolve else existing
-        }
 
         // Optimistically update solves cache for expanded session groups
         _sessionSolvesCache.update { cache ->
@@ -1281,9 +1022,6 @@ class HistoryViewModel(
                 val ownerId = currentOwnerId
                 solvesRepository.updateSolvePenalty(solve, penalty, ownerId = ownerId)
             } catch (e: Exception) {
-                _solves.value = _solves.value.map { existing ->
-                    if (existing.id == solve.id) existing.copy(penalty = previousPenalty) else existing
-                }
                 _sessionSolvesCache.update { cache ->
                     cache.mapValues { (_, sList) ->
                         sList.map { if (it.id == solve.id) it.copy(penalty = previousPenalty) else it }
@@ -1301,27 +1039,22 @@ class HistoryViewModel(
                         pbResult = revertedPbResult
                     )
                 }
-                _effectsChannel.send(HistoryUiEffect.ShowMessage("Failed to update penalty: ${e.message}"))
+                reportFailure("Failed to update penalty", e)
             }
         }
     }
 
     fun deleteSolve(solve: SolveTime) {
-        val index = _solves.value.indexOfFirst { it.id == solve.id }
-        if (index == -1 && !_sessionSolvesCache.value.values.any { list -> list.any { it.id == solve.id } }) {
-            return
-        }
+        val sessionSolves = _sessionSolvesCache.value.values.firstOrNull { list -> list.any { it.id == solve.id } }
+            ?: return
+        val originalIndex = sessionSolves.indexOfFirst { it.id == solve.id }
 
         if (_selectedSolveDetail.value?.solve?.id == solve.id) {
             _selectedSolveDetail.value = null
         }
 
         lastDeletedSolve = solve
-        lastDeletedIndex = if (index != -1) index else 0
 
-        _solves.value = _solves.value.filter { it.id != solve.id }
-        _totalCount.value = (_totalCount.value - 1).coerceAtLeast(0)
-        currentOffset = (currentOffset - 1).coerceAtLeast(0)
         _sessionSolvesCache.update { cache ->
             cache.mapValues { (_, sList) -> sList.filter { it.id != solve.id } }
         }
@@ -1335,32 +1068,25 @@ class HistoryViewModel(
                     HistoryUiEffect.ShowUndoSnackbar(
                         message = "Solve deleted",
                         solve = solve,
-                        originalIndex = lastDeletedIndex ?: 0
+                        originalIndex = originalIndex
                     )
                 )
             } catch (e: Exception) {
-                if (index != -1) {
-                    val mutable = _solves.value.toMutableList()
-                    mutable.add(index.coerceIn(0, mutable.size), solve)
-                    _solves.value = mutable
-                    _totalCount.value += 1
-                    currentOffset += 1
+                val sId = solve.sessionId
+                if (sId != null) {
+                    _sessionSolvesCache.update { cache ->
+                        val existing = cache[sId] ?: return@update cache
+                        if (existing.none { it.id == solve.id }) {
+                            cache + (sId to (existing + solve).sortedByDescending { it.timestamp })
+                        } else cache
+                    }
                 }
-                _effectsChannel.send(HistoryUiEffect.ShowMessage("Failed to delete solve: ${e.message}"))
+                reportFailure("Failed to delete solve", e)
             }
         }
     }
 
     fun restoreSolve(solve: SolveTime) {
-        val mutable = _solves.value.toMutableList()
-        val originalIndex = if (lastDeletedSolve?.id == solve.id) (lastDeletedIndex ?: 0) else 0
-        val insertIndex = originalIndex.coerceIn(0, mutable.size)
-        if (mutable.none { it.id == solve.id }) {
-            mutable.add(insertIndex, solve)
-            _solves.value = mutable
-            _totalCount.value += 1
-            currentOffset += 1
-        }
         val sId = solve.sessionId
         if (sId != null) {
             _sessionSolvesCache.update { cache ->
@@ -1371,23 +1097,19 @@ class HistoryViewModel(
             }
         }
         lastDeletedSolve = null
-        lastDeletedIndex = null
 
         viewModelScope.launch {
             try {
                 val ownerId = currentOwnerId
                 solvesRepository.restoreSolves(listOf(solve), ownerId = ownerId)
             } catch (e: Exception) {
-                _solves.value = _solves.value.filter { it.id != solve.id }
-                _totalCount.value = (_totalCount.value - 1).coerceAtLeast(0)
-                currentOffset = (currentOffset - 1).coerceAtLeast(0)
                 if (sId != null) {
                     _sessionSolvesCache.update { cache ->
                         val existing = cache[sId] ?: return@update cache
                         cache + (sId to existing.filter { it.id != solve.id })
                     }
                 }
-                _effectsChannel.send(HistoryUiEffect.ShowMessage("Failed to restore solve: ${e.message}"))
+                reportFailure("Failed to restore solve", e)
             }
         }
     }
@@ -1397,11 +1119,8 @@ class HistoryViewModel(
         restoreSolve(solveToRestore)
     }
 
-    /**
-     * Opens the solve detail card. [solveNumber] should be passed when the caller knows the solve's
-     * position (e.g. from a session group); otherwise it is derived from the flat solves list.
-     */
-    fun selectSolveForDetail(solve: SolveTime, solveNumber: Int? = null) {
+    /** Opens the solve detail card; [solveNumber] is the solve's position within its session. */
+    fun selectSolveForDetail(solve: SolveTime, solveNumber: Int) {
         viewModelScope.launch {
             val ownerId = currentOwnerId
             val solvedAtIso = CubeTypeConverters.epochMillisToIso(solve.timestamp)
@@ -1412,11 +1131,6 @@ class HistoryViewModel(
                 excludeSolveId = solve.id
             )
 
-            val resolvedSolveNumber = solveNumber ?: run {
-                val solveIndex = _solves.value.indexOfFirst { it.id == solve.id }
-                if (solveIndex != -1) (_totalCount.value - solveIndex).coerceAtLeast(1) else 1
-            }
-
             val pbResult = HistoricalPbCalculator.calculate(
                 solve = solve,
                 priorBestDurationMs = priorBestTime
@@ -1424,7 +1138,7 @@ class HistoryViewModel(
 
             _selectedSolveDetail.value = SolveDetailState(
                 solve = solve,
-                solveNumber = resolvedSolveNumber,
+                solveNumber = solveNumber,
                 priorBestTime = priorBestTime,
                 isPb = pbResult.isPb,
                 pbDelta = pbResult.deltaMs,
@@ -1436,5 +1150,15 @@ class HistoryViewModel(
 
     fun dismissSolveDetail() {
         _selectedSolveDetail.value = null
+    }
+
+    /** Shows a fixed, human-readable [message] and keeps the technical detail in the log. */
+    private suspend fun reportFailure(message: String, error: Throwable) {
+        Log.e(TAG, message, error)
+        _effectsChannel.send(HistoryUiEffect.ShowMessage(message))
+    }
+
+    private companion object {
+        const val TAG = "HistoryViewModel"
     }
 }

@@ -8,6 +8,7 @@ import com.maciekhetman.cubetimer.model.AuthException
 import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.User
 import com.maciekhetman.cubetimer.ui.auth.AuthDialogType
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,6 +22,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -28,6 +30,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.shadows.ShadowLog
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -198,11 +201,149 @@ class AuthViewModelTest {
         assertEquals("u1", fakeAuthManager.lastAdoptedUserId)
     }
 
+    @Test
+    fun testFailureNeverShowsTheRawServerText() = testScope.runTest {
+        viewModel.openDialog(AuthDialogType.LOGIN)
+        viewModel.onEmailChanged("cuber@example.com")
+        viewModel.onPasswordChanged("ValidPassword123!")
+        val raw = AuthException.ApiError("internal_error", "pq: relation \"users\" does not exist", 500)
+        fakeAuthManager.loginResult = AuthResult.Error(raw)
+
+        viewModel.submitLogin()
+        advanceUntilIdle()
+
+        assertEquals("Something went wrong on the server. Please try again later.", viewModel.formState.value.errorMessage)
+    }
+
+    @Test
+    fun testFailureLogsTheRawException() = testScope.runTest {
+        ShadowLog.clear()
+        viewModel.openDialog(AuthDialogType.LOGIN)
+        viewModel.onEmailChanged("cuber@example.com")
+        viewModel.onPasswordChanged("ValidPassword123!")
+        val raw = AuthException.Unknown("java.lang.IllegalStateException: boom")
+        fakeAuthManager.loginResult = AuthResult.Error(raw)
+
+        viewModel.submitLogin()
+        advanceUntilIdle()
+
+        val logged = ShadowLog.getLogsForTag("AuthViewModel").mapNotNull { it.throwable }
+        assertTrue("raw exception must be logged, got $logged", logged.any { it === raw })
+    }
+
+    @Test
+    fun testEveryAuthExceptionMapsToAFixedMessage() {
+        fun allTypes(raw: String): List<AuthException> = listOf(
+            AuthException.InvalidCredentials(raw),
+            AuthException.EmailNotVerified(raw),
+            AuthException.EmailAlreadyExists(raw),
+            AuthException.InvalidToken(raw),
+            AuthException.InvalidRefreshToken(raw),
+            AuthException.RefreshTokenReused(raw),
+            AuthException.AccountLinkRequired(raw),
+            AuthException.InvalidSocialToken(raw),
+            AuthException.IdentityAlreadyLinked(raw),
+            AuthException.RateLimited(raw),
+            AuthException.InvalidPassword(raw),
+            AuthException.InvalidEmail(raw),
+            AuthException.EmailDeliveryFailed(raw),
+            AuthException.Unauthorized(raw),
+            AuthException.Forbidden(raw),
+            AuthException.CursorExpired(raw),
+            AuthException.ApiError("code_$raw", raw, 500),
+            AuthException.NetworkError(raw),
+            AuthException.SerializationError(raw),
+            AuthException.Unknown(raw)
+        )
+
+        val first = allTypes("RAW-DETAIL-ONE")
+        val second = allTypes("RAW-DETAIL-TWO")
+        first.zip(second).forEach { (a, b) ->
+            val name = a::class.simpleName
+            val message = viewModel.mapAuthError(a)
+            assertTrue("$name has no message", message.isNotBlank())
+            assertFalse("$name leaks its raw text: $message", message.contains("RAW-DETAIL"))
+            assertEquals("$name message depends on the raw text", message, viewModel.mapAuthError(b))
+        }
+    }
+
+    @Test
+    fun testDeleteAccountSuccessClosesDialogAndClearsInputs() = testScope.runTest {
+        viewModel.openDialog(AuthDialogType.DELETE_ACCOUNT)
+        viewModel.onPasswordChanged("leftover")
+        fakeAuthManager.deleteAccountResult = AuthResult.Success(Unit)
+
+        viewModel.submitDeleteAccount()
+        advanceUntilIdle()
+
+        assertEquals(1, fakeAuthManager.deleteAccountCallCount)
+        assertEquals(AuthDialogType.NONE, viewModel.formState.value.dialogType)
+        assertFalse(viewModel.formState.value.isLoading)
+        assertEquals("", viewModel.formState.value.password)
+        assertNull(viewModel.formState.value.errorMessage)
+    }
+
+    @Test
+    fun testDeleteAccountFailureKeepsConfirmationOpenWithReadableError() = testScope.runTest {
+        viewModel.openDialog(AuthDialogType.DELETE_ACCOUNT)
+        fakeAuthManager.deleteAccountResult = AuthResult.Error(AuthException.NetworkError("Account deletion failed: Unable to resolve host"))
+
+        viewModel.submitDeleteAccount()
+        advanceUntilIdle()
+
+        assertEquals(AuthDialogType.DELETE_ACCOUNT, viewModel.formState.value.dialogType)
+        assertFalse(viewModel.formState.value.isLoading)
+        assertEquals("Network connection failed. Please check your connection.", viewModel.formState.value.errorMessage)
+    }
+
+    @Test
+    fun testDeleteAccountWhileRunningIsNotSubmittedTwice() = testScope.runTest {
+        viewModel.openDialog(AuthDialogType.DELETE_ACCOUNT)
+        val gate = CompletableDeferred<AuthResult<Unit>>()
+        fakeAuthManager.deleteAccountGate = gate
+
+        viewModel.submitDeleteAccount()
+        advanceUntilIdle()
+        assertTrue(viewModel.formState.value.isLoading)
+
+        viewModel.submitDeleteAccount()
+        advanceUntilIdle()
+        assertEquals(1, fakeAuthManager.deleteAccountCallCount)
+
+        gate.complete(AuthResult.Success(Unit))
+        advanceUntilIdle()
+        assertFalse(viewModel.formState.value.isLoading)
+        assertEquals(AuthDialogType.NONE, viewModel.formState.value.dialogType)
+    }
+
+    @Test
+    fun testReopeningTheProfileAfterAFailedDeletionClearsTheError() = testScope.runTest {
+        viewModel.openDialog(AuthDialogType.DELETE_ACCOUNT)
+        fakeAuthManager.deleteAccountResult = AuthResult.Error(AuthException.NetworkError())
+        viewModel.submitDeleteAccount()
+        advanceUntilIdle()
+        assertNotNull(viewModel.formState.value.errorMessage)
+
+        viewModel.openDialog(AuthDialogType.USER_PROFILE)
+
+        assertNull(viewModel.formState.value.errorMessage)
+        assertEquals(AuthDialogType.USER_PROFILE, viewModel.formState.value.dialogType)
+    }
+
     private class FakeAuthManager : AuthManager {
         private val _authState = MutableStateFlow<AuthState>(AuthState.Guest)
         override val authState: StateFlow<AuthState> = _authState.asStateFlow()
 
         override var currentUser: User? = null
+
+        var deleteAccountCallCount = 0
+        var deleteAccountResult: AuthResult<Unit> = AuthResult.Success(Unit)
+        var deleteAccountGate: CompletableDeferred<AuthResult<Unit>>? = null
+
+        override suspend fun deleteAccount(): AuthResult<Unit> {
+            deleteAccountCallCount++
+            return deleteAccountGate?.await() ?: deleteAccountResult
+        }
 
         var loginCallCount = 0
         var registerCallCount = 0

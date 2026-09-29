@@ -8,10 +8,8 @@ import com.maciekhetman.cubetimer.data.local.dao.ConflictDao
 import com.maciekhetman.cubetimer.data.local.dao.SessionDao
 import com.maciekhetman.cubetimer.data.local.dao.SolveDao
 import com.maciekhetman.cubetimer.data.local.dao.SyncOutboxDao
-import com.maciekhetman.cubetimer.data.local.entity.ConflictEntity
 import com.maciekhetman.cubetimer.data.local.entity.SessionEntity
 import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
-import com.maciekhetman.cubetimer.data.local.entity.SyncOutboxEntity
 import com.maciekhetman.cubetimer.data.local.mapper.toSyncPayload
 import com.maciekhetman.cubetimer.data.remote.NetworkModule
 import com.maciekhetman.cubetimer.data.remote.dto.SessionSnapshotDto
@@ -25,14 +23,11 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import java.time.Instant
-import java.util.UUID
 
 @RunWith(RobolectricTestRunner::class)
 class ConflictResolverTest {

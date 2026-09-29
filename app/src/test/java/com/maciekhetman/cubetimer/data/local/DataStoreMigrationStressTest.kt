@@ -7,7 +7,6 @@ import androidx.test.core.app.ApplicationProvider
 import com.maciekhetman.cubetimer.data.local.migration.DataStoreMigration
 import com.maciekhetman.cubetimer.data.settingsDataStore
 import com.maciekhetman.cubetimer.data.solvesDataStore
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.first
@@ -47,6 +46,11 @@ class DataStoreMigrationStressTest {
         database.close()
     }
 
+    private suspend fun deleteAllGuestSolves() {
+        val solveDao = database.solveDao()
+        solveDao.getAllSolvesForOwner("guest").forEach { solveDao.deleteById(it.id) }
+    }
+
     @Test
     fun testEmptyAndNullDataStoreVariations() = runTest {
         val variations = listOf(
@@ -63,7 +67,7 @@ class DataStoreMigrationStressTest {
             context.solvesDataStore.edit { preferences ->
                 preferences[SOLVES_LIST_KEY] = variant
             }
-            database.solveDao().deleteSolvesForOwner("guest")
+            deleteAllGuestSolves()
 
             migration.migrateIfNeeded()
 
@@ -91,7 +95,7 @@ class DataStoreMigrationStressTest {
             context.solvesDataStore.edit { preferences ->
                 preferences[SOLVES_LIST_KEY] = payload
             }
-            database.solveDao().deleteSolvesForOwner("guest")
+            deleteAllGuestSolves()
 
             migration.migrateIfNeeded()
 

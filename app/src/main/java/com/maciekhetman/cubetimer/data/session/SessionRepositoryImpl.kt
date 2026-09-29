@@ -63,9 +63,7 @@ class SessionRepositoryImpl(
     }
 
     override suspend fun getActiveSessions(ownerId: String, mode: Mode): List<Session> = withContext(ioDispatcher) {
-        sessionDao.getAllActiveSessionsForOwner(ownerId)
-            .filter { it.event == CubeTypeConverters.fromMode(mode) && !it.archived }
-            .map { it.toDomain() }
+        sessionDao.getActiveSessionsByEvent(ownerId, CubeTypeConverters.fromMode(mode)).map { it.toDomain() }
     }
 
     override suspend fun getSessionNamesWithPrefix(

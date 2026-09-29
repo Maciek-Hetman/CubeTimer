@@ -23,20 +23,17 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import kotlin.math.roundToInt
 import androidx.compose.material.icons.Icons
@@ -47,10 +44,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -186,10 +180,9 @@ private object NoHapticFeedback : HapticFeedback {
 @Composable
 fun CubeTimerApp(
     viewModel: TimerViewModel,
-    authViewModel: AuthViewModel = viewModel(),
-    // HistoryViewModel is expensive to create (eager DB queries), so it is left null here and only looked
-    // up (lazily, via viewModel()) inside the HISTORY branch of AppContent. Passing an explicit instance
-    // (e.g. from a test) still works.
+    authViewModel: AuthViewModel,
+    // HistoryViewModel is left null here and only looked up (lazily, via viewModel()) inside the HISTORY
+    // branch of AppContent. Passing an explicit instance (e.g. from a test) still works.
     historyViewModel: HistoryViewModel? = null,
     syncStateManager: SyncStateManager = (LocalContext.current.applicationContext as? CubeTimerApplication)?.syncStateManager ?: SyncStateManager(),
     // Only needed once the sync dialog is opened, so like historyViewModel it is looked up lazily
@@ -209,7 +202,6 @@ fun CubeTimerApp(
 
     // Modals visibility states
     var showSyncDialog by rememberSaveable { mutableStateOf(false) }
-    val snackbarHostState = remember { SnackbarHostState() }
 
     ApplyStatusBarColor()
 
@@ -273,7 +265,7 @@ fun CubeTimerApp(
                     )
                 }
                 AppDestinations.HISTORY -> {
-                    // Created lazily on first visit to this destination (heavy: eager DB queries).
+                    // Created lazily on first visit to this destination.
                     val resolvedHistoryViewModel = historyViewModel ?: viewModel()
                     LaunchedEffect(resolvedHistoryViewModel, currentMode) {
                         resolvedHistoryViewModel.setMode(currentMode)
@@ -301,10 +293,7 @@ fun CubeTimerApp(
         }
     }
 
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        snackbarHost = { SnackbarHost(snackbarHostState) }
-    ) { innerPadding ->
+    Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
         Box(modifier = Modifier.fillMaxSize()) {
             AppContent(innerPadding)
 

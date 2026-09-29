@@ -11,10 +11,13 @@ import com.maciekhetman.cubetimer.data.local.entity.SessionEntity
 import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
 import com.maciekhetman.cubetimer.model.Penalty
 import com.maciekhetman.cubetimer.model.SessionKind
+import com.maciekhetman.cubetimer.model.SolveTime
+import com.maciekhetman.cubetimer.model.TimingDevice
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -22,8 +25,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
-import java.time.Instant
-import java.util.UUID
 
 @RunWith(RobolectricTestRunner::class)
 class CsvImporterTest {
@@ -368,7 +369,7 @@ class CsvImporterTest {
     }
 
     @Test
-    fun importCsv_softDeletedSolvesInDb_treatedAsDuplicates() = runTest {
+    fun importCsv_softDeletedSolveOfSameOwner_isRestoredWithFileContent() = runTest {
         sessionDao.insertAll(listOf(
             SessionEntity(id = "sess-1", ownerId = "guest", name = "S1", event = "3x3", startedAt = "2026-09-11T10:00:00.000Z")
         ))
@@ -380,6 +381,50 @@ class CsvImporterTest {
                 event = "3x3",
                 durationMs = 12000L,
                 solvedAt = "2026-09-11T10:00:00.000Z",
+                scramble = "old",
+                version = 3L,
+                deletedAt = "2026-09-11T10:05:00.000Z"
+            )
+        ))
+
+        val csv = """
+            # Source: CubeTimer
+            solve_id,session_id,session_name,puzzle,timestamp,time,penalty,scramble
+            solve-del,sess-1,S1,3x3,1700000001000,9999,+2,R U
+        """.trimIndent()
+
+        val result = importer.importCsv(stringToStream(csv), ownerId = "guest")
+        assertTrue(result is CsvImportStatus.Success)
+        val success = result as CsvImportStatus.Success
+
+        assertEquals(1, success.importedCount)
+        assertEquals(0, success.duplicateCount)
+        assertEquals(0, success.sessionsCreatedCount)
+
+        val restored = solveDao.getSolveById("solve-del")!!
+        assertNull(restored.deletedAt)
+        assertEquals(9999L, restored.durationMs)
+        assertEquals("plus_two", restored.penalty)
+        assertEquals("R U", restored.scramble)
+        assertEquals(CubeTypeConverters.epochMillisToIso(1700000001000L), restored.solvedAt)
+        assertEquals("the server version is kept", 3L, restored.version)
+        assertEquals(listOf("solve-del"), solveDao.getSolvesByScope(ownerId = "guest").map { it.id })
+    }
+
+    @Test
+    fun importCsv_softDeletedSolveOfSignedInOwner_enqueuesUpsertWithItsServerVersion() = runTest {
+        sessionDao.insertAll(listOf(
+            SessionEntity(id = "sess-1", ownerId = "user-1", name = "S1", event = "3x3", startedAt = "2026-09-11T10:00:00.000Z")
+        ))
+        solveDao.insertAll(listOf(
+            SolveEntity(
+                id = "solve-del",
+                ownerId = "user-1",
+                sessionId = "sess-1",
+                event = "3x3",
+                durationMs = 12000L,
+                solvedAt = "2026-09-11T10:00:00.000Z",
+                version = 4L,
                 deletedAt = "2026-09-11T10:05:00.000Z"
             )
         ))
@@ -390,12 +435,247 @@ class CsvImporterTest {
             solve-del,sess-1,S1,3x3,1700000001000,12000,none,R U
         """.trimIndent()
 
-        val result = importer.importCsv(stringToStream(csv), ownerId = "guest")
-        assertTrue(result is CsvImportStatus.Success)
-        val success = result as CsvImportStatus.Success
+        val success = importer.importCsv(stringToStream(csv), ownerId = "user-1") as CsvImportStatus.Success
+        assertEquals(1, success.importedCount)
+
+        val mutations = syncOutboxDao.getAllPendingForOwner("user-1", 100)
+        assertEquals(1, mutations.size)
+        assertEquals("solve", mutations[0].entityType)
+        assertEquals("solve-del", mutations[0].entityId)
+        assertEquals("upsert", mutations[0].action)
+        assertEquals(4L, mutations[0].baseVersion)
+        assertNull(solveDao.getSolveById("solve-del")!!.deletedAt)
+    }
+
+    @Test
+    fun importCsv_solvesOwnedByAnotherOwner_areNeitherOverwrittenNorRestored() = runTest {
+        sessionDao.insertAll(listOf(
+            SessionEntity(id = "sess-1", ownerId = "other", name = "S1", event = "3x3", startedAt = "2026-09-11T10:00:00.000Z")
+        ))
+        solveDao.insertAll(listOf(
+            SolveEntity(id = "solve-live", ownerId = "other", sessionId = "sess-1", durationMs = 15000L, solvedAt = "2026-09-11T10:00:00.000Z"),
+            SolveEntity(
+                id = "solve-gone",
+                ownerId = "other",
+                sessionId = "sess-1",
+                durationMs = 16000L,
+                solvedAt = "2026-09-11T10:00:00.000Z",
+                deletedAt = "2026-09-11T10:05:00.000Z"
+            )
+        ))
+
+        val csv = """
+            # Source: CubeTimer
+            solve_id,session_id,session_name,puzzle,timestamp,time,penalty,scramble
+            solve-live,sess-1,S1,3x3,1700000001000,1,none,R
+            solve-gone,sess-1,S1,3x3,1700000002000,2,none,U
+        """.trimIndent()
+
+        // solves.id is the only primary key, so importing these ids for "me" would replace the other owner's rows.
+        val success = importer.importCsv(stringToStream(csv), ownerId = "me") as CsvImportStatus.Success
 
         assertEquals(0, success.importedCount)
-        assertEquals(1, success.duplicateCount)
+        assertEquals(2, success.duplicateCount)
+        val live = solveDao.getSolveById("solve-live")!!
+        assertEquals("other", live.ownerId)
+        assertEquals(15000L, live.durationMs)
+        val gone = solveDao.getSolveById("solve-gone")!!
+        assertEquals("other", gone.ownerId)
+        assertEquals("2026-09-11T10:05:00.000Z", gone.deletedAt)
+    }
+
+    @Test
+    fun importCsv_mixedFile_keepsImportedDuplicateAndMalformedCountsCoherent() = runTest {
+        sessionDao.insertAll(listOf(
+            SessionEntity(id = "sess-1", ownerId = "guest", name = "S1", event = "3x3", startedAt = "2026-09-11T10:00:00.000Z")
+        ))
+        solveDao.insertAll(listOf(
+            SolveEntity(id = "live", ownerId = "guest", sessionId = "sess-1", durationMs = 15000L, solvedAt = "2026-09-11T10:00:00.000Z"),
+            SolveEntity(
+                id = "deleted",
+                ownerId = "guest",
+                sessionId = "sess-1",
+                durationMs = 16000L,
+                solvedAt = "2026-09-11T10:00:00.000Z",
+                deletedAt = "2026-09-11T10:05:00.000Z"
+            )
+        ))
+
+        val csv = """
+            # Source: CubeTimer
+            solve_id,session_id,session_name,puzzle,timestamp,time,penalty,scramble
+            live,sess-1,S1,3x3,1700000001000,1,none,R
+            deleted,sess-1,S1,3x3,1700000002000,2,none,U
+            deleted,sess-1,S1,3x3,1700000003000,3,none,F
+            brand-new,sess-1,S1,3x3,1700000004000,4,none,B
+            bad,sess-1,S1,3x3,not-a-number,5,none,L
+        """.trimIndent()
+
+        val success = importer.importCsv(stringToStream(csv), ownerId = "guest") as CsvImportStatus.Success
+
+        assertEquals(2, success.importedCount)
+        assertEquals(2, success.duplicateCount)
+        assertEquals(1, success.malformedCount)
+        assertEquals(setOf("live", "deleted", "brand-new"), solveDao.getSolvesByScope(ownerId = "guest").map { it.id }.toSet())
+    }
+
+    @Test
+    fun importCsv_restoredSolveBringsItsSoftDeletedSessionBack() = runTest {
+        sessionDao.insertAll(listOf(
+            SessionEntity(
+                id = "sess-del",
+                ownerId = "user-1",
+                name = "Deleted session",
+                event = "3x3",
+                startedAt = "2026-09-11T10:00:00.000Z",
+                version = 2L,
+                deletedAt = "2026-09-11T10:05:00.000Z"
+            )
+        ))
+        solveDao.insertAll(listOf(
+            SolveEntity(
+                id = "solve-del",
+                ownerId = "user-1",
+                sessionId = "sess-del",
+                durationMs = 12000L,
+                solvedAt = "2026-09-11T10:00:00.000Z",
+                deletedAt = "2026-09-11T10:05:00.000Z"
+            )
+        ))
+
+        val csv = """
+            # Source: CubeTimer
+            solve_id,session_id,session_name,puzzle,timestamp,time,penalty,scramble
+            solve-del,sess-del,Deleted session,3x3,1700000001000,12000,none,R U
+        """.trimIndent()
+
+        val success = importer.importCsv(stringToStream(csv), ownerId = "user-1") as CsvImportStatus.Success
+
+        assertEquals(1, success.importedCount)
+        assertEquals("a restored session is not a created one", 0, success.sessionsCreatedCount)
+        val session = sessionDao.getSessionById("sess-del")!!
+        assertNull(session.deletedAt)
+        assertEquals(2L, session.version)
+        val mutations = syncOutboxDao.getAllPendingForOwner("user-1", 100)
+        assertEquals(listOf("session", "solve"), mutations.map { it.entityType })
+        assertEquals(2L, mutations[0].baseVersion)
+    }
+
+    @Test
+    fun importCsv_timingDeviceColumn_isImportedAndUnknownValuesFallBackToKeyboard() = runTest {
+        val csv = """
+            # Source: CubeTimer
+            solve_id,session_id,session_name,puzzle,timestamp,time,penalty,scramble,timing_device
+            s-touch,sess-1,S1,3x3,1700000001000,10000,none,R,keyboard
+            s-bt,sess-1,S1,3x3,1700000002000,11000,none,U,external_timer
+            s-cube,sess-1,S1,3x3,1700000003000,12000,none,F,smart_cube
+            s-unknown,sess-1,S1,3x3,1700000004000,13000,none,B,quantum_timer
+            s-blank,sess-1,S1,3x3,1700000005000,14000,none,L,
+            s-short,sess-1,S1,3x3,1700000006000,15000,none,D
+        """.trimIndent()
+
+        val success = importer.importCsv(stringToStream(csv), ownerId = "guest") as CsvImportStatus.Success
+
+        assertEquals(6, success.importedCount)
+        assertEquals(0, success.malformedCount)
+        val devices = solveDao.getSolvesByScope(ownerId = "guest").associate { it.id to it.timingDevice }
+        assertEquals("keyboard", devices["s-touch"])
+        assertEquals("external_timer", devices["s-bt"])
+        assertEquals("smart_cube", devices["s-cube"])
+        assertEquals("keyboard", devices["s-unknown"])
+        assertEquals("keyboard", devices["s-blank"])
+        assertEquals("keyboard", devices["s-short"])
+    }
+
+    @Test
+    fun importCsv_fileWithoutTimingDeviceColumn_importsAsKeyboardTimed() = runTest {
+        val csv = """
+            # Source: CubeTimer
+            solve_id,session_id,session_name,puzzle,timestamp,time,penalty,scramble
+            s-old,sess-1,S1,3x3,1700000001000,10000,none,R U
+        """.trimIndent()
+
+        importer.importCsv(stringToStream(csv), ownerId = "guest")
+
+        assertEquals("keyboard", solveDao.getSolveById("s-old")!!.timingDevice)
+    }
+
+    @Test
+    fun importCsv_restoreKeepsTheStoredDeviceUnlessTheFileNamesOne() = runTest {
+        sessionDao.insertAll(listOf(
+            SessionEntity(id = "sess-1", ownerId = "guest", name = "S1", event = "3x3", startedAt = "2026-09-11T10:00:00.000Z")
+        ))
+        val deletedAt = "2026-09-11T10:05:00.000Z"
+        solveDao.insertAll(listOf(
+            SolveEntity(id = "s-a", ownerId = "guest", sessionId = "sess-1", durationMs = 1L, solvedAt = deletedAt, timingDevice = "external_timer", deletedAt = deletedAt),
+            SolveEntity(id = "s-b", ownerId = "guest", sessionId = "sess-1", durationMs = 1L, solvedAt = deletedAt, timingDevice = "keyboard", deletedAt = deletedAt)
+        ))
+
+        val oldFormat = """
+            # Source: CubeTimer
+            solve_id,session_id,session_name,puzzle,timestamp,time,penalty,scramble
+            s-a,sess-1,S1,3x3,1700000001000,10000,none,R U
+        """.trimIndent()
+        val newFormat = """
+            # Source: CubeTimer
+            solve_id,session_id,session_name,puzzle,timestamp,time,penalty,scramble,timing_device
+            s-b,sess-1,S1,3x3,1700000001000,10000,none,R U,smart_cube
+        """.trimIndent()
+
+        importer.importCsv(stringToStream(oldFormat), ownerId = "guest")
+        importer.importCsv(stringToStream(newFormat), ownerId = "guest")
+
+        assertEquals("external_timer", solveDao.getSolveById("s-a")!!.timingDevice)
+        assertEquals("smart_cube", solveDao.getSolveById("s-b")!!.timingDevice)
+    }
+
+    @Test
+    fun importCsv_quotePrefixedFormulaFields_areImportedWithoutTheQuote() = runTest {
+        val csv = """
+            # Source: CubeTimer
+            solve_id,session_id,session_name,puzzle,timestamp,time,penalty,scramble
+            '-solve,'@sess,'=SUM(1+1),3x3,1700000001000,10000,+2,'+cmd
+            s-plain,'@sess,'quoted,3x3,1700000002000,11000,none,'plain
+        """.trimIndent()
+
+        importer.importCsv(stringToStream(csv), ownerId = "guest")
+
+        val formula = solveDao.getSolveById("-solve")!!
+        assertEquals("+cmd", formula.scramble)
+        assertEquals("plus_two", formula.penalty)
+        assertEquals("@sess", formula.sessionId)
+        assertEquals("=SUM(1+1)", sessionDao.getSessionById("@sess")!!.name)
+        assertEquals("'plain", solveDao.getSolveById("s-plain")!!.scramble)
+    }
+
+    @Test
+    fun exportThenImport_roundTripsTextAndTimingDeviceLosslessly() = runTest {
+        val scrambles = listOf("=1+1", "+cmd", "-5", "@SUM(A1)", "\t=x", "\r=x", "'=x", "''+y", "'plain", "R U R' U'", "")
+        val solves = scrambles.mapIndexed { i, scramble ->
+            SolveTime(
+                id = if (i == 0) "-first" else "solve-$i",
+                timeInMillis = 10000L + i,
+                penalty = if (i % 2 == 0) Penalty.PLUS_TWO else Penalty.NONE,
+                timestamp = 1700000000000L + i * 1000L,
+                scramble = scramble,
+                sessionId = "sess-1",
+                timingDevice = TimingDevice.entries[i % TimingDevice.entries.size]
+            )
+        }
+        val sessionName = "=cmd|' /C calc'!A0"
+        val csv = CsvExporter.exportSolvesToString(solves) { sessionName }
+
+        val success = importer.importCsv(stringToStream(csv), ownerId = "guest") as CsvImportStatus.Success
+
+        assertEquals(solves.size, success.importedCount)
+        assertEquals(sessionName, sessionDao.getSessionById("sess-1")!!.name)
+        for (solve in solves) {
+            val entity = solveDao.getSolveById(solve.id)!!
+            assertEquals("scramble of ${solve.id}", solve.scramble, entity.scramble)
+            assertEquals("device of ${solve.id}", solve.timingDevice.value, entity.timingDevice)
+            assertEquals("time of ${solve.id}", solve.timeInMillis, entity.durationMs)
+            assertEquals("penalty of ${solve.id}", CubeTypeConverters.fromPenalty(solve.penalty), entity.penalty)
+        }
     }
 
     @Test

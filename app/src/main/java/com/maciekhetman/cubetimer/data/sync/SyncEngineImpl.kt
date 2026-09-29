@@ -1,5 +1,6 @@
 package com.maciekhetman.cubetimer.data.sync
 
+import android.util.Log
 import com.maciekhetman.cubetimer.data.local.converter.CubeTypeConverters
 import androidx.room.withTransaction
 import com.maciekhetman.cubetimer.data.auth.AuthManager
@@ -20,9 +21,7 @@ import com.maciekhetman.cubetimer.data.local.entity.SyncMetadataEntity
 import com.maciekhetman.cubetimer.data.local.entity.SyncOutboxEntity
 import com.maciekhetman.cubetimer.data.remote.CubeSyncApiClient
 import com.maciekhetman.cubetimer.data.remote.NetworkModule
-import com.maciekhetman.cubetimer.data.remote.dto.ChangeDto
 import com.maciekhetman.cubetimer.data.remote.dto.DeviceDto
-import com.maciekhetman.cubetimer.data.remote.dto.MutationOutcomeDto
 import com.maciekhetman.cubetimer.data.remote.dto.SessionSnapshotDto
 import com.maciekhetman.cubetimer.data.remote.dto.SnapshotRequest
 import com.maciekhetman.cubetimer.data.remote.dto.SolveSnapshotDto
@@ -44,7 +43,6 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromJsonElement
 import java.io.IOException
-import java.time.Instant
 
 class SyncEngineImpl(
     private val apiClient: CubeSyncApiClient,
@@ -473,6 +471,22 @@ class SyncEngineImpl(
     private fun isPermanentRejection(e: AuthException.ApiError): Boolean =
         e.httpStatusCode in 400..499 && e.httpStatusCode !in RETRYABLE_4XX_STATUSES
 
+    /**
+     * Whether a remote solve may be written, given the session it names. `solves.session_id` is a
+     * deferred foreign key, so a solve whose session row is missing (e.g. the session's payload
+     * could not be decoded) does not fail its own write but the commit of the whole page, which
+     * then fails the same way on every retry and never advances the cursor. Such a solve is skipped
+     * instead; clearing its `session_id` is not an option, as the next upload would change the
+     * server's copy. Lookups are remembered for one page: no session row is added or removed while
+     * that page's solves are applied.
+     */
+    private inner class SessionReferences {
+        private val present = HashMap<String, Boolean>()
+
+        suspend fun canReference(sessionId: String?): Boolean =
+            sessionId == null || present.getOrPut(sessionId) { sessionDao.getSessionById(sessionId) != null }
+    }
+
     private data class BatchResult(
         val mutationsSynced: Int,
         val changesApplied: Int,
@@ -664,11 +678,14 @@ class SyncEngineImpl(
                     )
                     sessionDao.upsert(entity)
                     changesApplied++
+                } else {
+                    Log.w(TAG, "Skipping remote session ${change.entityId}: its payload could not be decoded")
                 }
             }
         }
 
         // B2. Apply solve changes
+        val sessionReferences = SessionReferences()
         for (change in solveChanges) {
             val pendingCount = syncOutboxDao.countPendingForEntity(ownerId, "solve", change.entityId)
             if (pendingCount > 0) {
@@ -706,6 +723,10 @@ class SyncEngineImpl(
                     }
                 }
                 if (dto != null) {
+                    if (!sessionReferences.canReference(dto.sessionId)) {
+                        Log.w(TAG, "Skipping remote solve ${dto.id}: its session ${dto.sessionId} is not available locally")
+                        continue
+                    }
                     val entity = SolveEntity(
                         id = dto.id,
                         ownerId = ownerId,
@@ -819,8 +840,13 @@ class SyncEngineImpl(
                 }
 
                 response.solves?.let { solves ->
+                    val sessionReferences = SessionReferences()
                     val entities = solves.mapNotNull { dto ->
                         if (syncOutboxDao.countPendingForEntity(ownerId, "solve", dto.id) > 0) {
+                            return@mapNotNull null
+                        }
+                        if (!sessionReferences.canReference(dto.sessionId)) {
+                            Log.w(TAG, "Skipping snapshot solve ${dto.id}: its session ${dto.sessionId} is not available locally")
                             return@mapNotNull null
                         }
                         SolveEntity(
@@ -892,6 +918,7 @@ class SyncEngineImpl(
     }
 
     private companion object {
+        const val TAG = "SyncEngine"
         const val ZERO_UUID = "00000000-0000-0000-0000-000000000000"
 
         /** Outbox rows fetched (and mutations sent, after coalescing) per request. */

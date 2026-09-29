@@ -1,5 +1,6 @@
 package com.maciekhetman.cubetimer.data.local
 
+import com.maciekhetman.cubetimer.testutil.keepUiStateActive
 import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.room.Room
@@ -11,7 +12,6 @@ import app.cash.turbine.test
 import com.maciekhetman.cubetimer.data.SolvesRepository
 import com.maciekhetman.cubetimer.data.auth.AuthManager
 import com.maciekhetman.cubetimer.data.auth.AuthResult
-import com.maciekhetman.cubetimer.data.local.entity.SessionEntity
 import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
 import com.maciekhetman.cubetimer.data.local.entity.SyncOutboxEntity
 import com.maciekhetman.cubetimer.data.session.SessionManagerImpl
@@ -20,14 +20,10 @@ import com.maciekhetman.cubetimer.data.settingsDataStore
 import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Penalty
-import com.maciekhetman.cubetimer.model.SolveTime
-import com.maciekhetman.cubetimer.model.StatsFilter
 import com.maciekhetman.cubetimer.model.User
 import com.maciekhetman.cubetimer.viewmodel.HistoryViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -218,194 +214,6 @@ class Milestone3EmpiricalChallengeStressTest {
     }
 
     // =========================================================================
-    // 2. SESSION FILTER SWITCHING ACROSS VARYING COUNTS & EDGE CASES
-    // =========================================================================
-
-    @Test
-    fun testSessionFilterSwitchingAcrossActiveAllAndSpecificSessions() = runTest(testDispatcher) {
-        val directExecutor = java.util.concurrent.Executor { it.run() }
-        val database = CubeDatabase.createInMemory(
-            context = context,
-            queryExecutor = directExecutor,
-            transactionExecutor = directExecutor
-        )
-
-        val solvesRepository = SolvesRepository(
-            context = context,
-            solveDao = database.solveDao(),
-            sessionDao = database.sessionDao(),
-            syncOutboxDao = database.syncOutboxDao(),
-            database = database,
-            ioDispatcher = testDispatcher
-        )
-        val sessionRepository = SessionRepositoryImpl(
-            database = database,
-            sessionDao = database.sessionDao(),
-            syncOutboxDao = database.syncOutboxDao()
-        )
-        val sessionManager = SessionManagerImpl(
-            sessionRepository = sessionRepository,
-            solveDao = database.solveDao(),
-            authManager = fakeAuthManager,
-            ioDispatcher = testDispatcher
-        )
-
-        // Create Sessions:
-        // Session A: the open automatic (active) session with 10 solves
-        val sessionA = sessionRepository.insertSession("Session A (10)", Mode.CUBE_3x3, "guest", kind = SessionKind.AUTOMATIC)
-        sessionManager.getActiveSessionFlow("guest", Mode.CUBE_3x3).first { it?.id == sessionA.id }
-
-        // Session B: Empty session with 0 solves
-        val sessionB = sessionRepository.insertSession("Session B (0)", Mode.CUBE_3x3, "guest")
-
-        // Session C: Large session with 120 solves (requires 3 pages of 50)
-        val sessionC = sessionRepository.insertSession("Session C (120)", Mode.CUBE_3x3, "guest")
-
-        val baseTime = Instant.parse("2026-08-30T10:00:00.000Z")
-
-        // Populate Session A: 10 solves
-        val solvesA = (0 until 10).map { i ->
-            SolveEntity(
-                id = "solve-a-$i",
-                ownerId = "guest",
-                sessionId = sessionA.id,
-                event = "3x3",
-                durationMs = 12000L + i * 10,
-                penalty = "none",
-                solvedAt = baseTime.plus(i.toLong(), ChronoUnit.MINUTES).toString(),
-                scramble = "R U R' U'",
-                version = 0L
-            )
-        }
-        database.solveDao().insertAll(solvesA)
-
-        // Populate Session C: 120 solves
-        val solvesC = (0 until 120).map { i ->
-            SolveEntity(
-                id = "solve-c-$i",
-                ownerId = "guest",
-                sessionId = sessionC.id,
-                event = "3x3",
-                durationMs = 10000L + i * 10,
-                penalty = "none",
-                solvedAt = baseTime.plus((100 + i).toLong(), ChronoUnit.MINUTES).toString(),
-                scramble = "R U2 R' U'",
-                version = 0L
-            )
-        }
-        database.solveDao().insertAll(solvesC)
-
-        // Populate a 2x2 mode solve to test event isolation: 15 solves
-        val session2x2 = sessionRepository.insertSession("Session 2x2 (15)", Mode.CUBE_2x2, "guest")
-        val solves2x2 = (0 until 15).map { i ->
-            SolveEntity(
-                id = "solve-2x2-$i",
-                ownerId = "guest",
-                sessionId = session2x2.id,
-                event = "2x2",
-                durationMs = 4000L + i * 10,
-                penalty = "none",
-                solvedAt = baseTime.plus((300 + i).toLong(), ChronoUnit.MINUTES).toString(),
-                scramble = "R U",
-                version = 0L
-            )
-        }
-        database.solveDao().insertAll(solves2x2)
-
-        val viewModel = HistoryViewModel(
-            application = context as android.app.Application,
-            solvesRepository = solvesRepository,
-            sessionManager = sessionManager,
-            sessionRepository = sessionRepository,
-            authManager = fakeAuthManager,
-            database = database,
-            sessionDao = database.sessionDao(),
-            solveDao = database.solveDao(),
-            syncOutboxDao = database.syncOutboxDao(),
-            defaultDispatcher = testDispatcher
-        )
-
-        viewModel.setFilter(StatsFilter.ActiveSession)
-        viewModel.uiState.first { state ->
-            state.activeSession?.id == sessionA.id && !state.isLoading && state.totalCount == 10 && state.currentFilter == StatsFilter.ActiveSession
-        }
-        advanceUntilIdle()
-
-        // 1. Initial State: StatsFilter.ActiveSession (Session A, 10 solves)
-        val stateActive = viewModel.uiState.value
-        assertEquals(StatsFilter.ActiveSession, stateActive.currentFilter)
-        assertEquals(10, stateActive.totalCount)
-        assertEquals(10, stateActive.solves.size)
-        assertFalse("10 items is less than PAGE_SIZE (50), hasMore must be false", stateActive.hasMore)
-        assertFalse(stateActive.isLoading)
-        assertEquals("solve-a-9", stateActive.solves.first().id) // newest first
-
-        // 2. Switch to Empty Session (Session B, 0 solves)
-        viewModel.setFilter(StatsFilter.SpecificSession(sessionB.id, sessionB.name))
-        advanceUntilIdle()
-
-        val stateEmpty = viewModel.uiState.value
-        assertEquals(0, stateEmpty.totalCount)
-        assertTrue(stateEmpty.solves.isEmpty())
-        assertFalse(stateEmpty.hasMore)
-        assertFalse(stateEmpty.isLoading)
-
-        // 3. Switch to Large Session (Session C, 120 solves)
-        viewModel.setFilter(StatsFilter.SpecificSession(sessionC.id, sessionC.name))
-        advanceUntilIdle()
-
-        val stateCPage1 = viewModel.uiState.value
-        assertEquals(120, stateCPage1.totalCount)
-        assertEquals(50, stateCPage1.solves.size)
-        assertTrue("Has more pages to load", stateCPage1.hasMore)
-        assertEquals("solve-c-119", stateCPage1.solves.first().id)
-
-        // Load Page 2 (items 51-100)
-        viewModel.loadMore()
-        advanceUntilIdle()
-
-        val stateCPage2 = viewModel.uiState.value
-        assertEquals(100, stateCPage2.solves.size)
-        assertTrue("Has page 3 left", stateCPage2.hasMore)
-
-        // Load Page 3 (items 101-120)
-        viewModel.loadMore()
-        advanceUntilIdle()
-
-        val stateCPage3 = viewModel.uiState.value
-        assertEquals(120, stateCPage3.solves.size)
-        assertFalse("All 120 items loaded, hasMore must be false", stateCPage3.hasMore)
-        assertEquals("solve-c-0", stateCPage3.solves.last().id)
-
-        // 4. Switch to AllSessions (Session A 10 + Session C 120 = 130 solves in 3x3; excludes 2x2 solves)
-        viewModel.setFilter(StatsFilter.AllSessions)
-        advanceUntilIdle()
-
-        val stateAll = viewModel.uiState.value
-        assertEquals(StatsFilter.AllSessions, stateAll.currentFilter)
-        assertEquals(130, stateAll.totalCount) // 10 + 120 = 130, 2x2's 15 solves are excluded!
-        assertEquals(50, stateAll.solves.size)
-        assertTrue(stateAll.hasMore)
-
-        // 5. Rapid switching stress test (ensure no crashes or race-condition corruptions)
-        for (i in 0 until 5) {
-            viewModel.setFilter(StatsFilter.ActiveSession)
-            viewModel.setFilter(StatsFilter.SpecificSession(sessionC.id, sessionC.name))
-            viewModel.setFilter(StatsFilter.SpecificSession(sessionB.id, sessionB.name))
-            viewModel.setFilter(StatsFilter.AllSessions)
-        }
-        advanceUntilIdle()
-
-        val stateAfterRapid = viewModel.uiState.value
-        assertEquals(StatsFilter.AllSessions, stateAfterRapid.currentFilter)
-        assertEquals(130, stateAfterRapid.totalCount)
-        assertEquals(50, stateAfterRapid.solves.size)
-        assertFalse(stateAfterRapid.isLoading)
-
-        database.close()
-    }
-
-    // =========================================================================
     // 3. COMPOSE UI PERFORMANCE INVARIANTS & SOLVE ACTION ROLLBACKS
     // =========================================================================
 
@@ -467,23 +275,25 @@ class Milestone3EmpiricalChallengeStressTest {
             defaultDispatcher = testDispatcher
         )
 
-        viewModel.uiState.first { it.solves.isNotEmpty() && !it.isLoading }
+        keepUiStateActive(viewModel)
+        viewModel.expandSession(session.id)
+        viewModel.uiState.first { state -> state.sessionGroups.singleOrNull()?.solves?.isNotEmpty() == true }
         advanceUntilIdle()
 
-        val solveItem = viewModel.uiState.value.solves.first()
+        val solveItem = viewModel.uiState.value.sessionGroups.single().solves.first()
         assertEquals(Penalty.NONE, solveItem.penalty)
 
         // Update penalty to DNF
         viewModel.updateSolvePenalty(solveItem, Penalty.DNF)
         advanceUntilIdle()
 
-        assertEquals(Penalty.DNF, viewModel.uiState.value.solves.first().penalty)
+        assertEquals(Penalty.DNF, viewModel.uiState.value.sessionGroups.single().solves.first().penalty)
 
         // Historical PB with DNF should NEVER be PB
-        viewModel.selectSolveForDetail(viewModel.uiState.value.solves.first())
+        viewModel.selectSolveForDetail(viewModel.uiState.value.sessionGroups.single().solves.first(), solveNumber = 1)
         advanceUntilIdle()
 
-        val detail = viewModel.selectedSolveDetail.value
+        val detail = viewModel.uiState.value.selectedSolve
         assertNotNull(detail)
         assertFalse("DNF solve can never be a Personal Best", detail!!.isPb)
         assertNull(detail.pbDelta)
@@ -550,14 +360,16 @@ class Milestone3EmpiricalChallengeStressTest {
             defaultDispatcher = testDispatcher
         )
 
-        viewModel.uiState.first { it.solves.isNotEmpty() && !it.isLoading }
+        keepUiStateActive(viewModel)
+        viewModel.expandSession(session.id)
+        viewModel.uiState.first { state -> state.sessionGroups.singleOrNull()?.solves?.isNotEmpty() == true }
         advanceUntilIdle()
 
-        val solveItem = viewModel.uiState.value.solves.first()
-        viewModel.selectSolveForDetail(solveItem)
+        val solveItem = viewModel.uiState.value.sessionGroups.single().solves.first()
+        viewModel.selectSolveForDetail(solveItem, solveNumber = 1)
         advanceUntilIdle()
 
-        val detail = viewModel.selectedSolveDetail.value
+        val detail = viewModel.uiState.value.selectedSolve
         assertNotNull(detail)
         assertNull("Prior best must be null for the only solve in database", detail?.priorBestTime)
         assertTrue("First solve in history must be a Personal Best", detail!!.isPb)

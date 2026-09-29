@@ -1,5 +1,7 @@
 package com.maciekhetman.cubetimer.viewmodel
 
+import kotlinx.coroutines.test.TestScope
+import com.maciekhetman.cubetimer.testutil.keepUiStateActive
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import app.cash.turbine.test
@@ -14,15 +16,11 @@ import com.maciekhetman.cubetimer.data.session.SessionManagerImpl
 import com.maciekhetman.cubetimer.data.session.SessionRepositoryImpl
 import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.Mode
-import com.maciekhetman.cubetimer.model.Penalty
 import com.maciekhetman.cubetimer.model.Session
-import com.maciekhetman.cubetimer.model.SolveTime
 import com.maciekhetman.cubetimer.model.User
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -36,8 +34,6 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -115,8 +111,8 @@ class HistoryViewModelStressChallengeTest {
         Dispatchers.resetMain()
     }
 
-    private fun createViewModel(): HistoryViewModel {
-        return HistoryViewModel(
+    private fun TestScope.createViewModel(): HistoryViewModel {
+        return keepUiStateActive(HistoryViewModel(
             application = application,
             solvesRepository = solvesRepository,
             sessionManager = sessionManager,
@@ -128,7 +124,7 @@ class HistoryViewModelStressChallengeTest {
             syncOutboxDao = database.syncOutboxDao(),
             defaultDispatcher = testDispatcher,
             ioDispatcher = testDispatcher
-        )
+        ))
     }
 
     private suspend fun createSessionWithSolves(

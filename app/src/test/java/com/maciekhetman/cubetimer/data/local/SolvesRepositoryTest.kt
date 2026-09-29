@@ -13,7 +13,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -46,6 +45,8 @@ class SolvesRepositoryTest {
         database.close()
     }
 
+    private suspend fun saveAll(solves: List<SolveTime>) = solves.forEach { repository.saveSolve(it) }
+
     @Test
     fun testSaveSolveAndObserveFlow() = runTest {
         val solve1 = SolveTime(
@@ -57,7 +58,7 @@ class SolvesRepositoryTest {
             mode = Mode.CUBE_3x3
         )
 
-        repository.solvesFlow.test {
+        repository.getAllSolvesFlow().test {
             assertEquals(0, awaitItem().size)
 
             repository.saveSolve(solve1)
@@ -73,35 +74,6 @@ class SolvesRepositoryTest {
     }
 
     @Test
-    fun testSaveSolvesBulkAndSoftDelete() = runTest {
-        val solve1 = SolveTime(
-            id = "solve-bulk-1",
-            timeInMillis = 10000L,
-            mode = Mode.CUBE_3x3
-        )
-        val solve2 = SolveTime(
-            id = "solve-bulk-2",
-            timeInMillis = 12000L,
-            mode = Mode.CUBE_3x3
-        )
-
-        repository.saveSolves(listOf(solve1, solve2))
-        var solves = repository.solvesFlow.first()
-        assertEquals(2, solves.size)
-
-        // Delete solve1 by saving list with only solve2
-        repository.saveSolves(listOf(solve2))
-        solves = repository.solvesFlow.first()
-        assertEquals(1, solves.size)
-        assertEquals("solve-bulk-2", solves[0].id)
-
-        // Clear all by saving empty list
-        repository.saveSolves(emptyList())
-        solves = repository.solvesFlow.first()
-        assertEquals(0, solves.size)
-    }
-
-    @Test
     fun testUpdateSolvePenalty() = runTest {
         val solve = SolveTime(
             id = "solve-penalty-test",
@@ -112,7 +84,7 @@ class SolvesRepositoryTest {
         repository.saveSolve(solve)
 
         repository.updateSolvePenalty(solve, Penalty.PLUS_TWO)
-        val solves = repository.solvesFlow.first()
+        val solves = repository.getAllSolvesFlow().first()
         assertEquals(1, solves.size)
         assertEquals(Penalty.PLUS_TWO, solves[0].penalty)
         assertEquals(17000L, solves[0].displayTime)
@@ -123,12 +95,12 @@ class SolvesRepositoryTest {
         val solve1 = SolveTime(id = "s-res-1", timeInMillis = 10000L, mode = Mode.CUBE_3x3)
         val solve2 = SolveTime(id = "s-res-2", timeInMillis = 11000L, mode = Mode.CUBE_3x3)
 
-        repository.saveSolves(listOf(solve1, solve2))
+        saveAll(listOf(solve1, solve2))
         repository.clearAllSolves()
-        assertEquals(0, repository.solvesFlow.first().size)
+        assertEquals(0, repository.getAllSolvesFlow().first().size)
 
         repository.restoreSolves(listOf(solve1, solve2))
-        assertEquals(2, repository.solvesFlow.first().size)
+        assertEquals(2, repository.getAllSolvesFlow().first().size)
     }
 
     @Test
@@ -143,20 +115,20 @@ class SolvesRepositoryTest {
         val s1 = SolveTime(id = "s-id-1", timeInMillis = 10000L, mode = Mode.CUBE_3x3)
         val s2 = SolveTime(id = "s-id-2", timeInMillis = 12000L, mode = Mode.CUBE_3x3)
         val s3 = SolveTime(id = "s-id-3", timeInMillis = 14000L, mode = Mode.CUBE_3x3)
-        repository.saveSolves(listOf(s1, s2, s3))
+        saveAll(listOf(s1, s2, s3))
 
         val deletedList = repository.deleteSolvesByIds(listOf("s-id-1", "s-id-2"), "guest")
         assertEquals(2, deletedList.size)
         assertTrue(deletedList.any { it.id == "s-id-1" })
         assertTrue(deletedList.any { it.id == "s-id-2" })
 
-        val remaining = repository.solvesFlow.first()
+        val remaining = repository.getAllSolvesFlow().first()
         assertEquals(1, remaining.size)
         assertEquals("s-id-3", remaining[0].id)
 
         // Undo restoration
         repository.restoreSolves(deletedList, "guest")
-        val restored = repository.solvesFlow.first()
+        val restored = repository.getAllSolvesFlow().first()
         assertEquals(3, restored.size)
     }
 
@@ -181,7 +153,7 @@ class SolvesRepositoryTest {
         val s1 = SolveTime(id = "s-3x3-1", timeInMillis = 10000L, mode = Mode.CUBE_3x3)
         val s2 = SolveTime(id = "s-3x3-2", timeInMillis = 11000L, mode = Mode.CUBE_3x3)
         val s3 = SolveTime(id = "s-2x2-1", timeInMillis = 4000L, mode = Mode.CUBE_2x2)
-        repository.saveSolves(listOf(s1, s2, s3))
+        saveAll(listOf(s1, s2, s3))
 
         // Clear only 3x3 scope
         val cleared3x3 = repository.clearAllSolvesInScope(Mode.CUBE_3x3, "guest")

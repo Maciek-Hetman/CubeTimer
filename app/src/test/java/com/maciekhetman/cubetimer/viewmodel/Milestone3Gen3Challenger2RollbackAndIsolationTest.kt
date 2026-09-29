@@ -1,5 +1,7 @@
 package com.maciekhetman.cubetimer.viewmodel
 
+import kotlinx.coroutines.test.TestScope
+import com.maciekhetman.cubetimer.testutil.keepUiStateActive
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import app.cash.turbine.test
@@ -15,8 +17,8 @@ import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Penalty
 import com.maciekhetman.cubetimer.model.SolveTime
-import com.maciekhetman.cubetimer.model.StatsFilter
 import com.maciekhetman.cubetimer.model.User
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,6 +42,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.io.IOException
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.EmptyCoroutineContext
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import com.maciekhetman.cubetimer.testutil.insertSession
@@ -60,6 +64,7 @@ class Milestone3Gen3Challenger2RollbackAndIsolationTest {
     private lateinit var database: CubeDatabase
     private lateinit var realSolveDao: SolveDao
     private lateinit var failingSolveDao: FailingSolveDao
+    private lateinit var repositoryDispatcher: HoldableDispatcher
     private lateinit var solvesRepository: SolvesRepository
     private lateinit var sessionRepository: SessionRepositoryImpl
     private lateinit var sessionManager: SessionManagerImpl
@@ -80,6 +85,7 @@ class Milestone3Gen3Challenger2RollbackAndIsolationTest {
 
         realSolveDao = database.solveDao()
         failingSolveDao = FailingSolveDao(realSolveDao)
+        repositoryDispatcher = HoldableDispatcher(testDispatcher)
 
         solvesRepository = SolvesRepository(
             context = application,
@@ -87,7 +93,7 @@ class Milestone3Gen3Challenger2RollbackAndIsolationTest {
             sessionDao = database.sessionDao(),
             syncOutboxDao = database.syncOutboxDao(),
             database = database,
-            ioDispatcher = testDispatcher
+            ioDispatcher = repositoryDispatcher
         )
 
         sessionRepository = SessionRepositoryImpl(
@@ -111,8 +117,11 @@ class Milestone3Gen3Challenger2RollbackAndIsolationTest {
         Dispatchers.resetMain()
     }
 
-    private fun createViewModel(): HistoryViewModel {
-        return HistoryViewModel(
+    private fun HistoryViewModel.solvesOf(sessionId: String): List<SolveTime> =
+        uiState.value.sessionGroups.single { it.session.id == sessionId }.solves
+
+    private fun TestScope.createViewModel(): HistoryViewModel {
+        return keepUiStateActive(HistoryViewModel(
             application = application,
             solvesRepository = solvesRepository,
             sessionManager = sessionManager,
@@ -123,7 +132,7 @@ class Milestone3Gen3Challenger2RollbackAndIsolationTest {
             solveDao = database.solveDao(),
             syncOutboxDao = database.syncOutboxDao(),
             defaultDispatcher = testDispatcher
-        )
+        ))
     }
 
     // =========================================================================
@@ -132,9 +141,11 @@ class Milestone3Gen3Challenger2RollbackAndIsolationTest {
 
     @Test
     fun testPenaltyUpdateOptimismAndRollbackWhenRepositoryThrows() = runTest(testDispatcher) {
+        val session = sessionRepository.insertSession("S1", Mode.CUBE_3x3, "guest")
         val solve = SolveEntity(
             id = "solve-pen-rollback",
             ownerId = "guest",
+            sessionId = session.id,
             event = "3x3",
             durationMs = 12000L,
             penalty = "none",
@@ -146,82 +157,87 @@ class Milestone3Gen3Challenger2RollbackAndIsolationTest {
 
         val vm = createViewModel()
         advanceUntilIdle()
+        vm.expandSession(session.id)
+        advanceUntilIdle()
 
-        assertEquals(1, vm.uiState.value.solves.size)
-        val initialSolveItem = vm.uiState.value.solves.first()
+        val initialSolveItem = vm.solvesOf(session.id).single()
         assertEquals(Penalty.NONE, initialSolveItem.penalty)
 
         // Step 1: Normal penalty update to PLUS_TWO succeeds
         vm.updateSolvePenalty(initialSolveItem, Penalty.PLUS_TWO)
         advanceUntilIdle()
 
-        assertEquals(Penalty.PLUS_TWO, vm.uiState.value.solves.first().penalty)
+        assertEquals(Penalty.PLUS_TWO, vm.solvesOf(session.id).single().penalty)
         assertEquals("plus_two", realSolveDao.getSolveById("solve-pen-rollback")?.penalty)
 
-        // Step 2: Configure repository to fail on next penalty update
+        // Step 2: Configure repository to fail on next penalty update, held back until released so
+        // the optimistic state can be observed first
         failingSolveDao.shouldFailUpsert = true
+        repositoryDispatcher.holding = true
 
-        val currentItem = vm.uiState.value.solves.first()
+        val currentItem = vm.solvesOf(session.id).single()
         vm.effects.test {
             vm.updateSolvePenalty(currentItem, Penalty.DNF)
+            advanceUntilIdle()
 
-            // Before advanceUntilIdle, optimistic state immediately reflects DNF
-            assertEquals(Penalty.DNF, vm.solves.value.first().penalty)
+            // The write is still pending, so the optimistic state shows DNF
+            assertEquals(Penalty.DNF, vm.solvesOf(session.id).single().penalty)
 
-            // Advance coroutines: repository fails and rollback occurs
+            // Repository fails and rollback occurs
+            repositoryDispatcher.release()
             advanceUntilIdle()
 
             // State rolled back to PLUS_TWO
-            assertEquals(Penalty.PLUS_TWO, vm.solves.value.first().penalty)
-            assertEquals(Penalty.PLUS_TWO, vm.uiState.value.solves.first().penalty)
+            assertEquals(Penalty.PLUS_TWO, vm.solvesOf(session.id).single().penalty)
 
             // Database still has previous PLUS_TWO
             assertEquals("plus_two", realSolveDao.getSolveById("solve-pen-rollback")?.penalty)
 
-            // UI effect received error message
+            // UI effect received a fixed error message, not the exception text
             val effect = awaitItem()
             assertTrue("Expected ShowMessage effect", effect is HistoryUiEffect.ShowMessage)
-            assertTrue(
-                "Effect message should contain failure reason",
-                (effect as HistoryUiEffect.ShowMessage).message.contains("Simulated upsert failure")
-            )
+            assertEquals("Failed to update penalty", (effect as HistoryUiEffect.ShowMessage).message)
         }
 
         // Step 3: Configure repository to fail on PLUS_TWO -> NONE
+        repositoryDispatcher.holding = true
         vm.effects.test {
-            val itemNow = vm.uiState.value.solves.first()
+            val itemNow = vm.solvesOf(session.id).single()
             vm.updateSolvePenalty(itemNow, Penalty.NONE)
+            advanceUntilIdle()
 
             // Optimistically NONE
-            assertEquals(Penalty.NONE, vm.solves.value.first().penalty)
+            assertEquals(Penalty.NONE, vm.solvesOf(session.id).single().penalty)
 
+            repositoryDispatcher.release()
             advanceUntilIdle()
 
             // Rolled back to PLUS_TWO
-            assertEquals(Penalty.PLUS_TWO, vm.solves.value.first().penalty)
-            assertEquals(Penalty.PLUS_TWO, vm.uiState.value.solves.first().penalty)
+            assertEquals(Penalty.PLUS_TWO, vm.solvesOf(session.id).single().penalty)
 
             val effect = awaitItem()
-            assertTrue((effect as HistoryUiEffect.ShowMessage).message.contains("Simulated upsert failure"))
+            assertEquals("Failed to update penalty", (effect as HistoryUiEffect.ShowMessage).message)
         }
 
         // Step 4: Disable failure -> update to NONE succeeds
         failingSolveDao.shouldFailUpsert = false
-        val itemRetry = vm.uiState.value.solves.first()
+        val itemRetry = vm.solvesOf(session.id).single()
         vm.updateSolvePenalty(itemRetry, Penalty.NONE)
         advanceUntilIdle()
 
-        assertEquals(Penalty.NONE, vm.uiState.value.solves.first().penalty)
+        assertEquals(Penalty.NONE, vm.solvesOf(session.id).single().penalty)
         assertEquals("none", realSolveDao.getSolveById("solve-pen-rollback")?.penalty)
     }
 
     @Test
     fun testDeleteSolveOptimismAndRollbackWhenRepositoryThrows() = runTest(testDispatcher) {
+        val session = sessionRepository.insertSession("S1", Mode.CUBE_3x3, "guest")
         val baseTime = Instant.parse("2026-08-30T10:00:00.000Z")
         val solves = (1..3).map { i ->
             SolveEntity(
                 id = "solve-del-$i",
                 ownerId = "guest",
+                sessionId = session.id,
                 event = "3x3",
                 durationMs = 10000L + i * 1000,
                 penalty = "none",
@@ -234,31 +250,32 @@ class Milestone3Gen3Challenger2RollbackAndIsolationTest {
 
         val vm = createViewModel()
         advanceUntilIdle()
+        vm.expandSession(session.id)
+        advanceUntilIdle()
 
-        assertEquals(3, vm.uiState.value.solves.size)
-        assertEquals(3, vm.uiState.value.totalCount)
+        assertEquals(3, vm.solvesOf(session.id).size)
 
-        // Target solve 2 (middle solve, index 1)
-        val targetSolve = vm.uiState.value.solves.first { it.id == "solve-del-2" }
+        // Target solve 2 (middle solve)
+        val targetSolve = vm.solvesOf(session.id).first { it.id == "solve-del-2" }
 
-        // Configure repository to fail on softDeleteAll
+        // Configure repository to fail on softDeleteAll, held back until released
         failingSolveDao.shouldFailSoftDeleteAll = true
+        repositoryDispatcher.holding = true
 
         vm.effects.test {
             vm.deleteSolve(targetSolve)
-
-            // Optimistic removal: list immediately has 2 items
-            assertEquals(2, vm.solves.value.size)
-            assertFalse(vm.solves.value.any { it.id == "solve-del-2" })
-            assertEquals(2, vm.totalCount.value)
-
-            // Run coroutines: repository fails and rollback occurs
             advanceUntilIdle()
 
-            // Solve 2 is rolled back and re-inserted into the solves list
-            assertEquals(3, vm.uiState.value.solves.size)
-            assertEquals(3, vm.uiState.value.totalCount)
-            assertEquals("solve-del-2", vm.uiState.value.solves[1].id)
+            // Optimistic removal: list immediately has 2 items
+            assertEquals(2, vm.solvesOf(session.id).size)
+            assertFalse(vm.solvesOf(session.id).any { it.id == "solve-del-2" })
+
+            // Repository fails and rollback occurs
+            repositoryDispatcher.release()
+            advanceUntilIdle()
+
+            // Solve 2 is rolled back and re-inserted at its place (most recent first)
+            assertEquals(listOf("solve-del-3", "solve-del-2", "solve-del-1"), vm.solvesOf(session.id).map { it.id })
 
             // DB was never soft-deleted
             val inDb = realSolveDao.getSolveById("solve-del-2")
@@ -268,18 +285,17 @@ class Milestone3Gen3Challenger2RollbackAndIsolationTest {
             // Error effect received
             val effect = awaitItem()
             assertTrue(effect is HistoryUiEffect.ShowMessage)
-            assertTrue((effect as HistoryUiEffect.ShowMessage).message.contains("Simulated soft delete failure"))
+            assertEquals("Failed to delete solve", (effect as HistoryUiEffect.ShowMessage).message)
         }
 
         // Now allow delete to succeed
         failingSolveDao.shouldFailSoftDeleteAll = false
-        val solveToDeleteNow = vm.uiState.value.solves.first { it.id == "solve-del-2" }
+        val solveToDeleteNow = vm.solvesOf(session.id).first { it.id == "solve-del-2" }
         vm.effects.test {
             vm.deleteSolve(solveToDeleteNow)
             advanceUntilIdle()
 
-            assertEquals(2, vm.uiState.value.solves.size)
-            assertEquals(2, vm.uiState.value.totalCount)
+            assertEquals(2, vm.solvesOf(session.id).size)
 
             val effect = awaitItem()
             assertTrue("Expected ShowUndoSnackbar on success", effect is HistoryUiEffect.ShowUndoSnackbar)
@@ -288,9 +304,11 @@ class Milestone3Gen3Challenger2RollbackAndIsolationTest {
 
     @Test
     fun testUndoRestoreSolveRollbackWhenRepositoryThrows() = runTest(testDispatcher) {
+        val session = sessionRepository.insertSession("S1", Mode.CUBE_3x3, "guest")
         val solve = SolveEntity(
             id = "solve-restore-fail",
             ownerId = "guest",
+            sessionId = session.id,
             event = "3x3",
             durationMs = 12000L,
             penalty = "none",
@@ -302,17 +320,19 @@ class Milestone3Gen3Challenger2RollbackAndIsolationTest {
 
         val vm = createViewModel()
         advanceUntilIdle()
+        vm.expandSession(session.id)
+        advanceUntilIdle()
 
-        assertEquals(1, vm.uiState.value.solves.size)
-        val item = vm.uiState.value.solves.first()
+        val item = vm.solvesOf(session.id).single()
 
         // Delete successfully
         vm.deleteSolve(item)
         advanceUntilIdle()
-        assertEquals(0, vm.uiState.value.solves.size)
+        assertTrue(vm.solvesOf(session.id).isEmpty())
 
-        // Configure repository to fail on restoreSolves (upsertAll)
+        // Configure repository to fail on restoreSolves (upsertAll), held back until released
         failingSolveDao.shouldFailUpsertAll = true
+        repositoryDispatcher.holding = true
 
         vm.effects.test {
             // Drain the ShowUndoSnackbar effect that was buffered from deleteSolve
@@ -321,32 +341,33 @@ class Milestone3Gen3Challenger2RollbackAndIsolationTest {
 
             // Call undo
             vm.undoDelete()
-
-            // Optimistic restore: solve is in list before launch finishes
-            assertEquals(1, vm.solves.value.size)
-            assertEquals(1, vm.totalCount.value)
-
             advanceUntilIdle()
 
-            // Rollback on failure: solve removed from list, totalCount decremented
-            assertEquals(0, vm.solves.value.size)
-            assertEquals(0, vm.uiState.value.solves.size)
-            assertEquals(0, vm.totalCount.value)
+            // Optimistic restore: solve is back in the list while the write is pending
+            assertEquals(listOf("solve-restore-fail"), vm.solvesOf(session.id).map { it.id })
+
+            repositoryDispatcher.release()
+            advanceUntilIdle()
+
+            // Rollback on failure: solve removed from the list again
+            assertTrue(vm.solvesOf(session.id).isEmpty())
 
             // ShowMessage effect received
             val effect = awaitItem()
             assertTrue(effect is HistoryUiEffect.ShowMessage)
-            assertTrue((effect as HistoryUiEffect.ShowMessage).message.contains("Simulated upsertAll failure"))
+            assertEquals("Failed to restore solve", (effect as HistoryUiEffect.ShowMessage).message)
         }
     }
 
     @Test
     fun testClearHistoryRollbackWhenRepositoryThrows() = runTest(testDispatcher) {
+        val session = sessionRepository.insertSession("S1", Mode.CUBE_3x3, "guest")
         val baseTime = Instant.parse("2026-08-30T10:00:00.000Z")
         val solves = (1..3).map { i ->
             SolveEntity(
                 id = "clear-fail-$i",
                 ownerId = "guest",
+                sessionId = session.id,
                 event = "3x3",
                 durationMs = 11000L + i * 500,
                 penalty = "none",
@@ -359,30 +380,32 @@ class Milestone3Gen3Challenger2RollbackAndIsolationTest {
 
         val vm = createViewModel()
         advanceUntilIdle()
+        vm.expandSession(session.id)
+        advanceUntilIdle()
 
-        assertEquals(3, vm.uiState.value.solves.size)
-        assertEquals(3, vm.uiState.value.totalCount)
+        assertEquals(3, vm.solvesOf(session.id).size)
 
-        // Make clear fail in DAO
+        // Make clear fail in DAO, held back until released
         failingSolveDao.shouldFailSoftDeleteAll = true
+        repositoryDispatcher.holding = true
 
         vm.effects.test {
             vm.clearHistory()
+            advanceUntilIdle()
 
             // Optimistically empty
-            assertEquals(0, vm.solves.value.size)
-            assertEquals(0, vm.totalCount.value)
+            assertTrue(vm.solvesOf(session.id).isEmpty())
 
+            repositoryDispatcher.release()
             advanceUntilIdle()
 
             // Rollback on failure: all 3 restored
-            assertEquals(3, vm.uiState.value.solves.size)
-            assertEquals(3, vm.uiState.value.totalCount)
-            assertEquals(3, vm.solves.value.size)
+            assertEquals(3, vm.solvesOf(session.id).size)
+            assertEquals(3, vm.uiState.value.sessionGroups.single().solveCount)
 
             val effect = awaitItem()
             assertTrue(effect is HistoryUiEffect.ShowMessage)
-            assertTrue((effect as HistoryUiEffect.ShowMessage).message.contains("Simulated soft delete failure"))
+            assertEquals("Failed to clear history", (effect as HistoryUiEffect.ShowMessage).message)
         }
     }
 
@@ -471,97 +494,79 @@ class Milestone3Gen3Challenger2RollbackAndIsolationTest {
         realSolveDao.insertAll(solvesD)
 
         val vm = createViewModel()
-        vm.setFilter(StatsFilter.ActiveSession)
-        vm.uiState.first { state ->
-            state.activeSession?.id == sessionA.id && !state.isLoading && state.totalCount == 10 && state.currentFilter == StatsFilter.ActiveSession
-        }
+        vm.uiState.first { state -> state.activeSession?.id == sessionA.id && !state.isLoading }
         advanceUntilIdle()
 
-        // 1. Invariant: Active Session (Session A) returns exactly 10 solves
-        val stateActive = vm.uiState.value
-        assertEquals(StatsFilter.ActiveSession, stateActive.currentFilter)
-        assertEquals(10, stateActive.totalCount)
-        assertEquals(10, stateActive.solves.size)
-        assertTrue(stateActive.solves.all { it.sessionId == sessionA.id })
-        assertTrue(stateActive.solves.none { it.id.startsWith("s-b-") || it.id.startsWith("s-c-") || it.id.startsWith("s-d-") })
+        // 1. Invariant: the 3x3 scope lists exactly Session A and Session B, with their own solve counts
+        val state3x3 = vm.uiState.value
+        assertEquals(Mode.CUBE_3x3, state3x3.currentMode)
+        assertEquals(setOf(sessionA.id, sessionB.id), state3x3.sessionGroups.map { it.session.id }.toSet())
+        assertEquals(10, state3x3.sessionGroups.first { it.session.id == sessionA.id }.solveCount)
+        assertEquals(20, state3x3.sessionGroups.first { it.session.id == sessionB.id }.solveCount)
 
-        // 2. Invariant: Specific Session (Session B) returns exactly 20 solves without leakage
-        vm.setFilter(StatsFilter.SpecificSession(sessionB.id, sessionB.name))
+        // 2. Invariant: an expanded session returns exactly its own solves without leakage
+        vm.expandSession(sessionA.id)
+        vm.expandSession(sessionB.id)
         advanceUntilIdle()
 
-        val stateB = vm.uiState.value
-        assertEquals(20, stateB.totalCount)
-        assertEquals(20, stateB.solves.size)
-        assertTrue(stateB.solves.all { it.sessionId == sessionB.id })
-        assertTrue(stateB.solves.none { it.sessionId == sessionA.id || it.sessionId == sessionC.id || it.sessionId == sessionD.id })
+        val expanded = vm.uiState.value.sessionGroups
+        val groupA = expanded.first { it.session.id == sessionA.id }
+        val groupB = expanded.first { it.session.id == sessionB.id }
+        assertEquals(10, groupA.solves.size)
+        assertTrue(groupA.solves.all { it.sessionId == sessionA.id })
+        assertEquals(20, groupB.solves.size)
+        assertTrue(groupB.solves.all { it.sessionId == sessionB.id })
+        val expandedIds = expanded.flatMap { group -> group.solves.map { it.id } }
+        assertTrue(expandedIds.none { it.startsWith("s-c-") || it.startsWith("s-d-") })
 
-        // 3. Invariant: All Sessions in 3x3 mode returns exactly 30 solves (10 + 20)
-        // Solves from 2x2 (Session C) and Megaminx (Session D) MUST NEVER LEAK!
-        vm.setFilter(StatsFilter.AllSessions)
+        // 3. Invariant: all puzzles lists every session, each with only its own solves
+        vm.setPuzzleScope(PuzzleScope.ALL_PUZZLES)
         advanceUntilIdle()
 
-        val stateAll3x3 = vm.uiState.value
-        assertEquals(30, stateAll3x3.totalCount)
-        assertEquals(30, stateAll3x3.solves.size)
-        assertTrue(stateAll3x3.solves.all { it.mode == Mode.CUBE_3x3 })
-        assertTrue("No 2x2 or Megaminx solves in 3x3 all solves", stateAll3x3.solves.none { it.mode == Mode.CUBE_2x2 || it.mode == Mode.MEGAMINX })
+        val allPuzzles = vm.uiState.value.sessionGroups
+        assertEquals(4, allPuzzles.size)
+        assertEquals(
+            mapOf(sessionA.id to 10, sessionB.id to 20, sessionC.id to 15, sessionD.id to 5),
+            allPuzzles.associate { it.session.id to it.solveCount }
+        )
 
-        // 4. Invariant: Mode switch to 2x2 isolates to Session C (15 solves)
+        // 4. Invariant: mode switch to 2x2 isolates to Session C (15 solves)
+        vm.setPuzzleScope(PuzzleScope.ACTIVE_PUZZLE)
         vm.setMode(Mode.CUBE_2x2)
         advanceUntilIdle()
 
         val state2x2 = vm.uiState.value
         assertEquals(Mode.CUBE_2x2, state2x2.currentMode)
-        assertEquals(15, state2x2.totalCount)
-        assertEquals(15, state2x2.solves.size)
-        assertTrue(state2x2.solves.all { it.mode == Mode.CUBE_2x2 })
-        assertTrue(state2x2.solves.none { it.mode == Mode.CUBE_3x3 })
+        assertEquals(listOf(sessionC.id), state2x2.sessionGroups.map { it.session.id })
+        assertEquals(15, state2x2.sessionGroups.single().solveCount)
 
-        // 5. Invariant: Mode switch to Megaminx isolates to Session D (5 solves)
+        // 5. Invariant: mode switch to Megaminx isolates to Session D (5 solves)
         vm.setMode(Mode.MEGAMINX)
         advanceUntilIdle()
 
         val stateMega = vm.uiState.value
         assertEquals(Mode.MEGAMINX, stateMega.currentMode)
-        assertEquals(5, stateMega.totalCount)
-        assertEquals(5, stateMega.solves.size)
-        assertTrue(stateMega.solves.all { it.mode == Mode.MEGAMINX })
+        assertEquals(listOf(sessionD.id), stateMega.sessionGroups.map { it.session.id })
+        assertEquals(5, stateMega.sessionGroups.single().solveCount)
     }
 
-    @Test
-    fun testRapidAlternatingFilterSwitchesPreservesStateConsistency() = runTest(testDispatcher) {
-        val sessionA = sessionRepository.insertSession("S-A", Mode.CUBE_3x3, "guest", kind = SessionKind.AUTOMATIC)
-        val sessionB = sessionRepository.insertSession("S-B", Mode.CUBE_3x3, "guest")
+    /**
+     * Runs work on [delegate] like normal but, while [holding], parks it until [release]. Repository
+     * writes are dispatched on it, so a held write has not touched the database yet and the
+     * optimistic UI state can be observed before the write succeeds or fails.
+     */
+    private class HoldableDispatcher(private val delegate: CoroutineDispatcher) : CoroutineDispatcher() {
+        private val held = ArrayDeque<Runnable>()
+        var holding = false
 
-        val sA = (1..5).map { i ->
-            SolveEntity("sa-$i", "guest", sessionA.id, "3x3", 10000L + i, "none", "2026-08-30T10:0$i:00Z", "R", 0L)
+        override fun dispatch(context: CoroutineContext, block: Runnable) {
+            if (holding) held.addLast(block) else delegate.dispatch(context, block)
         }
-        val sB = (1..8).map { i ->
-            SolveEntity("sb-$i", "guest", sessionB.id, "3x3", 12000L + i, "none", "2026-08-30T10:1$i:00Z", "U", 0L)
+
+        fun release() {
+            holding = false
+            while (held.isNotEmpty()) delegate.dispatch(EmptyCoroutineContext, held.removeFirst())
         }
-        realSolveDao.insertAll(sA + sB)
-
-        sessionManager.getActiveSessionFlow("guest", Mode.CUBE_3x3).first { it?.id == sessionA.id }
-
-        val vm = createViewModel()
-        advanceUntilIdle()
-
-        // Stress: rapid switching
-        for (round in 0 until 10) {
-            vm.setFilter(StatsFilter.ActiveSession)
-            vm.setFilter(StatsFilter.SpecificSession(sessionB.id, sessionB.name))
-            vm.setFilter(StatsFilter.AllSessions)
-            vm.setFilter(StatsFilter.SpecificSession(sessionA.id, sessionA.name))
-            vm.setFilter(StatsFilter.AllSessions)
-        }
-        advanceUntilIdle()
-
-        val finalState = vm.uiState.value
-        assertEquals(StatsFilter.AllSessions, finalState.currentFilter)
-        assertEquals(13, finalState.totalCount) // 5 + 8 = 13
-        assertEquals(13, finalState.solves.size)
-        assertFalse(finalState.isLoading)
-        assertFalse(finalState.hasMore)
     }
 
     /**

@@ -1,11 +1,10 @@
 package com.maciekhetman.cubetimer.viewmodel
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.maciekhetman.cubetimer.CubeTimerApplication
 import com.maciekhetman.cubetimer.data.auth.AuthManager
-import com.maciekhetman.cubetimer.data.auth.AuthManagerImpl
 import com.maciekhetman.cubetimer.data.auth.AuthResult
 import com.maciekhetman.cubetimer.model.AuthException
 import com.maciekhetman.cubetimer.model.AuthState
@@ -21,12 +20,6 @@ class AuthViewModel(
     application: Application,
     private val authManager: AuthManager
 ) : AndroidViewModel(application) {
-
-    constructor(application: Application) : this(
-        application = application,
-        authManager = (application as? CubeTimerApplication)?.authManager
-            ?: AuthManagerImpl.getInstance(application)
-    )
 
     val authState: StateFlow<AuthState> = authManager.authState
 
@@ -92,7 +85,7 @@ class AuthViewModel(
                     _formState.update {
                         it.copy(
                             isLoading = false,
-                            errorMessage = mapAuthError(result.exception)
+                            errorMessage = reportError(result.exception)
                         )
                     }
                 }
@@ -122,7 +115,7 @@ class AuthViewModel(
                     _formState.update {
                         it.copy(
                             isLoading = false,
-                            errorMessage = mapAuthError(result.exception)
+                            errorMessage = reportError(result.exception)
                         )
                     }
                 }
@@ -153,7 +146,7 @@ class AuthViewModel(
                     _formState.update {
                         it.copy(
                             isLoading = false,
-                            errorMessage = mapAuthError(result.exception)
+                            errorMessage = reportError(result.exception)
                         )
                     }
                 }
@@ -184,7 +177,7 @@ class AuthViewModel(
                     _formState.update {
                         it.copy(
                             isLoading = false,
-                            errorMessage = mapAuthError(result.exception)
+                            errorMessage = reportError(result.exception)
                         )
                     }
                 }
@@ -214,7 +207,7 @@ class AuthViewModel(
                     _formState.update {
                         it.copy(
                             isLoading = false,
-                            errorMessage = mapAuthError(result.exception)
+                            errorMessage = reportError(result.exception)
                         )
                     }
                 }
@@ -235,6 +228,36 @@ class AuthViewModel(
                     confirmPassword = "",
                     token = ""
                 )
+            }
+        }
+    }
+
+    fun submitDeleteAccount() {
+        if (_formState.value.isLoading) return
+
+        viewModelScope.launch {
+            _formState.update { it.copy(isLoading = true, errorMessage = null) }
+            when (val result = authManager.deleteAccount()) {
+                is AuthResult.Success -> {
+                    _formState.update {
+                        it.copy(
+                            isLoading = false,
+                            dialogType = AuthDialogType.NONE,
+                            email = "",
+                            password = "",
+                            confirmPassword = "",
+                            token = ""
+                        )
+                    }
+                }
+                is AuthResult.Error -> {
+                    _formState.update {
+                        it.copy(
+                            isLoading = false,
+                            errorMessage = reportError(result.exception)
+                        )
+                    }
+                }
             }
         }
     }
@@ -302,16 +325,38 @@ class AuthViewModel(
         return valid
     }
 
+    /** Logs the raw failure (never shown to the user) and returns its user-facing message. */
+    private fun reportError(ex: AuthException): String {
+        Log.w(TAG, "Auth request failed: ${ex::class.simpleName}", ex)
+        return mapAuthError(ex)
+    }
+
+    /** A fixed, human-readable message per exception type; server-supplied text is never surfaced. */
     fun mapAuthError(ex: AuthException): String = when (ex) {
         is AuthException.InvalidCredentials -> "Incorrect email or password."
         is AuthException.EmailNotVerified -> "Email is not verified. Please verify your account."
         is AuthException.EmailAlreadyExists -> "An account with this email already exists."
         is AuthException.InvalidToken -> "Invalid or expired verification/reset token."
+        is AuthException.InvalidRefreshToken -> "Your session has expired. Please log in again."
+        is AuthException.RefreshTokenReused -> "Your session was ended for security reasons. Please log in again."
+        is AuthException.AccountLinkRequired ->
+            "An account with this email already exists. Please log in with your email and password."
+        is AuthException.InvalidSocialToken -> "Google sign-in failed. Please try again."
+        is AuthException.IdentityAlreadyLinked -> "This Google account is already linked to another user."
         is AuthException.RateLimited -> "Too many attempts. Please try again in a few moments."
         is AuthException.InvalidPassword -> "Password must be between 10 and 128 characters."
+        is AuthException.InvalidEmail -> "Please enter a valid email address."
+        is AuthException.EmailDeliveryFailed -> "We couldn't send the email right now. Please try again later."
         is AuthException.Forbidden -> "Access denied. You don't have permission to do that."
         is AuthException.Unauthorized -> "Session expired. Please log in again."
+        is AuthException.CursorExpired -> "Your data is out of date. Please try again."
         is AuthException.NetworkError -> "Network connection failed. Please check your connection."
-        else -> ex.message ?: "Authentication failed."
+        is AuthException.SerializationError -> "The server sent an unexpected response. Please try again later."
+        is AuthException.ApiError -> "Something went wrong on the server. Please try again later."
+        is AuthException.Unknown -> "Something went wrong. Please try again."
+    }
+
+    private companion object {
+        const val TAG = "AuthViewModel"
     }
 }

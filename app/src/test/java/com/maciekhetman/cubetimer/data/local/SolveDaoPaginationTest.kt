@@ -9,16 +9,13 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.time.Instant
 import java.time.temporal.ChronoUnit
-import java.util.UUID
 
 @RunWith(RobolectricTestRunner::class)
 class SolveDaoPaginationTest {
@@ -313,11 +310,5 @@ class SolveDaoPaginationTest {
 
         // At t4, prior best should be 9500L
         assertEquals(9500L, solveDao.getPriorBestSolveDuration("guest", "3x3", t4))
-
-        // Verify getPriorBestSolve returns s4
-        val bestEntity = solveDao.getPriorBestSolve("guest", "3x3", t4)
-        assertNotNull(bestEntity)
-        assertEquals("s4", bestEntity?.id)
-        assertEquals(9500L, bestEntity?.durationMs)
     }
 }

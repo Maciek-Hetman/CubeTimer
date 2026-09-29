@@ -24,10 +24,7 @@ import com.maciekhetman.cubetimer.model.UserRole
 import com.maciekhetman.cubetimer.model.currentUser
 import com.maciekhetman.cubetimer.model.isAuthenticated
 import com.maciekhetman.cubetimer.model.isGuest
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher

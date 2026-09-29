@@ -44,6 +44,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -322,6 +323,8 @@ class TimerViewModel(
         viewModelScope.launch {
             authManager.authState.flatMapLatest { authState ->
                 val flowOwner = authState.ownerId
+                // SQL orders by the solved_at *string*, which misorders solves within a second when
+                // server rows omit milliseconds; sorting by epoch millis is cheap on nearly-sorted input.
                 repository.getAllSolvesFlow(flowOwner)
                     .map { dbSolves -> flowOwner to dbSolves.sortedBy { it.timestamp } }
                     .flowOn(defaultDispatcher)
@@ -499,10 +502,13 @@ class TimerViewModel(
                     settlePending(pendingIds)
 
                     // Check for records using solves for the captured mode, not whatever mode happens
-                    // to be selected once this coroutine resumes.
-                    val modeSolves = newAllSolves.filter { it.mode == currentModeValue }
-                    val previousSolves = modeSolves - newSolve
-                    checkForRecords(newSolve, previousSolves, modeSolves)
+                    // to be selected once this coroutine resumes. The averages scan the whole history,
+                    // so they run off the main thread.
+                    val record = withContext(defaultDispatcher) {
+                        val modeSolves = newAllSolves.filter { it.mode == currentModeValue }
+                        findRecord(newSolve, previousSolves = modeSolves - newSolve, newSolves = modeSolves)
+                    }
+                    if (record != null) _recordCelebration.value = record
                 } catch (e: CancellationException) {
                     settlePending(pendingIds)
                     throw e
@@ -558,29 +564,8 @@ class TimerViewModel(
         }
     }
 
-    fun addSolve(solve: SolveTime) {
-        val ownerId = authManager.currentOwnerId
-        markPendingUpserts(ownerId, listOf(solve))
-        publishSolves((_allSolves.value.filter { it.id != solve.id } + solve).sortedBy { it.timestamp })
-        launchWrite(ownerId, listOf(solve.id), "Couldn't save the solve") {
-            repository.saveSolve(solve, ownerId = ownerId, sessionId = solve.sessionId)
-        }
-    }
-
     fun setStatsFilter(filter: StatsFilter) {
         _statsFilter.value = filter
-    }
-
-    fun clearFilteredSolves() {
-        val toDelete = statsFilteredSolves.value
-        if (toDelete.isEmpty()) return
-        val ownerId = authManager.currentOwnerId
-        val toDeleteIds = toDelete.map { it.id }.toSet()
-        markPendingDeletes(ownerId, toDeleteIds)
-        publishSolves(_allSolves.value.filter { it.id !in toDeleteIds })
-        launchWrite(ownerId, toDeleteIds, "Couldn't delete the solves") {
-            repository.deleteSolves(toDelete, ownerId = ownerId)
-        }
     }
 
     fun clearAllSolves() {
@@ -794,12 +779,12 @@ class TimerViewModel(
         _writeError.value = null
     }
 
-    private fun checkForRecords(
+    private fun findRecord(
         newSolve: SolveTime,
         previousSolves: List<SolveTime>,
         newSolves: List<SolveTime>
-    ) {
-        if (newSolve.penalty == Penalty.DNF) return
+    ): RecordCelebration? {
+        if (newSolve.penalty == Penalty.DNF) return null
 
         // Check for best single
         val previousBest = previousSolves
@@ -807,11 +792,10 @@ class TimerViewModel(
             .minOfOrNull { it.displayTime }
 
         if (previousBest == null || newSolve.displayTime < previousBest) {
-            _recordCelebration.value = RecordCelebration(
+            return RecordCelebration(
                 type = RecordType.BEST_SINGLE,
                 time = newSolve.displayTime
             )
-            return
         }
 
         // Check for best Ao5
@@ -820,11 +804,10 @@ class TimerViewModel(
             val previousBestAo5 = AverageCalculator.bestAverageOfN(previousSolves, 5)
 
             if (currentAo5 != null && (previousBestAo5 == null || currentAo5 < previousBestAo5)) {
-                _recordCelebration.value = RecordCelebration(
+                return RecordCelebration(
                     type = RecordType.BEST_AO5,
                     time = currentAo5
                 )
-                return
             }
         }
 
@@ -834,12 +817,14 @@ class TimerViewModel(
             val previousBestAo12 = AverageCalculator.bestAverageOfN(previousSolves, 12)
 
             if (currentAo12 != null && (previousBestAo12 == null || currentAo12 < previousBestAo12)) {
-                _recordCelebration.value = RecordCelebration(
+                return RecordCelebration(
                     type = RecordType.BEST_AO12,
                     time = currentAo12
                 )
             }
         }
+
+        return null
     }
 
     fun resetAppStartTime() {
