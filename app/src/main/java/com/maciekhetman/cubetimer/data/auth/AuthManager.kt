@@ -3,6 +3,7 @@ package com.maciekhetman.cubetimer.data.auth
 import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.User
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 
 /**
  * Main coordinator for authentication state, login, registration, token refresh,
@@ -29,6 +30,23 @@ interface AuthManager {
      * Initializes authentication state from persistent storage on startup.
      */
     suspend fun initialize()
+
+    /**
+     * Suspends until startup authentication has finished restoring the session, i.e. until
+     * [initialize] has run to completion - including its token refresh, whatever the outcome.
+     *
+     * Leaving [AuthState.Loading] is not enough: the cached identity is published before the
+     * refresh, while the in-memory access token only exists once the refresh has returned. Work
+     * that talks to the server (sync) must wait for this, or its unauthenticated request races
+     * the startup refresh with the same refresh token and trips the server's reuse detection.
+     *
+     * The default waits for [authState] to leave [AuthState.Loading]; implementations that
+     * publish an interim state before initialization completes must override it. May never
+     * return if nothing ever initializes, so callers should bound the wait.
+     */
+    suspend fun awaitInitialized() {
+        authState.first { it !is AuthState.Loading }
+    }
 
     /**
      * Register a new account with email and password.

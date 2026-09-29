@@ -28,6 +28,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -50,15 +52,46 @@ class AuthManagerImpl(
     override val currentUser: User?
         get() = _authState.value.currentUser
 
+    /**
+     * Session-restore runs that were requested but haven't finished yet (see [awaitInitialized]).
+     * The automatic run is counted before it is launched, so there is no window in which a waiter
+     * could see zero while that run has yet to start.
+     */
+    private val pendingInitializations = MutableStateFlow(0)
+
     init {
         if (autoInitialize) {
+            pendingInitializations.update { it + 1 }
             authScope.launch {
-                initialize()
+                restoreSession()
+            }.invokeOnCompletion {
+                // Also runs if the launch is cancelled before it starts, so the count can't leak.
+                pendingInitializations.update { it - 1 }
             }
         }
     }
 
-    override suspend fun initialize() = withContext(ioDispatcher) {
+    override suspend fun initialize() {
+        pendingInitializations.update { it + 1 }
+        try {
+            restoreSession()
+        } finally {
+            pendingInitializations.update { it - 1 }
+        }
+    }
+
+    /**
+     * Returns once every requested [initialize] run - including the automatic one - has finished,
+     * i.e. after the startup refresh has succeeded, been rejected (Guest) or failed on the network
+     * (cached identity kept). With `autoInitialize = false` and no [initialize] call in flight it
+     * returns immediately, even while still [AuthState.Loading]: nothing is restoring a session,
+     * so there is nothing to wait for (and nothing that would ever end the wait).
+     */
+    override suspend fun awaitInitialized() {
+        pendingInitializations.first { it == 0 }
+    }
+
+    private suspend fun restoreSession() = withContext(ioDispatcher) {
         val refreshToken = tokenStorage.getRefreshToken()
         if (refreshToken.isNullOrBlank()) {
             _authState.value = AuthState.Guest
