@@ -145,47 +145,12 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
-                SettingsSection(title = "Account") {
-                    Surface(
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onSyncClick()
-                        },
-                        color = androidx.compose.ui.graphics.Color.Transparent
-                    ) {
-                        SettingsRow(title = "Cloud Sync") {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = syncStatusLabel(syncUiState),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                SyncStatusIcon(syncUiState)
-                            }
-                        }
-                    }
-                    SettingsDivider()
-                    Surface(
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onAuthClick()
-                        },
-                        color = androidx.compose.ui.graphics.Color.Transparent
-                    ) {
-                        SettingsRow(title = "Account") {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = accountStatusLabel(authState),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                AccountStatusIcon(authState)
-                            }
-                        }
-                    }
-                }
+                AccountSection(
+                    syncUiState = syncUiState,
+                    onSyncClick = onSyncClick,
+                    authState = authState,
+                    onAuthClick = onAuthClick
+                )
             }
 
             item {
@@ -403,6 +368,65 @@ fun SettingsScreen(
     }
 }
 
+/**
+ * The "Account" settings section: cloud sync status (with a hint when sync conflicts need the user's
+ * attention) and the signed-in account. Tapping a row opens the matching dialog via the callbacks.
+ */
+@Composable
+fun AccountSection(
+    syncUiState: SyncUiState,
+    onSyncClick: () -> Unit,
+    authState: AuthState,
+    onAuthClick: () -> Unit,
+) {
+    val haptic = LocalHapticFeedback.current
+    SettingsSection(title = "Account") {
+        Surface(
+            onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onSyncClick()
+            },
+            color = androidx.compose.ui.graphics.Color.Transparent
+        ) {
+            SettingsRow(
+                title = "Cloud Sync",
+                supportingText = if (syncUiState.conflictCount > 0) syncConflictHint(syncUiState.conflictCount) else null,
+                supportingTextColor = MaterialTheme.colorScheme.error
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = syncStatusLabel(syncUiState),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    SyncStatusIcon(syncUiState)
+                }
+            }
+        }
+        SettingsDivider()
+        Surface(
+            onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onAuthClick()
+            },
+            color = androidx.compose.ui.graphics.Color.Transparent
+        ) {
+            SettingsRow(title = "Account") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = accountStatusLabel(authState),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    AccountStatusIcon(authState)
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun SettingsSection(
     title: String,
@@ -440,6 +464,8 @@ fun SettingsDivider() {
 fun SettingsRow(
     title: String,
     modifier: Modifier = Modifier,
+    supportingText: String? = null,
+    supportingTextColor: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Unspecified,
     content: @Composable () -> Unit
 ) {
     Row(
@@ -450,11 +476,19 @@ fun SettingsRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.weight(1f)
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge
+            )
+            if (supportingText != null) {
+                Text(
+                    text = supportingText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = supportingTextColor
+                )
+            }
+        }
         content()
     }
 }
@@ -617,6 +651,10 @@ fun syncStatusLabel(syncUiState: SyncUiState): String = when (syncUiState.status
     SyncStatusType.ERROR -> "Sync error"
 }
 
+/** "1 conflict needs attention" / "3 conflicts need attention" - shown under the Cloud Sync row. */
+fun syncConflictHint(count: Int): String =
+    if (count == 1) "1 conflict needs attention" else "$count conflicts need attention"
+
 fun accountStatusLabel(authState: AuthState): String = when (authState) {
     is AuthState.Admin -> authState.user.email
     is AuthState.Authenticated -> authState.user.email
@@ -638,16 +676,33 @@ private fun SyncStatusIcon(syncUiState: SyncUiState) {
 
     when (syncUiState.status) {
         SyncStatusType.SYNCED -> {
-            Icon(
-                imageVector = Icons.Default.CloudDone,
-                contentDescription = "Synced",
-                tint = if (syncUiState.isGuest) {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                } else {
-                    MaterialTheme.colorScheme.primary
-                },
-                modifier = Modifier.size(22.dp)
-            )
+            if (syncUiState.conflictCount > 0) {
+                BadgedBox(
+                    badge = {
+                        Badge(containerColor = MaterialTheme.colorScheme.error) {
+                            Text(syncUiState.conflictCount.coerceAtMost(99).toString())
+                        }
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CloudDone,
+                        contentDescription = "Synced, conflicts need attention",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            } else {
+                Icon(
+                    imageVector = Icons.Default.CloudDone,
+                    contentDescription = "Synced",
+                    tint = if (syncUiState.isGuest) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    },
+                    modifier = Modifier.size(22.dp)
+                )
+            }
         }
         SyncStatusType.SYNCING -> {
             Icon(

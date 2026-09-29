@@ -2,6 +2,7 @@ package com.maciekhetman.cubetimer.viewmodel
 
 import android.app.Application
 import android.os.SystemClock
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.maciekhetman.cubetimer.data.SettingsRepository
@@ -25,6 +26,7 @@ import com.maciekhetman.cubetimer.model.StatsFilter
 import com.maciekhetman.cubetimer.model.TimerState
 import com.maciekhetman.cubetimer.model.TimingDevice
 import com.maciekhetman.cubetimer.model.ownerId
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -121,6 +123,9 @@ class TimerViewModel(
 
     val bluetoothPermissions: List<String> = bluetoothTimer?.requiredPermissions.orEmpty()
 
+    private val _writeError = MutableStateFlow<String?>(null)
+    val writeError: StateFlow<String?> = _writeError.asStateFlow()
+
     // Last known DB-confirmed solves per owner, used only to show the right list instantly when
     // switching owners (never merged with pending local edits - the Room flow below is always the
     // single source of truth for the active owner).
@@ -176,6 +181,44 @@ class TimerViewModel(
     private fun publishSolves(solves: List<SolveTime>) {
         _allSolves.value = solves
         _solves.value = solves.filter { it.mode == _currentMode.value }
+    }
+
+    /**
+     * Runs the Room write behind an optimistic update of [ids]. A failure (e.g. a full disk) is
+     * rolled back on screen and reported through [writeError] instead of escaping viewModelScope
+     * and crashing the app.
+     */
+    private fun launchWrite(
+        ownerId: String,
+        ids: Collection<String>,
+        errorMessage: String,
+        write: suspend () -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                write()
+                settlePending(ids)
+            } catch (e: CancellationException) {
+                settlePending(ids)
+                throw e
+            } catch (e: Exception) {
+                onWriteFailed(ownerId, ids, errorMessage, e)
+            }
+        }
+    }
+
+    /**
+     * Drops the failed writes' pending entries and re-shows the last DB state right away: a write
+     * that never reached the DB produces no emission, so the optimistic change would otherwise stay
+     * on screen until some unrelated write.
+     */
+    private fun onWriteFailed(ownerId: String, ids: Collection<String>, message: String, error: Exception) {
+        Log.e(TAG, message, error)
+        ids.forEach { pendingWrites.remove(it) }
+        if (ownerId == authManager.currentOwnerId) {
+            confirmedSolvesByOwner[ownerId]?.let { publishSolves(mergeWithPending(ownerId, it)) }
+        }
+        _writeError.value = message
     }
 
     private val _solves = MutableStateFlow<List<SolveTime>>(emptyList())
@@ -427,39 +470,45 @@ class TimerViewModel(
             generateNewScramble()
 
             viewModelScope.launch {
-                val activeSession = sessionManager.getOrCreateActiveSession(
-                    ownerId = ownerId,
-                    mode = currentModeValue,
-                    solveTimestamp = nowMs
-                )
-
-                val newSolve = SolveTime(
-                    timeInMillis = currentState.time,
-                    penalty = penalty,
-                    scramble = capturedScramble,
-                    mode = currentModeValue,
-                    timestamp = nowMs,
-                    sessionId = activeSession.id,
-                    timingDevice = currentState.timingDevice
-                )
-
-                val newAllSolves = (_allSolves.value.filter { it.id != newSolve.id } + newSolve).sortedBy { it.timestamp }
-                markPendingUpserts(ownerId, listOf(newSolve))
-                if (authManager.currentOwnerId == ownerId) {
-                    publishSolves(newAllSolves)
-                }
-
+                var pendingIds = emptyList<String>()
                 try {
-                    repository.saveSolve(newSolve, ownerId = ownerId, sessionId = activeSession.id)
-                } finally {
-                    settlePending(listOf(newSolve.id))
-                }
+                    val activeSession = sessionManager.getOrCreateActiveSession(
+                        ownerId = ownerId,
+                        mode = currentModeValue,
+                        solveTimestamp = nowMs
+                    )
 
-                // Check for records using solves for the captured mode, not whatever mode happens
-                // to be selected once this coroutine resumes.
-                val modeSolves = newAllSolves.filter { it.mode == currentModeValue }
-                val previousSolves = modeSolves - newSolve
-                checkForRecords(newSolve, previousSolves, modeSolves)
+                    val newSolve = SolveTime(
+                        timeInMillis = currentState.time,
+                        penalty = penalty,
+                        scramble = capturedScramble,
+                        mode = currentModeValue,
+                        timestamp = nowMs,
+                        sessionId = activeSession.id,
+                        timingDevice = currentState.timingDevice
+                    )
+
+                    val newAllSolves = (_allSolves.value.filter { it.id != newSolve.id } + newSolve).sortedBy { it.timestamp }
+                    pendingIds = listOf(newSolve.id)
+                    markPendingUpserts(ownerId, listOf(newSolve))
+                    if (authManager.currentOwnerId == ownerId) {
+                        publishSolves(newAllSolves)
+                    }
+
+                    repository.saveSolve(newSolve, ownerId = ownerId, sessionId = activeSession.id)
+                    settlePending(pendingIds)
+
+                    // Check for records using solves for the captured mode, not whatever mode happens
+                    // to be selected once this coroutine resumes.
+                    val modeSolves = newAllSolves.filter { it.mode == currentModeValue }
+                    val previousSolves = modeSolves - newSolve
+                    checkForRecords(newSolve, previousSolves, modeSolves)
+                } catch (e: CancellationException) {
+                    settlePending(pendingIds)
+                    throw e
+                } catch (e: Exception) {
+                    onWriteFailed(ownerId, pendingIds, "Couldn't save the solve", e)
+                }
             }
         }
     }
@@ -491,12 +540,8 @@ class TimerViewModel(
         val ownerId = authManager.currentOwnerId
         markPendingDeletes(ownerId, listOf(solve.id))
         publishSolves(_allSolves.value.filter { it.id != solve.id })
-        viewModelScope.launch {
-            try {
-                repository.deleteSolve(solve, ownerId = ownerId)
-            } finally {
-                settlePending(listOf(solve.id))
-            }
+        launchWrite(ownerId, listOf(solve.id), "Couldn't delete the solve") {
+            repository.deleteSolve(solve, ownerId = ownerId)
         }
     }
 
@@ -508,12 +553,8 @@ class TimerViewModel(
         }
         markPendingUpserts(ownerId, listOf(updated))
         publishSolves(newAllSolves)
-        viewModelScope.launch {
-            try {
-                repository.updateSolvePenalty(solve, penalty, ownerId = ownerId)
-            } finally {
-                settlePending(listOf(solve.id))
-            }
+        launchWrite(ownerId, listOf(solve.id), "Couldn't update the solve") {
+            repository.updateSolvePenalty(solve, penalty, ownerId = ownerId)
         }
     }
 
@@ -521,12 +562,8 @@ class TimerViewModel(
         val ownerId = authManager.currentOwnerId
         markPendingUpserts(ownerId, listOf(solve))
         publishSolves((_allSolves.value.filter { it.id != solve.id } + solve).sortedBy { it.timestamp })
-        viewModelScope.launch {
-            try {
-                repository.saveSolve(solve, ownerId = ownerId, sessionId = solve.sessionId)
-            } finally {
-                settlePending(listOf(solve.id))
-            }
+        launchWrite(ownerId, listOf(solve.id), "Couldn't save the solve") {
+            repository.saveSolve(solve, ownerId = ownerId, sessionId = solve.sessionId)
         }
     }
 
@@ -541,12 +578,8 @@ class TimerViewModel(
         val toDeleteIds = toDelete.map { it.id }.toSet()
         markPendingDeletes(ownerId, toDeleteIds)
         publishSolves(_allSolves.value.filter { it.id !in toDeleteIds })
-        viewModelScope.launch {
-            try {
-                repository.deleteSolves(toDelete, ownerId = ownerId)
-            } finally {
-                settlePending(toDeleteIds)
-            }
+        launchWrite(ownerId, toDeleteIds, "Couldn't delete the solves") {
+            repository.deleteSolves(toDelete, ownerId = ownerId)
         }
     }
 
@@ -555,12 +588,8 @@ class TimerViewModel(
         val clearedIds = _allSolves.value.map { it.id }
         markPendingDeletes(ownerId, clearedIds)
         publishSolves(emptyList())
-        viewModelScope.launch {
-            try {
-                repository.clearAllSolves(ownerId = ownerId)
-            } finally {
-                settlePending(clearedIds)
-            }
+        launchWrite(ownerId, clearedIds, "Couldn't delete the solves") {
+            repository.clearAllSolves(ownerId = ownerId)
         }
     }
 
@@ -569,12 +598,8 @@ class TimerViewModel(
         val toRestoreIds = previous.map { it.id }.toSet()
         markPendingUpserts(ownerId, previous)
         publishSolves((_allSolves.value.filter { it.id !in toRestoreIds } + previous).sortedBy { it.timestamp })
-        viewModelScope.launch {
-            try {
-                repository.restoreSolves(previous, ownerId = ownerId)
-            } finally {
-                settlePending(toRestoreIds)
-            }
+        launchWrite(ownerId, toRestoreIds, "Couldn't restore the solves") {
+            repository.restoreSolves(previous, ownerId = ownerId)
         }
     }
 
@@ -765,6 +790,10 @@ class TimerViewModel(
         inputBlockedUntil = timeSource() + 200
     }
 
+    fun clearWriteError() {
+        _writeError.value = null
+    }
+
     private fun checkForRecords(
         newSolve: SolveTime,
         previousSolves: List<SolveTime>,
@@ -839,5 +868,9 @@ class TimerViewModel(
         timerJob?.cancel()
         holdJob?.cancel()
         scrambleJob?.cancel()
+    }
+
+    private companion object {
+        const val TAG = "TimerViewModel"
     }
 }

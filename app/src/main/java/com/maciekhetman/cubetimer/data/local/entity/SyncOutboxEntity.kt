@@ -42,7 +42,7 @@ data class SyncOutboxEntity(
     val clientTime: String, // ISO 8601 UTC timestamp
 
     @ColumnInfo(name = "status")
-    val status: String = "pending", // "pending", "in_flight", "failed"
+    val status: String = "pending", // "pending", "in_flight", "failed", "dead" (permanently rejected, never resent)
 
     @ColumnInfo(name = "attempt_count")
     val attemptCount: Int = 0,

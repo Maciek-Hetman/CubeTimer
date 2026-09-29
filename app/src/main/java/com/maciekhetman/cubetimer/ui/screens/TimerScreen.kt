@@ -6,6 +6,7 @@ import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -128,6 +129,14 @@ fun TimerScreen(
     val showBottomContent = showAverages || showLastResults
 
     KeepScreenOn()
+
+    val writeError by viewModel.writeError.collectAsStateWithLifecycle()
+    LaunchedEffect(writeError) {
+        writeError?.let { message ->
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+            viewModel.clearWriteError()
+        }
+    }
 
     LaunchedEffect(isHolding, timerStartDelayMillis, hapticsEnabled, bluetoothMode) {
         if (isHolding && hapticsEnabled && !bluetoothMode) {

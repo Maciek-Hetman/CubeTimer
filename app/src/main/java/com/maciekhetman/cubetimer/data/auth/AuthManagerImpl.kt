@@ -6,7 +6,10 @@ import com.maciekhetman.cubetimer.data.local.CubeDatabase
 import com.maciekhetman.cubetimer.data.local.entity.SyncOutboxEntity
 import com.maciekhetman.cubetimer.data.local.mapper.toUpsertMutation
 import com.maciekhetman.cubetimer.data.remote.CubeSyncApiClient
+import com.maciekhetman.cubetimer.data.remote.ErrorParser
 import com.maciekhetman.cubetimer.data.remote.NetworkModule
+import com.maciekhetman.cubetimer.data.remote.RefreshResult
+import com.maciekhetman.cubetimer.data.remote.TokenRefresher
 import com.maciekhetman.cubetimer.data.remote.dto.AuthResponse
 import com.maciekhetman.cubetimer.data.remote.dto.GoogleAuthRequest
 import com.maciekhetman.cubetimer.data.remote.dto.LoginRequest
@@ -21,6 +24,7 @@ import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.User
 import com.maciekhetman.cubetimer.model.UserRole
 import com.maciekhetman.cubetimer.model.currentUser
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -31,9 +35,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import java.time.Instant
+import java.util.concurrent.atomic.AtomicLong
 
 class AuthManagerImpl(
     private val apiClient: CubeSyncApiClient,
@@ -43,7 +50,13 @@ class AuthManagerImpl(
     private val json: Json = Json { ignoreUnknownKeys = true; encodeDefaults = true },
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val authScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
-    autoInitialize: Boolean = true
+    autoInitialize: Boolean = true,
+    /**
+     * The refresh path shared with the OkHttp `TokenAuthenticator`. The startup restore and
+     * [refreshSession] refresh through it so they can never spend the same refresh token as a
+     * concurrent 401-triggered refresh. Without one they fall back to [apiClient].
+     */
+    private val tokenRefresher: TokenRefresher? = null
 ) : AuthManager, SessionExpirationListener {
 
     private val _authState = MutableStateFlow<AuthState>(AuthState.Loading)
@@ -59,11 +72,18 @@ class AuthManagerImpl(
      */
     private val pendingInitializations = MutableStateFlow(0)
 
+    /** Serializes session restores: two of them must never refresh side by side. */
+    private val restoreMutex = Mutex()
+
+    /** Number of restores that have run to completion; lets a queued request notice it is moot. */
+    private val completedRestores = AtomicLong(0)
+
     init {
         if (autoInitialize) {
             pendingInitializations.update { it + 1 }
+            val requestedAt = completedRestores.get()
             authScope.launch {
-                restoreSession()
+                restoreSessionOnce(requestedAt)
             }.invokeOnCompletion {
                 // Also runs if the launch is cancelled before it starts, so the count can't leak.
                 pendingInitializations.update { it - 1 }
@@ -74,7 +94,7 @@ class AuthManagerImpl(
     override suspend fun initialize() {
         pendingInitializations.update { it + 1 }
         try {
-            restoreSession()
+            restoreSessionOnce(requestedAt = completedRestores.get())
         } finally {
             pendingInitializations.update { it - 1 }
         }
@@ -91,6 +111,20 @@ class AuthManagerImpl(
         pendingInitializations.first { it == 0 }
     }
 
+    /**
+     * Restores the session, unless a restore that was running (or queued ahead of this one) when
+     * this one was [requestedAt] has completed since: concurrent initializations coalesce into a
+     * single refresh instead of each spending the refresh token. A restore requested after the
+     * previous one finished is a new request and refreshes again.
+     */
+    private suspend fun restoreSessionOnce(requestedAt: Long) {
+        restoreMutex.withLock {
+            if (completedRestores.get() > requestedAt) return
+            restoreSession()
+            completedRestores.incrementAndGet()
+        }
+    }
+
     private suspend fun restoreSession() = withContext(ioDispatcher) {
         val refreshToken = tokenStorage.getRefreshToken()
         if (refreshToken.isNullOrBlank()) {
@@ -105,34 +139,118 @@ class AuthManagerImpl(
         // fall back to Guest, and on a network error we simply keep the cached identity.
         val cachedUser = tokenStorage.getCachedUser()
         if (cachedUser != null) {
-            _authState.value = if (cachedUser.userRole == UserRole.ADMIN) {
-                AuthState.Admin(cachedUser)
-            } else {
-                AuthState.Authenticated(cachedUser)
-            }
+            publishUser(cachedUser)
         }
 
-        try {
-            val response = apiClient.refreshToken(refreshToken)
-            handleAuthSuccess(response, isNewLogin = false)
-        } catch (e: AuthException.RefreshTokenReused) {
-            tokenStorage.clearAuthData()
-            _authState.value = AuthState.Guest
-        } catch (e: AuthException.InvalidRefreshToken) {
-            tokenStorage.clearAuthData()
-            _authState.value = AuthState.Guest
-        } catch (e: AuthException.InvalidCredentials) {
-            tokenStorage.clearAuthData()
-            _authState.value = AuthState.Guest
-        } catch (e: AuthException.Unauthorized) {
-            tokenStorage.clearAuthData()
-            _authState.value = AuthState.Guest
-        } catch (_: Exception) {
-            // Network error: keep the cached identity we already surfaced above, if any.
-            if (cachedUser == null) {
+        when (attemptRefresh(refreshToken)) {
+            is RefreshAttempt.Refreshed -> Unit
+            is RefreshAttempt.Rejected -> {
+                tokenStorage.clearAuthData()
+                _authState.value = AuthState.Guest
+            }
+            // Network error or transient server failure: keep the cached identity we already
+            // surfaced above, if any.
+            is RefreshAttempt.Failed -> if (cachedUser == null) {
                 _authState.value = AuthState.Guest
             }
         }
+    }
+
+    /** How a refresh attempt ended, from the point of view of the session. */
+    private sealed interface RefreshAttempt {
+        /** The session is valid; [user] has been published as the auth state. */
+        data class Refreshed(val user: User) : RefreshAttempt
+
+        /** The server definitively refused the refresh token: the session is over. */
+        data class Rejected(val error: AuthException) : RefreshAttempt
+
+        /** Connectivity or a transient server problem: nothing is known to be wrong with the session. */
+        data class Failed(val error: AuthException) : RefreshAttempt
+    }
+
+    private suspend fun attemptRefresh(refreshToken: String): RefreshAttempt {
+        val refresher = tokenRefresher
+        return if (refresher != null) {
+            refreshThrough(refresher)
+        } else {
+            refreshThroughApiClient(refreshToken)
+        }
+    }
+
+    private suspend fun refreshThrough(refresher: TokenRefresher): RefreshAttempt {
+        // Captured before waiting for the refresher's lock: if a 401-triggered refresh (or a login)
+        // installs an access token in the meantime, the refresher notices and doesn't refresh again.
+        val staleAccessToken = tokenStorage.getAccessToken()
+
+        // A plain blocking call on purpose (no runInterruptible): once the request is on the wire the
+        // server may already have rotated the refresh token, so it must run through to storing the
+        // new one even if this coroutine is cancelled meanwhile - abandoning it would lose the session.
+        val result = refresher.refresh(staleAccessToken)
+
+        return when (result) {
+            is RefreshResult.Refreshed -> {
+                // The refresher already persisted the tokens; saving them again here could
+                // overwrite a newer rotation.
+                val user = result.session.user.toDomain()
+                publishUser(user)
+                RefreshAttempt.Refreshed(user)
+            }
+            is RefreshResult.AlreadyRefreshed -> {
+                val user = tokenStorage.getCachedUser()
+                if (user != null) {
+                    publishUser(user)
+                    RefreshAttempt.Refreshed(user)
+                } else {
+                    RefreshAttempt.Failed(AuthException.Unknown("Session was refreshed but no user is stored"))
+                }
+            }
+            is RefreshResult.NoRefreshToken ->
+                RefreshAttempt.Rejected(AuthException.InvalidRefreshToken("No refresh token available"))
+            is RefreshResult.Rejected -> RefreshAttempt.Rejected(refreshError(result.statusCode, result.body))
+            is RefreshResult.NetworkError -> RefreshAttempt.Failed(
+                AuthException.NetworkError("Session refresh failed: ${result.exception.localizedMessage}", result.exception)
+            )
+            is RefreshResult.Transient -> RefreshAttempt.Failed(refreshError(result.statusCode, result.body))
+            is RefreshResult.Failed -> RefreshAttempt.Failed(
+                AuthException.Unknown("Session refresh failed: ${result.cause.localizedMessage}", result.cause)
+            )
+        }
+    }
+
+    private suspend fun refreshThroughApiClient(refreshToken: String): RefreshAttempt = try {
+        val response = apiClient.refreshToken(refreshToken)
+        RefreshAttempt.Refreshed(handleAuthSuccess(response, isNewLogin = false))
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: AuthException) {
+        if (e.isDefinitiveRefreshRejection()) RefreshAttempt.Rejected(e) else RefreshAttempt.Failed(e)
+    } catch (e: Exception) {
+        RefreshAttempt.Failed(AuthException.NetworkError("Session refresh failed: ${e.localizedMessage}", e))
+    }
+
+    private fun refreshError(statusCode: Int, body: String): AuthException {
+        val apiError = ErrorParser.parseApiError(body)?.error
+        return ErrorParser.toAuthException(
+            errorCode = apiError?.code,
+            message = apiError?.message ?: "HTTP Error $statusCode",
+            httpStatusCode = statusCode
+        )
+    }
+
+    /**
+     * Whether a failed refresh proves the refresh token itself is dead (revoked, reused, invalid),
+     * as opposed to a network or server hiccup. Mirrors the statuses [TokenRefresher] treats as
+     * definitive (400/401/403/409) for refreshes that go through [CubeSyncApiClient] instead.
+     */
+    private fun AuthException.isDefinitiveRefreshRejection(): Boolean = when (this) {
+        is AuthException.RefreshTokenReused,
+        is AuthException.InvalidRefreshToken,
+        is AuthException.InvalidCredentials,
+        is AuthException.InvalidToken,
+        is AuthException.Unauthorized,
+        is AuthException.Forbidden -> true
+        is AuthException.ApiError -> httpStatusCode in DEFINITIVE_REFRESH_STATUS_CODES
+        else -> false
     }
 
     override suspend fun register(email: String, password: String): AuthResult<Unit> = withContext(ioDispatcher) {
@@ -141,6 +259,8 @@ class AuthManagerImpl(
             AuthResult.Success(Unit)
         } catch (e: AuthException) {
             AuthResult.Error(e)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             AuthResult.Error(AuthException.NetworkError("Registration failed: ${e.localizedMessage}", e))
         }
@@ -153,6 +273,8 @@ class AuthManagerImpl(
             AuthResult.Success(user)
         } catch (e: AuthException) {
             AuthResult.Error(e)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             AuthResult.Error(AuthException.NetworkError("Login failed: ${e.localizedMessage}", e))
         }
@@ -171,6 +293,8 @@ class AuthManagerImpl(
             AuthResult.Success(user)
         } catch (e: AuthException) {
             AuthResult.Error(e)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             AuthResult.Error(AuthException.NetworkError("Google sign-in failed: ${e.localizedMessage}", e))
         }
@@ -183,6 +307,8 @@ class AuthManagerImpl(
             AuthResult.Success(user)
         } catch (e: AuthException) {
             AuthResult.Error(e)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             AuthResult.Error(AuthException.NetworkError("Email verification failed: ${e.localizedMessage}", e))
         }
@@ -194,6 +320,8 @@ class AuthManagerImpl(
             AuthResult.Success(Unit)
         } catch (e: AuthException) {
             AuthResult.Error(e)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             AuthResult.Error(AuthException.NetworkError("Failed to resend verification email: ${e.localizedMessage}", e))
         }
@@ -205,6 +333,8 @@ class AuthManagerImpl(
             AuthResult.Success(Unit)
         } catch (e: AuthException) {
             AuthResult.Error(e)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             AuthResult.Error(AuthException.NetworkError("Password reset request failed: ${e.localizedMessage}", e))
         }
@@ -217,6 +347,8 @@ class AuthManagerImpl(
             AuthResult.Success(user)
         } catch (e: AuthException) {
             AuthResult.Error(e)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             AuthResult.Error(AuthException.NetworkError("Password reset confirmation failed: ${e.localizedMessage}", e))
         }
@@ -226,16 +358,15 @@ class AuthManagerImpl(
         val refreshToken = tokenStorage.getRefreshToken()
             ?: return@withContext AuthResult.Error(AuthException.InvalidCredentials("No refresh token available"))
 
-        try {
-            val response = apiClient.refreshToken(refreshToken)
-            val user = handleAuthSuccess(response, isNewLogin = false)
-            AuthResult.Success(user)
-        } catch (e: AuthException) {
-            tokenStorage.clearAuthData()
-            _authState.value = AuthState.Guest
-            AuthResult.Error(e)
-        } catch (e: Exception) {
-            AuthResult.Error(AuthException.NetworkError("Session refresh failed: ${e.localizedMessage}", e))
+        when (val attempt = attemptRefresh(refreshToken)) {
+            is RefreshAttempt.Refreshed -> AuthResult.Success(attempt.user)
+            is RefreshAttempt.Rejected -> {
+                tokenStorage.clearAuthData()
+                _authState.value = AuthState.Guest
+                AuthResult.Error(attempt.error)
+            }
+            // Offline or a server hiccup says nothing about the session: report it, keep the login.
+            is RefreshAttempt.Failed -> AuthResult.Error(attempt.error)
         }
     }
 
@@ -265,7 +396,9 @@ class AuthManagerImpl(
             try {
                 apiClient.logout(refreshToken)
             } catch (_: Exception) {
-                // Ignore network errors on logout to allow local logout to complete
+                // Ignore network errors on logout to allow local logout to complete. This also
+                // swallows cancellation on purpose: a cancelled caller must not be left half
+                // logged out, so the local steps below always run.
             }
         }
 
@@ -301,13 +434,17 @@ class AuthManagerImpl(
             syncTrigger?.invoke()
         }
 
+        publishUser(user)
+
+        return user
+    }
+
+    private fun publishUser(user: User) {
         _authState.value = if (user.userRole == UserRole.ADMIN) {
             AuthState.Admin(user)
         } else {
             AuthState.Authenticated(user)
         }
-
-        return user
     }
 
     override suspend fun adoptGuestData(userId: String) = withContext(ioDispatcher) {
@@ -355,6 +492,8 @@ class AuthManagerImpl(
     }
 
     companion object {
+        private val DEFINITIVE_REFRESH_STATUS_CODES = setOf(400, 401, 403, 409)
+
         @Volatile
         private var instance: AuthManager? = null
 

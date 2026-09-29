@@ -14,6 +14,7 @@ import com.maciekhetman.cubetimer.data.remote.dto.StatusResponse
 import com.maciekhetman.cubetimer.data.remote.dto.UserDto
 import com.maciekhetman.cubetimer.data.remote.dto.VerifyEmailRequest
 import com.maciekhetman.cubetimer.model.AuthException
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.SerializationException
 import retrofit2.Response
 import java.io.IOException
@@ -108,6 +109,9 @@ class CubeSyncApiClientImpl(
             val message = apiError?.error?.message ?: response.message().ifBlank { "HTTP Error ${response.code()}" }
 
             throw ErrorParser.toAuthException(code, message, response.code())
+        } catch (e: CancellationException) {
+            // Structured concurrency: a cancelled call is not an API failure, let it propagate.
+            throw e
         } catch (e: AuthException) {
             throw e
         } catch (e: IOException) {
@@ -132,6 +136,9 @@ class CubeSyncApiClientImpl(
             val message = apiError?.error?.message ?: response.message().ifBlank { "HTTP Error ${response.code()}" }
 
             throw ErrorParser.toAuthException(code, message, response.code())
+        } catch (e: CancellationException) {
+            // Structured concurrency: a cancelled call is not an API failure, let it propagate.
+            throw e
         } catch (e: AuthException) {
             throw e
         } catch (e: IOException) {

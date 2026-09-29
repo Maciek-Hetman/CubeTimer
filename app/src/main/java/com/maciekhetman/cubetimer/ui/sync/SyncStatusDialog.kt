@@ -14,7 +14,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
@@ -37,15 +39,28 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.maciekhetman.cubetimer.model.SyncStatusType
 import com.maciekhetman.cubetimer.model.SyncUiState
+import com.maciekhetman.cubetimer.viewmodel.ConflictUiModel
 
+/**
+ * Cloud sync status, plus - for signed-in users - the list of unresolved sync [conflicts] with
+ * keep-this-device's / keep-server's actions. [resolvingConflictIds] are conflicts with a resolution
+ * in flight (their buttons are disabled) and [conflictErrorMessage] reports a failed resolution.
+ */
 @Composable
 fun SyncStatusDialog(
     syncState: SyncUiState,
     onTriggerSync: () -> Unit,
     onDismiss: () -> Unit,
     onLoginClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    conflicts: List<ConflictUiModel> = emptyList(),
+    resolvingConflictIds: Set<String> = emptySet(),
+    conflictErrorMessage: String? = null,
+    onKeepLocal: (String) -> Unit = {},
+    onKeepServer: (String) -> Unit = {}
 ) {
+    // conflictCount comes from the database; the list is mapped asynchronously and may lag behind it.
+    val hasConflicts = syncState.conflictCount > 0 || conflicts.isNotEmpty()
     val infiniteTransition = rememberInfiniteTransition(label = "sync_rotation")
     val rotation by infiniteTransition.animateFloat(
         initialValue = 0f,
@@ -104,7 +119,12 @@ fun SyncStatusDialog(
             }
         },
         text = {
-            Column(modifier = Modifier.fillMaxWidth()) {
+            // Scrollable: a long conflict list must not push the buttons off small screens.
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+            ) {
                 if (syncState.isGuest) {
                     Text(
                         text = "You are currently in guest mode. Your solves and sessions are saved locally on this device.",
@@ -128,7 +148,8 @@ fun SyncStatusDialog(
                     }
                 } else {
                     val statusText = when (syncState.status) {
-                        SyncStatusType.SYNCED -> "All data is up to date."
+                        SyncStatusType.SYNCED ->
+                            if (hasConflicts) "Some changes need your review." else "All data is up to date."
                         SyncStatusType.SYNCING -> "Synchronizing changes with cloud..."
                         SyncStatusType.OFFLINE -> "Device is offline. Changes will sync automatically when reconnected."
                         SyncStatusType.ERROR -> "A synchronization error occurred."
@@ -174,6 +195,17 @@ fun SyncStatusDialog(
                                 modifier = Modifier.padding(10.dp)
                             )
                         }
+                    }
+
+                    if (conflicts.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        SyncConflictList(
+                            conflicts = conflicts,
+                            onKeepLocal = onKeepLocal,
+                            onKeepServer = onKeepServer,
+                            resolvingIds = resolvingConflictIds,
+                            errorMessage = conflictErrorMessage
+                        )
                     }
                 }
             }

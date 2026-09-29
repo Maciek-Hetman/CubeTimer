@@ -6,5 +6,8 @@
     <!-- EncryptedSharedPreferences: its Keystore-backed key can't be restored to a new
          device/install, so the encrypted values would be unreadable garbage anyway. -->
     <exclude domain="sharedpref" path="cubetimer_secure_prefs.xml" />
+    <!-- The device id identifies this install to the server; a restored copy would make two
+         devices share one id. (API 31+ already excludes all shared prefs in data_extraction_rules.) -->
+    <exclude domain="sharedpref" path="cubetimer_device_prefs.xml" />
     <exclude domain="file" path="datastore/" />
 </full-backup-content>

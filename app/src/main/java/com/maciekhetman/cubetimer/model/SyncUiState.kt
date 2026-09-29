@@ -19,5 +19,7 @@ data class SyncUiState(
     val lastSyncedAtMillis: Long? = null,
     val pendingCount: Int = 0,
     val errorMessage: String? = null,
-    val isGuest: Boolean = true
+    val isGuest: Boolean = true,
+    /** Number of unresolved sync conflicts of the signed-in owner (always 0 for guests). */
+    val conflictCount: Int = 0
 )
