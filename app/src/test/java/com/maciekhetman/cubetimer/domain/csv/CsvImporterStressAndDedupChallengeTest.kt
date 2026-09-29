@@ -10,7 +10,6 @@ import com.maciekhetman.cubetimer.data.local.dao.SyncOutboxDao
 import com.maciekhetman.cubetimer.data.local.entity.SessionEntity
 import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
 import com.maciekhetman.cubetimer.data.local.entity.SyncOutboxEntity
-import com.maciekhetman.cubetimer.model.Penalty
 import com.maciekhetman.cubetimer.model.SessionKind
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -27,8 +26,6 @@ import org.robolectric.RobolectricTestRunner
 import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
 import java.sql.SQLException
-import java.time.Instant
-import java.util.UUID
 
 /**
  * Adversarial Stress, Deduplication, and Database Integrity Challenge Suite

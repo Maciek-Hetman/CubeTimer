@@ -3,7 +3,6 @@ package com.maciekhetman.cubetimer.ui.components
 import androidx.compose.ui.graphics.Color
 import com.maciekhetman.cubetimer.model.Mode
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue

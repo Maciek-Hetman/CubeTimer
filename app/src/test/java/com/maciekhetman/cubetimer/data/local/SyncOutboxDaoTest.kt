@@ -2,7 +2,6 @@ package com.maciekhetman.cubetimer.data.local
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import app.cash.turbine.test
 import com.maciekhetman.cubetimer.data.local.dao.SyncOutboxDao
 import com.maciekhetman.cubetimer.data.local.entity.SyncOutboxEntity
 import kotlinx.coroutines.test.runTest

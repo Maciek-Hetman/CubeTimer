@@ -6,11 +6,8 @@ import com.maciekhetman.cubetimer.data.SolvesRepository
 import com.maciekhetman.cubetimer.data.auth.AuthManagerImpl
 import com.maciekhetman.cubetimer.data.auth.TokenStorage
 import com.maciekhetman.cubetimer.data.local.CubeDatabase
-import com.maciekhetman.cubetimer.data.local.converter.CubeTypeConverters
 import com.maciekhetman.cubetimer.data.local.entity.SessionEntity
 import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
-import com.maciekhetman.cubetimer.data.local.mapper.toDomain
-import com.maciekhetman.cubetimer.data.local.mapper.toEntity
 import com.maciekhetman.cubetimer.data.local.mapper.toSolveEntity
 import com.maciekhetman.cubetimer.data.local.mapper.toSolveTime
 import com.maciekhetman.cubetimer.data.local.mapper.toSyncPayload
@@ -31,13 +28,11 @@ import com.maciekhetman.cubetimer.model.Session
 import com.maciekhetman.cubetimer.model.SessionKind
 import com.maciekhetman.cubetimer.model.SolveTime
 import com.maciekhetman.cubetimer.model.User
-import com.maciekhetman.cubetimer.model.UserRole
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import org.junit.After
@@ -51,7 +46,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.time.Instant
-import java.util.UUID
 import com.maciekhetman.cubetimer.testutil.insertSession
 
 @RunWith(RobolectricTestRunner::class)

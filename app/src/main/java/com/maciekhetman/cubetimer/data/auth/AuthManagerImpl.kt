@@ -8,17 +8,12 @@ import com.maciekhetman.cubetimer.data.local.entity.SyncOutboxEntity
 import com.maciekhetman.cubetimer.data.local.mapper.toUpsertMutation
 import com.maciekhetman.cubetimer.data.remote.CubeSyncApiClient
 import com.maciekhetman.cubetimer.data.remote.ErrorParser
-import com.maciekhetman.cubetimer.data.remote.NetworkModule
 import com.maciekhetman.cubetimer.data.remote.RefreshResult
 import com.maciekhetman.cubetimer.data.remote.TokenRefresher
 import com.maciekhetman.cubetimer.data.remote.dto.AuthResponse
 import com.maciekhetman.cubetimer.data.remote.dto.GoogleAuthRequest
 import com.maciekhetman.cubetimer.data.remote.dto.LoginRequest
-import com.maciekhetman.cubetimer.data.remote.dto.LogoutRequest
-import com.maciekhetman.cubetimer.data.remote.dto.PasswordResetConfirmRequest
-import com.maciekhetman.cubetimer.data.remote.dto.PasswordResetRequest
 import com.maciekhetman.cubetimer.data.remote.dto.RegisterRequest
-import com.maciekhetman.cubetimer.data.remote.dto.VerifyEmailRequest
 import com.maciekhetman.cubetimer.data.remote.mapper.toDomain
 import com.maciekhetman.cubetimer.model.AuthException
 import com.maciekhetman.cubetimer.model.AuthState
@@ -41,7 +36,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
-import java.time.Instant
 import java.util.concurrent.atomic.AtomicLong
 
 class AuthManagerImpl(
@@ -545,23 +539,5 @@ class AuthManagerImpl(
     companion object {
         private const val TAG = "AuthManager"
         private val DEFINITIVE_REFRESH_STATUS_CODES = setOf(400, 401, 403, 409)
-
-        @Volatile
-        private var instance: AuthManager? = null
-
-        fun getInstance(context: android.content.Context): AuthManager {
-            return instance ?: synchronized(this) {
-                instance ?: AuthManagerImpl(
-                    apiClient = NetworkModule.provideCubeSyncApiClient(
-                        NetworkModule.provideAuthApiService(
-                            baseUrl = com.maciekhetman.cubetimer.CubeTimerApplication.BASE_URL,
-                            okHttpClient = NetworkModule.provideOkHttpClient()
-                        )
-                    ),
-                    tokenStorage = EncryptedTokenStorage(context.applicationContext),
-                    database = CubeDatabase.getInstance(context.applicationContext)
-                ).also { instance = it }
-            }
-        }
     }
 }

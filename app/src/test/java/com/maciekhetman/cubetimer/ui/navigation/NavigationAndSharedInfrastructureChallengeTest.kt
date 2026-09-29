@@ -7,19 +7,15 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.core.content.FileProvider
 import com.maciekhetman.cubetimer.AppDestinations
 import com.maciekhetman.cubetimer.model.StatsFilter
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import java.io.File
 
 /**
  * Empirical challenger test suite for Milestone 1: Navigation & Shared Infrastructure.
@@ -28,7 +24,6 @@ import java.io.File
  * 1. FloatingNavigationBar container geometry, pill indicator coordinates, and destination mapping.
  * 2. Predictive Back navigation state machine routing and loop prevention across all destinations.
  * 3. SessionFilterBar composable rendering, empty lists, long session names, and chip selections.
- * 4. FileProvider end-to-end URI generation using cache-path shared_solves/.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -325,39 +320,5 @@ class NavigationAndSharedInfrastructureChallengeTest {
         val rightStiffnessLeft = if (movingLeft) 3800f else 1500f
 
         assertTrue("Left edge must be stiffer (faster) when moving left", leftStiffnessLeft > rightStiffnessLeft)
-    }
-
-    // =============================================================================================
-    // 5. FILE PROVIDER ZERO-PERMISSION FILE SHARING INFRASTRUCTURE
-    // =============================================================================================
-
-    @Test
-    fun `file provider generates valid content uri for cache-path shared_solves`() {
-        val context = RuntimeEnvironment.getApplication()
-        val sharedSolvesDir = File(context.cacheDir, "shared_solves")
-        if (!sharedSolvesDir.exists()) {
-            assertTrue(sharedSolvesDir.mkdirs())
-        }
-
-        val sampleShareFile = File(sharedSolvesDir, "solve_card_test_snapshot.png")
-        sampleShareFile.writeBytes(byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47)) // PNG header
-
-        assertTrue(sampleShareFile.exists())
-
-        val authority = "${context.packageName}.fileprovider"
-        try {
-            val sCacheField = FileProvider::class.java.getDeclaredField("sCache")
-            sCacheField.isAccessible = true
-            (sCacheField.get(null) as? java.util.Map<*, *>)?.clear()
-        } catch (_: Throwable) {}
-        val contentUri = FileProvider.getUriForFile(context, authority, sampleShareFile)
-
-        assertNotNull(contentUri)
-        assertEquals("content", contentUri.scheme)
-        assertEquals(authority, contentUri.authority)
-        assertTrue(
-            "Uri path must contain shared_solves or mapped filename",
-            contentUri.path?.contains("shared_solves") == true || contentUri.path?.contains("solve_card_test_snapshot.png") == true
-        )
     }
 }

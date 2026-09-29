@@ -7,7 +7,6 @@ import androidx.test.core.app.ApplicationProvider
 import com.maciekhetman.cubetimer.data.local.migration.DataStoreMigration
 import com.maciekhetman.cubetimer.data.settingsDataStore
 import com.maciekhetman.cubetimer.data.solvesDataStore
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.first

@@ -3,7 +3,6 @@ package com.maciekhetman.cubetimer.data.local.mapper
 import com.maciekhetman.cubetimer.data.local.converter.CubeTypeConverters
 import com.maciekhetman.cubetimer.data.local.entity.SessionEntity
 import com.maciekhetman.cubetimer.data.remote.dto.SessionSyncPayload
-import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Session
 import com.maciekhetman.cubetimer.model.SessionKind
 

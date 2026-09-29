@@ -4,7 +4,6 @@ import com.maciekhetman.cubetimer.data.session.DeletedSessionSnapshot
 import com.maciekhetman.cubetimer.domain.HistoricalPbResult
 import com.maciekhetman.cubetimer.domain.TimeFormatter
 import com.maciekhetman.cubetimer.model.Mode
-import com.maciekhetman.cubetimer.model.Penalty
 import com.maciekhetman.cubetimer.model.Session
 import com.maciekhetman.cubetimer.model.SessionKind
 import com.maciekhetman.cubetimer.model.SolveTime

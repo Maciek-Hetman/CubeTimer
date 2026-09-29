@@ -6,16 +6,10 @@ import androidx.test.core.app.ApplicationProvider
 import com.maciekhetman.cubetimer.data.auth.AuthManager
 import com.maciekhetman.cubetimer.data.auth.TokenStorage
 import com.maciekhetman.cubetimer.data.local.CubeDatabase
-import com.maciekhetman.cubetimer.data.local.entity.SessionEntity
-import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
-import com.maciekhetman.cubetimer.data.local.entity.SyncOutboxEntity
-import com.maciekhetman.cubetimer.data.local.mapper.toSyncPayload
 import com.maciekhetman.cubetimer.data.remote.AuthInterceptor
 import com.maciekhetman.cubetimer.data.remote.CubeSyncApiClient
 import com.maciekhetman.cubetimer.data.remote.CubeSyncAuthApiService
 import com.maciekhetman.cubetimer.data.remote.NetworkModule
-import com.maciekhetman.cubetimer.data.remote.dto.SessionSyncPayload
-import com.maciekhetman.cubetimer.data.remote.dto.SolveSyncPayload
 import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.User
 import com.maciekhetman.cubetimer.model.UserRole
@@ -34,7 +28,6 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import java.util.UUID
 
 @RunWith(RobolectricTestRunner::class)
 class SyncContractMockWebServerTest {

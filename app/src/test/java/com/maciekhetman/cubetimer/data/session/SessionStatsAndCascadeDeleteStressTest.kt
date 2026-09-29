@@ -12,11 +12,7 @@ import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
 import com.maciekhetman.cubetimer.data.remote.NetworkModule
 import com.maciekhetman.cubetimer.data.remote.dto.SessionSyncPayload
 import com.maciekhetman.cubetimer.data.remote.dto.SolveSyncPayload
-import com.maciekhetman.cubetimer.data.local.mapper.toDomain
-import com.maciekhetman.cubetimer.data.local.mapper.toSolveTime
 import com.maciekhetman.cubetimer.model.Mode
-import com.maciekhetman.cubetimer.model.Penalty
-import com.maciekhetman.cubetimer.model.SolveTime
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -31,7 +27,6 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import java.util.UUID
 import kotlin.math.roundToInt
 import kotlin.random.Random
 import kotlin.system.measureTimeMillis
