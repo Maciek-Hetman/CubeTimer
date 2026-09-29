@@ -37,6 +37,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromJsonElement
 import java.io.IOException
@@ -56,7 +57,9 @@ class SyncEngineImpl(
     private val conflictDao: ConflictDao = database.conflictDao(),
     private val json: Json = NetworkModule.json,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-    private val defaultConflictPolicy: ConflictPolicy = ConflictPolicy.MANUAL_PROMPT
+    private val defaultConflictPolicy: ConflictPolicy = ConflictPolicy.MANUAL_PROMPT,
+    /** Upper bound on waiting for [AuthManager.awaitInitialized] before a sync gives up (retryably). */
+    private val authInitTimeoutMillis: Long = DEFAULT_AUTH_INIT_TIMEOUT_MILLIS
 ) : SyncEngine {
 
     private val syncMutex = Mutex()
@@ -79,7 +82,28 @@ class SyncEngineImpl(
     override suspend fun resolveConflictKeepLocal(conflictId: String): Boolean =
         conflictResolver.resolveKeepLocal(conflictId)
 
-    override suspend fun sync(ownerId: String?): SyncResult = withContext(ioDispatcher) {
+    override suspend fun sync(ownerId: String?): SyncResult {
+        // When WorkManager cold-starts the process to sync, the auth manager is only just restoring
+        // the session: authState is still Loading and the sync would quietly no-op. Leaving Loading
+        // isn't enough either - the cached identity is published before the startup refresh, and
+        // until that returns there is no access token, so our request would 401 and
+        // TokenAuthenticator would refresh with the same refresh token concurrently (tripping the
+        // server's reuse detection). So wait for initialization to finish - also for an explicit
+        // ownerId, which needs the same token; only an explicit guest never reaches the server.
+        // Bounded, and before syncMutex so a stuck wait can't hold up other syncs.
+        val explicitGuest = ownerId != null && (ownerId == "guest" || ownerId.isBlank())
+        if (!explicitGuest) {
+            val initialized = withTimeoutOrNull(authInitTimeoutMillis) { authManager.awaitInitialized() }
+            if (initialized == null) {
+                // Not NoOp: the worker must retry rather than report success with nothing uploaded.
+                stateManager.setOffline()
+                return SyncResult.Offline("Timed out waiting for the signed-in session to be restored")
+            }
+        }
+        return syncAfterAuthInitialized(ownerId)
+    }
+
+    private suspend fun syncAfterAuthInitialized(ownerId: String?): SyncResult = withContext(ioDispatcher) {
         val currentAuth = authManager.authState.value
         val resolvedOwnerId = ownerId ?: (currentAuth as? AuthState.Authenticated)?.user?.id
             ?: (currentAuth as? AuthState.Admin)?.user?.id
@@ -663,5 +687,12 @@ class SyncEngineImpl(
 
     private companion object {
         const val ZERO_UUID = "00000000-0000-0000-0000-000000000000"
+
+        /**
+         * The startup refresh is one request under OkHttp's 15 s connect and 15 s read timeouts: a
+         * refresh that times out ends in ~15 s, and even one slow in both phases fits. Anything
+         * longer ends the sync with a retryable [SyncResult.Offline].
+         */
+        const val DEFAULT_AUTH_INIT_TIMEOUT_MILLIS = 30_000L
     }
 }

@@ -14,8 +14,6 @@ import com.maciekhetman.cubetimer.data.remote.dto.LogoutRequest
 import com.maciekhetman.cubetimer.data.remote.dto.PasswordResetConfirmRequest
 import com.maciekhetman.cubetimer.data.remote.dto.PasswordResetRequest
 import com.maciekhetman.cubetimer.data.remote.dto.RegisterRequest
-import com.maciekhetman.cubetimer.data.remote.dto.SessionSyncPayload
-import com.maciekhetman.cubetimer.data.remote.dto.SolveSyncPayload
 import com.maciekhetman.cubetimer.data.remote.dto.VerifyEmailRequest
 import com.maciekhetman.cubetimer.data.remote.mapper.toDomain
 import com.maciekhetman.cubetimer.model.AuthException
@@ -30,11 +28,12 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import java.time.Instant
-import java.util.UUID
 
 class AuthManagerImpl(
     private val apiClient: CubeSyncApiClient,
@@ -53,15 +52,46 @@ class AuthManagerImpl(
     override val currentUser: User?
         get() = _authState.value.currentUser
 
+    /**
+     * Session-restore runs that were requested but haven't finished yet (see [awaitInitialized]).
+     * The automatic run is counted before it is launched, so there is no window in which a waiter
+     * could see zero while that run has yet to start.
+     */
+    private val pendingInitializations = MutableStateFlow(0)
+
     init {
         if (autoInitialize) {
+            pendingInitializations.update { it + 1 }
             authScope.launch {
-                initialize()
+                restoreSession()
+            }.invokeOnCompletion {
+                // Also runs if the launch is cancelled before it starts, so the count can't leak.
+                pendingInitializations.update { it - 1 }
             }
         }
     }
 
-    override suspend fun initialize() = withContext(ioDispatcher) {
+    override suspend fun initialize() {
+        pendingInitializations.update { it + 1 }
+        try {
+            restoreSession()
+        } finally {
+            pendingInitializations.update { it - 1 }
+        }
+    }
+
+    /**
+     * Returns once every requested [initialize] run - including the automatic one - has finished,
+     * i.e. after the startup refresh has succeeded, been rejected (Guest) or failed on the network
+     * (cached identity kept). With `autoInitialize = false` and no [initialize] call in flight it
+     * returns immediately, even while still [AuthState.Loading]: nothing is restoring a session,
+     * so there is nothing to wait for (and nothing that would ever end the wait).
+     */
+    override suspend fun awaitInitialized() {
+        pendingInitializations.first { it == 0 }
+    }
+
+    private suspend fun restoreSession() = withContext(ioDispatcher) {
         val refreshToken = tokenStorage.getRefreshToken()
         if (refreshToken.isNullOrBlank()) {
             _authState.value = AuthState.Guest
@@ -299,58 +329,22 @@ class AuthManagerImpl(
             solveDao.adoptGuestSolves(guestOwnerId = "guest", targetOwnerId = userId, updatedAt = nowIso)
             sessionDao.adoptGuestSessions(guestOwnerId = "guest", targetOwnerId = userId, updatedAt = nowIso)
 
+            // Mutations are built through the shared outbox mappers from each row as it is *after*
+            // step 1 (owner = userId, version reset to 0, updated_at = now), so the payloads carry
+            // exactly the DTO fields — notably the solve's real timing_device, which a hand-built
+            // SolveSyncPayload silently defaulted to "keyboard".
             val outboxMutations = mutableListOf<SyncOutboxEntity>()
 
             // 2. Enqueue session mutations first (satisfying FK constraints)
             for (session in guestSessions) {
-                val payload = SessionSyncPayload(
-                    id = session.id,
-                    name = session.name,
-                    event = session.event,
-                    kind = session.kind,
-                    startedAt = session.startedAt,
-                    endedAt = session.endedAt,
-                    archived = session.archived
-                )
-                outboxMutations.add(
-                    SyncOutboxEntity(
-                        id = UUID.randomUUID().toString(),
-                        ownerId = userId,
-                        entityType = "session",
-                        entityId = session.id,
-                        action = "upsert",
-                        baseVersion = 0L,
-                        payloadJson = json.encodeToString(SessionSyncPayload.serializer(), payload),
-                        clientTime = nowIso,
-                        status = "pending"
-                    )
-                )
+                outboxMutations += session.copy(ownerId = userId, version = 0L, updatedAt = nowIso)
+                    .toUpsertMutation(clientTime = nowIso, json = json)
             }
 
             // 3. Enqueue solve mutations
             for (solve in guestSolves) {
-                val payload = SolveSyncPayload(
-                    id = solve.id,
-                    sessionId = solve.sessionId,
-                    durationMs = solve.durationMs,
-                    penalty = solve.penalty,
-                    solvedAt = solve.solvedAt,
-                    scramble = solve.scramble,
-                    event = solve.event
-                )
-                outboxMutations.add(
-                    SyncOutboxEntity(
-                        id = UUID.randomUUID().toString(),
-                        ownerId = userId,
-                        entityType = "solve",
-                        entityId = solve.id,
-                        action = "upsert",
-                        baseVersion = 0L,
-                        payloadJson = json.encodeToString(SolveSyncPayload.serializer(), payload),
-                        clientTime = nowIso,
-                        status = "pending"
-                    )
-                )
+                outboxMutations += solve.copy(ownerId = userId, version = 0L, updatedAt = nowIso)
+                    .toUpsertMutation(clientTime = nowIso, json = json)
             }
 
             // 4. Batch enqueue into outbox

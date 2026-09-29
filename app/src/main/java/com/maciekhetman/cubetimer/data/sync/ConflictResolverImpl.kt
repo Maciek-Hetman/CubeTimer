@@ -110,12 +110,21 @@ class ConflictResolverImpl(
     }
 
     private suspend fun extractLocalTimestamp(conflict: ConflictEntity): Long {
-        if (conflict.entityType == "solve") {
-            val solve = solveDao.getSolveById(conflict.entityId)
-            if (solve != null) return CubeTypeConverters.isoToEpochMillis(solve.updatedAt)
-        } else if (conflict.entityType == "session") {
-            val session = sessionDao.getSessionById(conflict.entityId)
-            if (session != null) return CubeTypeConverters.isoToEpochMillis(session.updatedAt)
+        val row: Pair<Long, String>? = when (conflict.entityType) {
+            "solve" -> solveDao.getSolveById(conflict.entityId)?.let { it.version to it.updatedAt }
+            "session" -> sessionDao.getSessionById(conflict.entityId)?.let { it.version to it.updatedAt }
+            else -> null
+        }
+        if (row != null) {
+            val (rowVersion, rowUpdatedAt) = row
+            // The row's updated_at is a local edit time only while the row still holds a local
+            // edit: local edits never bump `version`, so that is while it sits below the conflict's
+            // server version, or when the user edited it again (a queued mutation). Once the sync
+            // engine has applied the server's copy over it (same response's `changes`), updated_at
+            // is the server's own timestamp and comparing it with the server's is meaningless.
+            val holdsLocalEdit = rowVersion < conflict.serverVersion ||
+                syncOutboxDao.countPendingForEntity(conflict.ownerId, conflict.entityType, conflict.entityId) > 0
+            if (holdsLocalEdit) return CubeTypeConverters.isoToEpochMillis(rowUpdatedAt)
         }
         return conflict.localPayloadJson?.let {
             try {
@@ -154,6 +163,14 @@ class ConflictResolverImpl(
         } ?: 0L
     }
 
+    /**
+     * Keep server: write the conflict's server snapshot over the local row - unless the row has
+     * already moved past it. The sync engine applies the same response's `changes` right after
+     * recording a conflict, so newer server versions of the entity can land on the row after the
+     * snapshot was taken; the cursor has passed them, so they would never come back if the stale
+     * snapshot overwrote them. In that case the row already holds the server's (newer) state and
+     * the conflict is simply marked resolved.
+     */
     private suspend fun applyServerWins(conflict: ConflictEntity): Boolean = database.withTransaction {
         val nowIso = CubeTypeConverters.nowIso()
         val serverUpdated = conflict.serverUpdatedAt ?: nowIso
@@ -166,8 +183,12 @@ class ConflictResolverImpl(
                     null
                 }
             }
+            val snapshotVersion = conflict.serverVersion.coerceAtLeast(dto?.version ?: 0L)
+            val localVersion = sessionDao.getSessionById(conflict.entityId)?.version
 
-            if (dto != null) {
+            if (localVersion != null && localVersion > snapshotVersion) {
+                // Row is newer than the snapshot: leave it alone.
+            } else if (dto != null) {
                 val entity = SessionEntity(
                     id = dto.id,
                     ownerId = conflict.ownerId,
@@ -201,8 +222,12 @@ class ConflictResolverImpl(
                     null
                 }
             }
+            val snapshotVersion = conflict.serverVersion.coerceAtLeast(dto?.version ?: 0L)
+            val localVersion = solveDao.getSolveById(conflict.entityId)?.version
 
-            if (dto != null) {
+            if (localVersion != null && localVersion > snapshotVersion) {
+                // Row is newer than the snapshot: leave it alone.
+            } else if (dto != null) {
                 val entity = SolveEntity(
                     id = dto.id,
                     ownerId = conflict.ownerId,
@@ -235,50 +260,221 @@ class ConflictResolverImpl(
         true
     }
 
+    /**
+     * Keep local: re-assert the user's version of the entity - the conflicting mutation's payload
+     * stored on the conflict ([ConflictEntity.localPayloadJson], what the conflict UI shows as
+     * "This device") - not the current Room row. The sync engine deletes the conflicting outbox
+     * mutation when it records the conflict and then applies the same response's `changes`, which
+     * usually carry the server's newer copy of this very entity; with nothing queued any more, that
+     * copy overwrites the row. Re-sending the row would therefore push the server's data back.
+     *
+     * The re-asserted version is written back to Room (so the UI shows what was kept) and queued as
+     * an upsert (or a delete, when the conflicting mutation was one - it has no payload) whose base
+     * version is the newest server version known locally: the conflict's, or a newer one that has
+     * since reached the row. The row's `version` is set to that same value.
+     *
+     * If the entity already has a queued mutation, the user edited it again after the conflicting
+     * edit (queued mutations older than it were settled with its outcome); that newer edit is
+     * what should win, so it is only rebased onto the newest known server version rather than
+     * clobbered with the older conflict payload.
+     *
+     * A payload that cannot be decoded falls back to re-sending the current row.
+     */
     private suspend fun applyLocalWins(conflict: ConflictEntity): Boolean = database.withTransaction {
         val nowIso = CubeTypeConverters.nowIso()
 
         if (conflict.entityType == "session") {
-            val localSession = sessionDao.getSessionById(conflict.entityId)
-            if (localSession != null && localSession.deletedAt == null) {
-                // baseVersion targets the server version recorded on the conflict (not the local
-                // row's own version) so the retried push lands against what the server last saw.
-                syncOutboxDao.enqueue(
-                    localSession.copy(version = conflict.serverVersion)
-                        .toUpsertMutation(ownerId = conflict.ownerId, clientTime = nowIso, json = json)
+            keepLocalSession(conflict, nowIso)
+        } else if (conflict.entityType == "solve") {
+            keepLocalSolve(conflict, nowIso)
+        }
+
+        conflictDao.resolveConflict(conflict.conflictId, nowIso)
+        true
+    }
+
+    private suspend fun keepLocalSession(conflict: ConflictEntity, nowIso: String) {
+        val localSession = sessionDao.getSessionById(conflict.entityId)
+        val knownServerVersion = conflict.serverVersion.coerceAtLeast(localSession?.version ?: 0L)
+
+        if (rebaseQueuedMutation(conflict, knownServerVersion)) {
+            if (localSession != null && localSession.version < knownServerVersion) {
+                sessionDao.update(localSession.copy(version = knownServerVersion))
+            }
+            return
+        }
+
+        val localPayloadJson = conflict.localPayloadJson
+        if (localPayloadJson == null) {
+            // The conflicting mutation was a delete: soft-delete locally and re-send it.
+            if (localSession != null) {
+                sessionDao.update(
+                    localSession.copy(
+                        version = knownServerVersion,
+                        deletedAt = localSession.deletedAt ?: nowIso,
+                        updatedAt = nowIso
+                    )
                 )
+            }
+            syncOutboxDao.enqueue(
+                sessionDeleteMutation(
+                    entityId = conflict.entityId,
+                    ownerId = conflict.ownerId,
+                    baseVersion = knownServerVersion,
+                    clientTime = nowIso
+                )
+            )
+            return
+        }
+
+        val payload = try {
+            json.decodeFromString<SessionSyncPayload>(localPayloadJson)
+        } catch (_: Exception) {
+            null
+        }
+        if (payload == null) {
+            // Undecodable payload: fall back to re-sending the current row.
+            if (localSession != null && localSession.deletedAt == null) {
+                val rebased = localSession.copy(version = knownServerVersion)
+                sessionDao.update(rebased)
+                syncOutboxDao.enqueue(rebased.toUpsertMutation(ownerId = conflict.ownerId, clientTime = nowIso, json = json))
             } else {
                 syncOutboxDao.enqueue(
                     sessionDeleteMutation(
                         entityId = conflict.entityId,
                         ownerId = conflict.ownerId,
-                        baseVersion = conflict.serverVersion,
+                        baseVersion = knownServerVersion,
                         clientTime = nowIso
                     )
                 )
             }
-        } else if (conflict.entityType == "solve") {
-            val localSolve = solveDao.getSolveById(conflict.entityId)
-            if (localSolve != null && localSolve.deletedAt == null) {
-                // baseVersion targets the server version recorded on the conflict (not the local
-                // row's own version) so the retried push lands against what the server last saw.
-                syncOutboxDao.enqueue(
-                    localSolve.copy(version = conflict.serverVersion)
-                        .toUpsertMutation(ownerId = conflict.ownerId, clientTime = nowIso, json = json)
+            return
+        }
+
+        val kept = SessionEntity(
+            id = conflict.entityId,
+            ownerId = conflict.ownerId,
+            name = payload.name,
+            event = payload.event,
+            kind = payload.kind,
+            startedAt = payload.startedAt,
+            endedAt = payload.endedAt,
+            archived = payload.archived,
+            version = knownServerVersion,
+            updatedAt = nowIso,
+            deletedAt = null
+        )
+        // upsert (UPDATE in place), never a REPLACE: deleting the session row would fire the
+        // solves.session_id ON DELETE SET NULL and detach every solve in it.
+        sessionDao.upsert(kept)
+        syncOutboxDao.enqueue(kept.toUpsertMutation(ownerId = conflict.ownerId, clientTime = nowIso, json = json))
+    }
+
+    private suspend fun keepLocalSolve(conflict: ConflictEntity, nowIso: String) {
+        val localSolve = solveDao.getSolveById(conflict.entityId)
+        val knownServerVersion = conflict.serverVersion.coerceAtLeast(localSolve?.version ?: 0L)
+
+        if (rebaseQueuedMutation(conflict, knownServerVersion)) {
+            if (localSolve != null && localSolve.version < knownServerVersion) {
+                solveDao.update(localSolve.copy(version = knownServerVersion))
+            }
+            return
+        }
+
+        val localPayloadJson = conflict.localPayloadJson
+        if (localPayloadJson == null) {
+            // The conflicting mutation was a delete: soft-delete locally and re-send it.
+            if (localSolve != null) {
+                solveDao.update(
+                    localSolve.copy(
+                        version = knownServerVersion,
+                        deletedAt = localSolve.deletedAt ?: nowIso,
+                        updatedAt = nowIso
+                    )
                 )
+            }
+            syncOutboxDao.enqueue(
+                solveDeleteMutation(
+                    entityId = conflict.entityId,
+                    ownerId = conflict.ownerId,
+                    baseVersion = knownServerVersion,
+                    clientTime = nowIso
+                )
+            )
+            return
+        }
+
+        val payload = try {
+            json.decodeFromString<SolveSyncPayload>(localPayloadJson)
+        } catch (_: Exception) {
+            null
+        }
+        if (payload == null) {
+            // Undecodable payload: fall back to re-sending the current row.
+            if (localSolve != null && localSolve.deletedAt == null) {
+                val rebased = localSolve.copy(version = knownServerVersion)
+                solveDao.update(rebased)
+                syncOutboxDao.enqueue(rebased.toUpsertMutation(ownerId = conflict.ownerId, clientTime = nowIso, json = json))
             } else {
                 syncOutboxDao.enqueue(
                     solveDeleteMutation(
                         entityId = conflict.entityId,
                         ownerId = conflict.ownerId,
-                        baseVersion = conflict.serverVersion,
+                        baseVersion = knownServerVersion,
                         clientTime = nowIso
                     )
                 )
             }
+            return
         }
 
-        conflictDao.resolveConflict(conflict.conflictId, nowIso)
-        true
+        val kept = SolveEntity(
+            id = conflict.entityId,
+            ownerId = conflict.ownerId,
+            sessionId = keptSolveSessionId(payload.sessionId, localSolve),
+            event = payload.event,
+            durationMs = payload.durationMs,
+            penalty = payload.penalty,
+            solvedAt = payload.solvedAt,
+            scramble = payload.scramble,
+            version = knownServerVersion,
+            updatedAt = nowIso,
+            deletedAt = null,
+            timingDevice = payload.timingDevice
+        )
+        solveDao.upsert(kept)
+        // Built from the row just written, so the pushed session_id always matches Room's.
+        syncOutboxDao.enqueue(kept.toUpsertMutation(ownerId = conflict.ownerId, clientTime = nowIso, json = json))
+    }
+
+    /**
+     * The session a kept solve is written to. `solves.session_id` is a DEFERRED foreign key, so a
+     * payload naming a session that no longer exists locally (e.g. hard-deleted since) would not
+     * fail on the write but on commit, aborting the whole resolution. Such a payload keeps the
+     * session the row currently references (it committed, so it exists), or none. A soft-deleted
+     * session still exists as a row and is kept as is.
+     */
+    private suspend fun keptSolveSessionId(payloadSessionId: String?, localSolve: SolveEntity?): String? {
+        if (payloadSessionId == null || sessionDao.getSessionById(payloadSessionId) != null) {
+            return payloadSessionId
+        }
+        return localSolve?.sessionId?.takeIf { sessionDao.getSessionById(it) != null }
+    }
+
+    /**
+     * If the entity already has a queued mutation (a newer local edit), rebases the newest one onto
+     * [knownServerVersion] - the sync engine sends only the newest per entity, with the highest base
+     * version of the group - and returns true. Returns false when nothing is queued.
+     */
+    private suspend fun rebaseQueuedMutation(conflict: ConflictEntity, knownServerVersion: Long): Boolean {
+        val queued = syncOutboxDao.getPendingMutationForEntity(
+            ownerId = conflict.ownerId,
+            entityType = conflict.entityType,
+            entityId = conflict.entityId
+        ) ?: return false
+        if (queued.baseVersion < knownServerVersion) {
+            syncOutboxDao.update(queued.copy(baseVersion = knownServerVersion))
+        }
+        return true
     }
 }
