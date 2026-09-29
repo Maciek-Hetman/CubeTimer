@@ -36,16 +36,23 @@ object QiyiTimerProtocol {
         return crc
     }
 
-    internal fun encryptBlock(block: IntArray): IntArray = aes(Cipher.ENCRYPT_MODE, block)
+    internal fun encryptBlock(block: IntArray): IntArray = encryptBlocks(listOf(block)).single()
 
-    internal fun decryptBlock(block: IntArray): IntArray = aes(Cipher.DECRYPT_MODE, block)
+    internal fun decryptBlock(block: IntArray): IntArray = decryptBlocks(listOf(block)).single()
 
-    private fun aes(mode: Int, block: IntArray): IntArray {
-        require(block.size == 16) { "AES block must be 16 bytes" }
+    /** Encrypts every 16-byte block with a single [Cipher], instead of building one per block. */
+    internal fun encryptBlocks(blocks: List<IntArray>): List<IntArray> = aes(Cipher.ENCRYPT_MODE, blocks)
+
+    internal fun decryptBlocks(blocks: List<IntArray>): List<IntArray> = aes(Cipher.DECRYPT_MODE, blocks)
+
+    private fun aes(mode: Int, blocks: List<IntArray>): List<IntArray> {
+        require(blocks.all { it.size == 16 }) { "AES block must be 16 bytes" }
         val cipher = Cipher.getInstance("AES/ECB/NoPadding")
         cipher.init(mode, SecretKeySpec(KEY, "AES"))
-        val out = cipher.doFinal(ByteArray(16) { block[it].toByte() })
-        return IntArray(16) { out[it].toInt() and 0xFF }
+        return blocks.map { block ->
+            val out = cipher.doFinal(ByteArray(16) { block[it].toByte() })
+            IntArray(16) { out[it].toInt() and 0xFF }
+        }
     }
 
     /** Builds the encrypted BLE packets (at most 20 bytes each) for one message. */
@@ -58,10 +65,11 @@ object QiyiTimerProtocol {
         val crc = crc16modbus(msg.toIntArray())
         msg += listOf((crc shr 8) and 0xFF, crc and 0xFF)
 
-        return (msg.indices step 16).map { start ->
-            val block = IntArray(16) { i -> msg.getOrElse(start + i) { 1 } }
+        val starts = (msg.indices step 16).toList()
+        val encrypted = encryptBlocks(starts.map { start -> IntArray(16) { i -> msg.getOrElse(start + i) { 1 } } })
+        return starts.mapIndexed { index, start ->
             val header = if (start == 0) listOf(0x00, msg.size + 2, 0x40, 0x00) else listOf(start shr 4)
-            (header + encryptBlock(block).toList()).map { it.toByte() }.toByteArray()
+            (header + encrypted[index].toList()).map { it.toByte() }.toByteArray()
         }
     }
 
@@ -174,13 +182,12 @@ class QiyiPacketDecoder {
         } else {
             body = packet.drop(1).map { it.toInt() and 0xFF }
         }
-        for (start in body.indices step 16) {
-            if (start + 16 > body.size) {
-                reset()
-                return null
-            }
-            buffer += QiyiTimerProtocol.decryptBlock(body.subList(start, start + 16).toIntArray()).toList()
+        if (body.size % 16 != 0) {
+            reset()
+            return null
         }
+        val blocks = (body.indices step 16).map { start -> body.subList(start, start + 16).toIntArray() }
+        QiyiTimerProtocol.decryptBlocks(blocks).forEach { buffer += it.toList() }
         if (buffer.size < messageLength) {
             expectedPacket++
             return null
