@@ -3,40 +3,26 @@ package com.maciekhetman.cubetimer.data.remote
 import android.util.Log
 import com.maciekhetman.cubetimer.data.auth.SessionExpirationListener
 import com.maciekhetman.cubetimer.data.auth.TokenStorage
-import com.maciekhetman.cubetimer.data.remote.dto.AuthResponse
-import com.maciekhetman.cubetimer.data.remote.dto.RefreshRequest
 import kotlinx.serialization.json.Json
 import okhttp3.Authenticator
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.Route
-import java.io.IOException
-import java.util.concurrent.TimeUnit
 
 /**
  * OkHttp Authenticator that transparently refreshes expired access tokens upon HTTP 401 Unauthorized.
- * Uses mutex synchronization and double-checked token validation to prevent thundering herd race conditions.
+ *
+ * The refresh itself is delegated to a [TokenRefresher], which is shared with the startup session
+ * restore so that only one caller at a time ever spends the refresh token; a 401 that loses that
+ * race is retried with the token the winner obtained.
  */
 class TokenAuthenticator(
-    private val tokenStorage: TokenStorage,
-    private val baseUrl: String,
-    private val json: Json = Json { ignoreUnknownKeys = true; isLenient = true; encodeDefaults = true },
-    var sessionExpirationListener: SessionExpirationListener? = null
+    tokenStorage: TokenStorage,
+    baseUrl: String,
+    json: Json = Json { ignoreUnknownKeys = true; isLenient = true; encodeDefaults = true },
+    var sessionExpirationListener: SessionExpirationListener? = null,
+    private val tokenRefresher: TokenRefresher = TokenRefresher(tokenStorage, baseUrl, json)
 ) : Authenticator {
-
-    private val refreshLock = Any()
-
-    // Isolated unauthenticated OkHttpClient for synchronous token refresh calls
-    private val refreshClient: OkHttpClient by lazy {
-        OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(15, TimeUnit.SECONDS)
-            .writeTimeout(15, TimeUnit.SECONDS)
-            .build()
-    }
 
     override fun authenticate(route: Route?, response: Response): Request? {
         // 1. Guard against infinite retry loops
@@ -55,113 +41,49 @@ class TokenAuthenticator(
         val failedAuthorization = response.request.header(AuthInterceptor.HEADER_AUTHORIZATION)
         val failedToken = failedAuthorization?.removePrefix("Bearer ")?.trim()
 
-        // 3. Synchronize refresh to prevent thundering herd and token family invalidation
-        synchronized(refreshLock) {
-            val currentAccessToken = tokenStorage.getAccessToken()
-
-            // Double-checked locking: If another thread already refreshed the token, reuse it
-            if (!currentAccessToken.isNullOrBlank() && currentAccessToken != failedToken) {
+        // 3. Refresh through the shared, serialized path (see TokenRefresher).
+        return when (val result = tokenRefresher.refresh(staleAccessToken = failedToken)) {
+            is RefreshResult.AlreadyRefreshed -> {
                 Log.d(TAG, "Token was refreshed by a concurrent request. Retrying failed call with new token.")
-                return response.request.newBuilder()
-                    .header(AuthInterceptor.HEADER_AUTHORIZATION, "Bearer $currentAccessToken")
-                    .build()
+                retryWith(response, result.accessToken)
             }
-
-            // Retrieve persistent refresh token
-            val storedRefreshToken = tokenStorage.getRefreshToken()
-            if (storedRefreshToken.isNullOrBlank()) {
-                Log.w(TAG, "No refresh token available in storage. Purging auth data.")
-                tokenStorage.clearAuthData()
+            is RefreshResult.Refreshed -> {
+                Log.i(TAG, "Token refresh succeeded. Retrying original request.")
+                retryWith(response, result.session.accessToken)
+            }
+            is RefreshResult.NoRefreshToken -> {
+                Log.w(TAG, "No refresh token available in storage. Purged auth data.")
                 sessionExpirationListener?.onSessionExpired()
-                return null
+                null
             }
-
-            // Execute synchronous refresh request against POST /v1/auth/refresh
-            return try {
-                val refreshResult = performTokenRefresh(storedRefreshToken)
-                when (refreshResult) {
-                    is RefreshResult.Success -> {
-                        val session = refreshResult.session
-                        tokenStorage.saveAuthSession(
-                            accessToken = session.accessToken,
-                            refreshToken = session.refreshToken,
-                            userId = session.user.id,
-                            userEmail = session.user.email,
-                            userRole = session.user.userRole,
-                            emailVerified = session.user.emailVerified,
-                            displayName = session.user.displayName
-                        )
-                        Log.i(TAG, "Token refresh succeeded. Retrying original request.")
-                        response.request.newBuilder()
-                            .header(AuthInterceptor.HEADER_AUTHORIZATION, "Bearer ${session.accessToken}")
-                            .build()
-                    }
-                    is RefreshResult.ExpiredOrInvalid -> {
-                        Log.w(TAG, "Refresh token rejected by server (HTTP ${refreshResult.statusCode}). Clearing session.")
-                        tokenStorage.clearAuthData()
-                        sessionExpirationListener?.onSessionExpired()
-                        null
-                    }
-                    is RefreshResult.NetworkError -> {
-                        Log.e(TAG, "Network error during token refresh. Not clearing tokens.", refreshResult.exception)
-                        null
-                    }
-                    is RefreshResult.Transient -> {
-                        Log.w(
-                            TAG,
-                            "Transient server error (HTTP ${refreshResult.statusCode}) during token refresh. " +
-                                "Preserving session for retry."
-                        )
-                        null
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Unexpected error during token refresh.", e)
+            is RefreshResult.Rejected -> {
+                Log.w(TAG, "Refresh token rejected by server (HTTP ${result.statusCode}). Cleared session.")
+                sessionExpirationListener?.onSessionExpired()
+                null
+            }
+            is RefreshResult.NetworkError -> {
+                Log.e(TAG, "Network error during token refresh. Not clearing tokens.", result.exception)
+                null
+            }
+            is RefreshResult.Transient -> {
+                Log.w(
+                    TAG,
+                    "Transient server error (HTTP ${result.statusCode}) during token refresh. " +
+                        "Preserving session for retry."
+                )
+                null
+            }
+            is RefreshResult.Failed -> {
+                Log.e(TAG, "Unexpected error during token refresh.", result.cause)
                 null
             }
         }
     }
 
-    private fun performTokenRefresh(refreshToken: String): RefreshResult {
-        val refreshUrl = baseUrl.trimEnd('/') + "/v1/auth/refresh"
-        val requestBodyJson = json.encodeToString(RefreshRequest.serializer(), RefreshRequest(refreshToken))
-        val body = requestBodyJson.toRequestBody("application/json; charset=utf-8".toMediaType())
-
-        val request = Request.Builder()
-            .url(refreshUrl)
-            .post(body)
-            .header(AuthInterceptor.HEADER_DEVICE_ID, tokenStorage.getDeviceId())
-            .header(AuthInterceptor.HEADER_SYNC_PROTOCOL, AuthInterceptor.SYNC_PROTOCOL_VERSION)
-            .header(AuthInterceptor.HEADER_CONTENT_TYPE, AuthInterceptor.CONTENT_TYPE_JSON)
+    private fun retryWith(response: Response, accessToken: String): Request =
+        response.request.newBuilder()
+            .header(AuthInterceptor.HEADER_AUTHORIZATION, "Bearer $accessToken")
             .build()
-
-        return try {
-            val rawResponse = refreshClient.newCall(request).execute()
-            rawResponse.use { resp ->
-                val responseBody = resp.body?.string().orEmpty()
-                when (resp.code) {
-                    200 -> {
-                        val authSession = json.decodeFromString(AuthResponse.serializer(), responseBody)
-                        RefreshResult.Success(authSession)
-                    }
-                    // Definitive auth failures per the CubeSync refresh contract: the refresh
-                    // token is genuinely invalid, revoked, or reused. Only these should clear
-                    // stored credentials and force a logout.
-                    400, 401, 403, 409 -> {
-                        RefreshResult.ExpiredOrInvalid(resp.code, responseBody)
-                    }
-                    // Any other status (5xx, 429, unexpected codes) is a transient server-side
-                    // condition, not proof the refresh token is invalid. Keep the session so the
-                    // next request can retry instead of forcing an unnecessary logout.
-                    else -> {
-                        RefreshResult.Transient(resp.code, responseBody)
-                    }
-                }
-            }
-        } catch (e: IOException) {
-            RefreshResult.NetworkError(e)
-        }
-    }
 
     private fun isAuthEndpoint(path: String): Boolean {
         return path.endsWith("/v1/auth/refresh") ||
@@ -187,14 +109,5 @@ class TokenAuthenticator(
     companion object {
         private const val TAG = "TokenAuthenticator"
         private const val MAX_RETRIES = 3
-    }
-
-    private sealed interface RefreshResult {
-        data class Success(val session: AuthResponse) : RefreshResult
-        data class ExpiredOrInvalid(val statusCode: Int, val body: String) : RefreshResult
-        data class NetworkError(val exception: IOException) : RefreshResult
-
-        /** Transient server-side failure (5xx, 429, unexpected code): keep the session. */
-        data class Transient(val statusCode: Int, val body: String) : RefreshResult
     }
 }

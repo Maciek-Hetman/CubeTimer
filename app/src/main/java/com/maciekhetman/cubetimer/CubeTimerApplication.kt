@@ -20,6 +20,7 @@ import com.maciekhetman.cubetimer.data.remote.CubeSyncApiClient
 import com.maciekhetman.cubetimer.data.remote.CubeSyncAuthApiService
 import com.maciekhetman.cubetimer.data.remote.NetworkModule
 import com.maciekhetman.cubetimer.data.remote.TokenAuthenticator
+import com.maciekhetman.cubetimer.data.remote.TokenRefresher
 import com.maciekhetman.cubetimer.data.session.SessionManager
 import com.maciekhetman.cubetimer.data.session.SessionManagerImpl
 import com.maciekhetman.cubetimer.data.session.SessionRepository
@@ -56,8 +57,16 @@ class CubeTimerApplication : Application(), Configuration.Provider {
         AuthInterceptor(tokenStorage)
     }
 
+    /**
+     * The single path through which the refresh token is spent; shared by [tokenAuthenticator]
+     * (401s) and [authManager] (startup restore) so they can never refresh concurrently.
+     */
+    val tokenRefresher: TokenRefresher by lazy {
+        TokenRefresher(tokenStorage, baseUrl = BASE_URL)
+    }
+
     val tokenAuthenticator: TokenAuthenticator by lazy {
-        TokenAuthenticator(tokenStorage, baseUrl = BASE_URL)
+        TokenAuthenticator(tokenStorage, baseUrl = BASE_URL, tokenRefresher = tokenRefresher)
     }
 
     val apiService: CubeSyncAuthApiService by lazy {
@@ -87,7 +96,8 @@ class CubeTimerApplication : Application(), Configuration.Provider {
             apiClient = apiClient,
             tokenStorage = tokenStorage,
             database = database,
-            syncTrigger = { scheduleImmediateSyncIfAuthenticated() }
+            syncTrigger = { scheduleImmediateSyncIfAuthenticated() },
+            tokenRefresher = tokenRefresher
         ).also {
             tokenAuthenticator.sessionExpirationListener = it
         }
