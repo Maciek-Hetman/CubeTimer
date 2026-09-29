@@ -121,6 +121,9 @@ and an open automatic session is reused only if the gap since the last solve is 
 automatic only: the app never creates, selects, renames or archives manual sessions. `kind = "manual"` still
 exists because the backend syncs it (other clients, older builds); such sessions are listed in History but
 never become the active session. CSV import recreates missing sessions as closed automatic sessions.
+`DataStoreMigration` does the same for legacy DataStore solves, and on every start attaches any non-deleted
+*guest* solve left without a session (older builds imported them session-less, which hid them from History);
+signed-in owners' session-less solves are left alone, as the server accepts them.
 
 ### UI
 - Navigation is **not** `NavHost`-based (there is no navigation-compose dependency): `MainActivity` keeps a
