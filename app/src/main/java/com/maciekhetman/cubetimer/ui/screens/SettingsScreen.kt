@@ -83,11 +83,11 @@ fun SettingsScreen(
     viewModel: TimerViewModel,
     currentMode: Mode,
     onModeSelected: (Mode) -> Unit,
+    modifier: Modifier = Modifier,
     syncUiState: SyncUiState = SyncUiState(),
     onSyncClick: () -> Unit = {},
     authState: AuthState = AuthState.Guest,
     onAuthClick: () -> Unit = {},
-    modifier: Modifier = Modifier,
 ) {
     val dynamicColorEnabled by viewModel.dynamicColorEnabled.collectAsStateWithLifecycle()
     val defaultMode by viewModel.defaultMode.collectAsStateWithLifecycle()

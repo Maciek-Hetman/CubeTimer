@@ -139,7 +139,7 @@ class TokenAuthenticatorStressTest {
 
                 val resp = okHttpClient.newCall(req).execute()
                 val code = resp.code
-                val body = resp.body?.string()
+                val body = resp.body.string()
                 resp.close()
                 Pair(code, body)
             }

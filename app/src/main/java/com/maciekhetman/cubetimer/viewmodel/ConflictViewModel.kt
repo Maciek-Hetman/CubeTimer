@@ -45,8 +45,8 @@ class ConflictViewModel(
     constructor(application: Application) : this(
         application = application,
         syncEngine = (application as CubeTimerApplication).syncEngine,
-        authManager = (application as CubeTimerApplication).authManager,
-        onResolved = { (application as CubeTimerApplication).syncStateManager.triggerSync() }
+        authManager = application.authManager,
+        onResolved = { application.syncStateManager.triggerSync() }
     )
 
     val conflicts: StateFlow<List<ConflictUiModel>> = authManager.authState

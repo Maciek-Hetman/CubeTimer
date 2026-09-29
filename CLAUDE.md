@@ -26,6 +26,9 @@ never send fields it doesn't declare). Supports GAN and QiYi Bluetooth timers.
 ```
 
 Toolchain: JDK 21 (Kotlin `jvmToolchain(21)`), AGP 9.x, compileSdk/targetSdk 37, minSdk 24.
+AGP's built-in Kotlin brings an older KGP; the `kotlin` version in `libs.versions.toml` (compose/serialization
+plugins) is what actually pins the compiler. `java.time` is used everywhere, so core library desugaring is on —
+don't drop it while minSdk < 26 (lint's `NewApi` fails the build without it).
 Unit tests get a 2 GB heap (configured in `app/build.gradle.kts`) — the suite is large and Robolectric-heavy,
 so a full run takes several minutes.
 

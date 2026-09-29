@@ -10,6 +10,7 @@ import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
+import android.bluetooth.BluetoothStatusCodes
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
@@ -241,6 +242,8 @@ class AndroidBluetoothTimerManager(
                 if (!ready) fail("Couldn't connect to $deviceName")
             }
             gatt = try {
+                // The BluetoothGattConnectionSettings overload that replaces this is API 37+ only.
+                @Suppress("DEPRECATION")
                 device.connectGatt(appContext, false, callback, BluetoothDevice.TRANSPORT_LE)
             } catch (e: SecurityException) {
                 null
@@ -289,7 +292,7 @@ class AndroidBluetoothTimerManager(
                 val op = CompletableDeferred<Boolean>()
                 pendingOp = op
                 val started = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    gatt.writeCharacteristic(characteristic, packet, writeType) == BluetoothGatt.GATT_SUCCESS
+                    gatt.writeCharacteristic(characteristic, packet, writeType) == BluetoothStatusCodes.SUCCESS
                 } else {
                     @Suppress("DEPRECATION")
                     characteristic.writeType = writeType
@@ -327,7 +330,7 @@ class AndroidBluetoothTimerManager(
                 val op = CompletableDeferred<Boolean>()
                 pendingOp = op
                 val started = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    gatt.writeDescriptor(descriptor, value) == BluetoothGatt.GATT_SUCCESS
+                    gatt.writeDescriptor(descriptor, value) == BluetoothStatusCodes.SUCCESS
                 } else {
                     @Suppress("DEPRECATION")
                     descriptor.value = value

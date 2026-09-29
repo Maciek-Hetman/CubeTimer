@@ -116,8 +116,8 @@ fun HistoryScreen(
     viewModel: HistoryViewModel,
     currentMode: Mode,
     onModeSelected: (Mode) -> Unit,
-    onSolveClick: (SolveTime, Int) -> Unit = { _, _ -> },
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onSolveClick: (SolveTime, Int) -> Unit = { _, _ -> }
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
@@ -535,14 +535,14 @@ private fun ConfirmDeleteDialog(
 internal fun HistorySolveCard(
     solve: SolveTime,
     solveNumber: Int,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit = {},
     onDelete: () -> Unit,
     onTogglePlusTwo: () -> Unit,
     onToggleDnf: () -> Unit,
     isSelected: Boolean = false,
     isSelectionMode: Boolean = false,
-    onLongClick: () -> Unit = {},
-    modifier: Modifier = Modifier
+    onLongClick: () -> Unit = {}
 ) {
     // Selected rows round out, a small shape morph on top of the color change.
     val corner by animateDpAsState(

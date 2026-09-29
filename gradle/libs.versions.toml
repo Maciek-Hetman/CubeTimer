@@ -1,29 +1,31 @@
 [versions]
 agp = "9.4.1"
-coreKtx = "1.19.0"
+coreKtx = "1.19.1"
 junit = "4.13.2"
 lifecycleRuntimeKtx = "2.11.0"
 activityCompose = "1.13.0"
-kotlin = "2.2.10"
-composeBom = "2026.08.00"
+kotlin = "2.4.20"
+composeBom = "2026.09.00"
 datastorePreferences = "1.2.1"
 tnoodle = "0.19.2"
 ksp = "2.3.11"
-room = "2.8.4"
+room = "2.8.5"
 kotlinxSerialization = "1.11.0"
 securityCrypto = "1.1.0"
-workmanager = "2.11.2"
-robolectric = "4.16.1"
+workmanager = "2.12.0"
+robolectric = "4.17"
 mockwebserver = "5.5.0"
 okhttp = "5.5.0"
-retrofit = "2.12.0"
+retrofit = "3.0.0"
 coroutinesTest = "1.11.0"
 turbine = "1.2.1"
 testCoreKtx = "1.7.0"
+desugarJdkLibs = "2.1.5"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
+desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugarJdkLibs" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }

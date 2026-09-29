@@ -82,9 +82,9 @@ fun CollapsingTopBar(
     currentMode: Mode,
     onModeSelected: (Mode) -> Unit,
     scrollBehavior: TopAppBarScrollBehavior,
+    modifier: Modifier = Modifier,
     titleBadgeText: String? = null,
-    extraActions: @Composable RowScope.() -> Unit = {},
-    modifier: Modifier = Modifier
+    extraActions: @Composable RowScope.() -> Unit = {}
 ) {
     MediumTopAppBar(
         title = {

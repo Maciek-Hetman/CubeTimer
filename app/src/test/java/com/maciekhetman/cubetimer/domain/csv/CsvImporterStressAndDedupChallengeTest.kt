@@ -420,14 +420,14 @@ class CsvImporterStressAndDedupChallengeTest {
         assertEquals("upsert", sess1.action)
         assertEquals(0L, sess1.baseVersion)
         assertTrue(sess1.payloadJson!!.contains("\"name\":\"Auth Alpha\""))
-        assertTrue(sess1.payloadJson!!.contains("\"kind\":\"automatic\""))
+        assertTrue(sess1.payloadJson.contains("\"kind\":\"automatic\""))
 
         // Verify solve payloads
         val solve2 = solveMutations.find { it.entityId == "solve-auth-2" }!!
         assertEquals("upsert", solve2.action)
         assertEquals(0L, solve2.baseVersion)
         assertTrue(solve2.payloadJson!!.contains("\"duration_ms\":14560"))
-        assertTrue(solve2.payloadJson!!.contains("\"penalty\":\"plus_two\""))
+        assertTrue(solve2.payloadJson.contains("\"penalty\":\"plus_two\""))
 
         // Verify no outbox generated for pre-existing sessions on subsequent imports
         val csv2 = """

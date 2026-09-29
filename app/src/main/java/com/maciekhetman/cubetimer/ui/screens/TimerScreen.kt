@@ -362,11 +362,11 @@ private fun TimerContent(
     viewModel: TimerViewModel,
     runningTimerDisplay: RunningTimerDisplay,
     focusModeActive: Boolean,
+    modifier: Modifier = Modifier,
     hideStartHint: Boolean = false,
     bluetoothMode: Boolean = false,
     bluetoothConnected: Boolean = false,
-    onConnectBluetoothTimer: () -> Unit = {},
-    modifier: Modifier = Modifier
+    onConnectBluetoothTimer: () -> Unit = {}
 ) {
     // Reading the fast-changing TimerState here (via `by`) is intentional and safe: this is the small
     // leaf composable that is meant to recompose on every tick, isolated from the rest of TimerScreen.
@@ -754,8 +754,8 @@ private fun ScrambleDisplay(
     onRefresh: () -> Unit,
     showRefreshButton: Boolean,
     scale: Float,
-    enabled: Boolean = true,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
 ) {
     var showPreviewDialog by remember { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
