@@ -4,10 +4,7 @@ import com.maciekhetman.cubetimer.data.local.converter.CubeTypeConverters
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Penalty
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Test
-import java.time.Instant
 
 class CubeTypeConvertersTest {
 
@@ -47,15 +44,20 @@ class CubeTypeConvertersTest {
     }
 
     @Test
-    fun testInstantConverters() {
-        val now = Instant.now()
-        val str = CubeTypeConverters.instantToString(now)
-        assertNotNull(str)
-        val parsed = CubeTypeConverters.stringToInstant(str)
-        assertEquals(now, parsed)
+    fun eventForRewrite_keepsAnEventThisAppHasNoModeFor() {
+        // toMode("skewb") is the 3x3 fallback, so a domain model round-tripped through it must not
+        // overwrite the stored string.
+        assertEquals(Mode.CUBE_3x3, CubeTypeConverters.toMode("skewb"))
+        assertEquals("skewb", CubeTypeConverters.eventForRewrite("skewb", Mode.CUBE_3x3))
+        assertEquals("clock", CubeTypeConverters.eventForRewrite("clock", Mode.CUBE_3x3))
+    }
 
-        assertNull(CubeTypeConverters.instantToString(null))
-        assertNull(CubeTypeConverters.stringToInstant(null))
-        assertNull(CubeTypeConverters.stringToInstant("invalid-timestamp"))
+    @Test
+    fun eventForRewrite_usesTheModeForKnownEventsAndExplicitChanges() {
+        assertEquals("3x3", CubeTypeConverters.eventForRewrite("3x3", Mode.CUBE_3x3))
+        assertEquals("3x3", CubeTypeConverters.eventForRewrite("cube_3x3", Mode.CUBE_3x3))
+        assertEquals("pyraminx", CubeTypeConverters.eventForRewrite("pyraminx", Mode.PYRAMINX))
+        // The caller picked another mode on purpose: that wins over whatever was stored.
+        assertEquals("4x4", CubeTypeConverters.eventForRewrite("skewb", Mode.CUBE_4x4))
     }
 }

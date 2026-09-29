@@ -88,12 +88,11 @@ interface SessionDao {
     suspend fun getOpenAutomaticSession(ownerId: String, event: String): SessionEntity?
 
     @Query("""
-        SELECT * FROM sessions 
-        WHERE owner_id = :ownerId AND event = :event AND deleted_at IS NULL AND archived = 0 
-        ORDER BY started_at DESC 
-        LIMIT 1
+        SELECT * FROM sessions
+        WHERE owner_id = :ownerId AND event = :event AND deleted_at IS NULL AND archived = 0
+        ORDER BY started_at DESC
     """)
-    suspend fun getMostRecentActiveSession(ownerId: String, event: String): SessionEntity?
+    suspend fun getActiveSessionsByEvent(ownerId: String, event: String): List<SessionEntity>
 
     @Query("""
         SELECT name FROM sessions 
@@ -133,20 +132,6 @@ interface SessionDao {
         WHERE id = :id AND ended_at IS NULL
     """)
     suspend fun closeSession(id: String, endedAt: String, updatedAt: String): Int
-
-    @Query("""
-        UPDATE sessions 
-        SET name = :newName, updated_at = :updatedAt 
-        WHERE id = :id
-    """)
-    suspend fun renameSession(id: String, newName: String, updatedAt: String): Int
-
-    @Query("""
-        UPDATE sessions 
-        SET archived = :archived, updated_at = :updatedAt 
-        WHERE id = :id
-    """)
-    suspend fun setArchived(id: String, archived: Boolean, updatedAt: String): Int
 
     @Query("UPDATE sessions SET deleted_at = :deletedAt, updated_at = :updatedAt WHERE id = :id")
     suspend fun softDelete(id: String, deletedAt: String, updatedAt: String): Int

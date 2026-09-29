@@ -106,16 +106,9 @@ interface SyncOutboxDao {
     @Query("UPDATE sync_outbox SET status = 'pending' WHERE owner_id = :ownerId AND status = 'in_flight'")
     suspend fun resetAllInFlight(ownerId: String): Int
 
-    @Query("""
-        UPDATE sync_outbox 
-        SET status = 'failed', attempt_count = attempt_count + 1, last_attempt_at = :attemptAt, last_error = :error 
-        WHERE id = :id
-    """)
-    suspend fun markFailed(id: String, error: String?, attemptAt: Long): Int
-
     /**
-     * [markFailed] for many rows in one statement. At most [MAX_IN_LIST_SIZE] ids per call; use
-     * [markAllFailedChunked] for arbitrary lists.
+     * Marks the rows `failed` (retried on the next sync), counting the attempt. At most
+     * [MAX_IN_LIST_SIZE] ids per call; use [markAllFailedChunked] for arbitrary lists.
      */
     @Query("""
         UPDATE sync_outbox

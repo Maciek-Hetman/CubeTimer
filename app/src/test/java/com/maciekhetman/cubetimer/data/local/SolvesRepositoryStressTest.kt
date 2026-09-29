@@ -51,6 +51,8 @@ class SolvesRepositoryStressTest {
         database.close()
     }
 
+    private suspend fun saveAll(solves: List<SolveTime>) = solves.forEach { repository.saveSolve(it) }
+
     @Test
     fun testRapidPenaltyTransitions() = runTest {
         val solve = SolveTime(
@@ -74,11 +76,11 @@ class SolvesRepositoryStressTest {
 
         for (p in penalties) {
             repository.updateSolvePenalty(solve, p)
-            val current = repository.solvesFlow.first().first()
+            val current = repository.getAllSolvesFlow().first().first()
             assertEquals(p, current.penalty)
         }
 
-        val finalSolve = repository.solvesFlow.first().first()
+        val finalSolve = repository.getAllSolvesFlow().first().first()
         assertEquals(Penalty.PLUS_TWO, finalSolve.penalty)
         assertEquals(12000L, finalSolve.displayTime)
     }
@@ -94,7 +96,7 @@ class SolvesRepositoryStressTest {
                 mode = Mode.CUBE_3x3
             )
         }
-        repository.saveSolves(solves)
+        saveAll(solves)
 
         // Launch concurrent penalty updates
         val jobs = solves.mapIndexed { idx, s ->
@@ -105,7 +107,7 @@ class SolvesRepositoryStressTest {
         }
         jobs.awaitAll()
 
-        val updatedSolves = repository.solvesFlow.first()
+        val updatedSolves = repository.getAllSolvesFlow().first()
         assertEquals(count, updatedSolves.size)
         for (i in 1..count) {
             val s = updatedSolves.find { it.id == "concurrent-solve-$i" }
@@ -124,8 +126,8 @@ class SolvesRepositoryStressTest {
                 mode = Mode.CUBE_3x3
             )
         }
-        repository.saveSolves(solves)
-        assertEquals(10, repository.solvesFlow.first().size)
+        saveAll(solves)
+        assertEquals(10, repository.getAllSolvesFlow().first().size)
 
         // Soft delete 4 solves
         val toDelete = solves.take(4)
@@ -134,7 +136,7 @@ class SolvesRepositoryStressTest {
         }
 
         // Active flow should only see 6 solves
-        val activeSolves = repository.solvesFlow.first()
+        val activeSolves = repository.getAllSolvesFlow().first()
         assertEquals(6, activeSolves.size)
         for (s in toDelete) {
             assertTrue(activeSolves.none { it.id == s.id })
@@ -156,57 +158,7 @@ class SolvesRepositoryStressTest {
         val ghostSolve = SolveTime(id = "ghost-solve-id", timeInMillis = 5000L)
         // Should execute cleanly without error
         repository.deleteSolve(ghostSolve)
-        assertEquals(0, repository.solvesFlow.first().size)
-    }
-
-    @Test
-    fun testHighVolumeBulkSaveAndDeltaSync() = runTest {
-        val count = 200
-        val initialSolves = (1..count).map { idx ->
-            SolveTime(
-                id = "bulk-$idx",
-                timeInMillis = 10000L + idx,
-                mode = Mode.CUBE_3x3
-            )
-        }
-
-        repository.saveSolves(initialSolves)
-        assertEquals(count, repository.solvesFlow.first().size)
-
-        // Delta: keep 1..100, remove 101..200, add 201..250
-        val nextSolves = (1..100).map { idx ->
-            SolveTime(
-                id = "bulk-$idx",
-                timeInMillis = 20000L + idx, // updated duration
-                mode = Mode.CUBE_3x3
-            )
-        } + (201..250).map { idx ->
-            SolveTime(
-                id = "bulk-$idx",
-                timeInMillis = 10000L + idx,
-                mode = Mode.CUBE_3x3
-            )
-        }
-
-        repository.saveSolves(nextSolves)
-
-        val activeSolves = repository.solvesFlow.first()
-        assertEquals(150, activeSolves.size)
-
-        // Check modified solve duration updated
-        val solve1 = activeSolves.find { it.id == "bulk-1" }
-        assertEquals(20001L, solve1?.timeInMillis)
-
-        // Check new solve exists
-        val solve201 = activeSolves.find { it.id == "bulk-201" }
-        assertNotNull(solve201)
-
-        // Check total raw rows in DB (200 initial + 50 new = 250 total rows)
-        val allDbSolves = database.solveDao().getAllSolvesForOwner("guest")
-        assertEquals(250, allDbSolves.size)
-
-        val softDeleted = allDbSolves.filter { it.deletedAt != null }
-        assertEquals(100, softDeleted.size) // 101..200 soft deleted
+        assertEquals(0, repository.getAllSolvesFlow().first().size)
     }
 
     @Test
@@ -218,12 +170,12 @@ class SolvesRepositoryStressTest {
                 mode = Mode.CUBE_3x3
             )
         }
-        repository.saveSolves(solves)
-        assertEquals(5, repository.solvesFlow.first().size)
+        saveAll(solves)
+        assertEquals(5, repository.getAllSolvesFlow().first().size)
 
         // User clears solves (e.g. bulk clear)
         repository.clearAllSolves("guest")
-        assertEquals(0, repository.solvesFlow.first().size)
+        assertEquals(0, repository.getAllSolvesFlow().first().size)
 
         // Verify they are marked soft-deleted
         val dbDeleted = database.solveDao().getAllSolvesForOwner("guest")
@@ -234,7 +186,7 @@ class SolvesRepositoryStressTest {
         repository.restoreSolves(solves, "guest")
 
         // Solves should immediately be active again
-        val restored = repository.solvesFlow.first()
+        val restored = repository.getAllSolvesFlow().first()
         assertEquals(5, restored.size)
 
         val dbRestored = database.solveDao().getAllSolvesForOwner("guest")
@@ -263,10 +215,10 @@ class SolvesRepositoryStressTest {
         repository.saveSolve(sPyra_1, ownerId = "guest", sessionId = "sess-a")
 
         // Mode filtered queries
-        assertEquals(2, repository.getSolvesFlow(Mode.CUBE_3x3).first().size)
-        assertEquals(1, repository.getSolvesFlow(Mode.CUBE_2x2).first().size)
-        assertEquals(1, repository.getSolvesFlow(Mode.PYRAMINX).first().size)
-        assertEquals(0, repository.getSolvesFlow(Mode.CUBE_4x4).first().size)
+        assertEquals(2, repository.getSolvesPagedByEvent(Mode.CUBE_3x3).size)
+        assertEquals(1, repository.getSolvesPagedByEvent(Mode.CUBE_2x2).size)
+        assertEquals(1, repository.getSolvesPagedByEvent(Mode.PYRAMINX).size)
+        assertEquals(0, repository.getSolvesPagedByEvent(Mode.CUBE_4x4).size)
 
         // Session filtered queries
         assertEquals(3, repository.getSolvesBySessionFlow("sess-a").first().size)

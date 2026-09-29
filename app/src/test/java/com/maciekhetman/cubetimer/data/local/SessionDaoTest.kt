@@ -79,33 +79,43 @@ class SessionDaoTest {
     }
 
     @Test
-    fun testRenameAndArchiveSession() = runTest {
-        val session = SessionEntity(
-            id = "sess-rename",
-            ownerId = "guest",
-            name = "Original Name",
-            event = "3x3",
+    fun testActiveSessionsByEventExcludeArchivedDeletedAndOtherScopes() = runTest {
+        fun session(
+            id: String,
+            startedAt: String = "2026-08-30T08:00:00.000Z",
+            ownerId: String = "guest",
+            event: String = "3x3",
+            archived: Boolean = false,
+            deletedAt: String? = null
+        ) = SessionEntity(
+            id = id,
+            ownerId = ownerId,
+            name = id,
+            event = event,
             kind = "manual",
-            startedAt = "2026-08-30T08:00:00.000Z"
+            startedAt = startedAt,
+            archived = archived,
+            deletedAt = deletedAt
         )
-        sessionDao.insert(session)
+        sessionDao.insertAll(
+            listOf(
+                session("older", startedAt = "2026-08-30T08:00:00.000Z"),
+                session("newer", startedAt = "2026-08-30T09:00:00.000Z"),
+                session("archived", archived = true),
+                session("deleted", deletedAt = "2026-08-30T10:00:00.000Z"),
+                session("other-event", event = "2x2"),
+                session("other-owner", ownerId = "user-1")
+            )
+        )
 
-        sessionDao.renameSession("sess-rename", "Updated Name", "2026-08-30T08:30:00.000Z")
-        var retrieved = sessionDao.getSessionById("sess-rename")
-        assertEquals("Updated Name", retrieved?.name)
-
-        sessionDao.setArchived("sess-rename", true, "2026-08-30T09:00:00.000Z")
-        retrieved = sessionDao.getSessionById("sess-rename")
-        assertTrue(retrieved?.archived == true)
-
-        val activeSessions = sessionDao.getAllActiveSessionsForOwner("guest")
-        // Archived session is not filtered out from getAllActiveSessionsForOwner (which only filters deleted_at),
-        // but observeActiveSessionsByEvent should filter it.
+        assertEquals(listOf("newer", "older"), sessionDao.getActiveSessionsByEvent("guest", "3x3").map { it.id })
         sessionDao.observeActiveSessionsByEvent("guest", "3x3").test {
-            val list = awaitItem()
-            assertEquals(0, list.size)
+            assertEquals(listOf("newer", "older"), awaitItem().map { it.id })
             cancelAndIgnoreRemainingEvents()
         }
+
+        // getAllActiveSessionsForOwner only filters deleted_at, so the archived session still counts there.
+        assertTrue(sessionDao.getAllActiveSessionsForOwner("guest").any { it.id == "archived" })
     }
 
     @Test

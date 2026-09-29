@@ -332,9 +332,7 @@ class RoomPersistenceStressTest {
         assertEquals(100, outboxDao.getPendingMutations("sync-user").size)
 
         // Mark failed with error
-        remainingIds.forEach { id ->
-            outboxDao.markFailed(id, "500 Server Error", nowMillis)
-        }
+        outboxDao.markAllFailed(remainingIds, "500 Server Error", nowMillis)
         val allOutbox = outboxDao.getAllPendingForOwner("sync-user")
         assertEquals(200, allOutbox.size)
         val failed = allOutbox.filter { it.status == "failed" }

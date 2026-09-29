@@ -6,7 +6,6 @@ import com.maciekhetman.cubetimer.model.Penalty
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
-import java.time.format.DateTimeParseException
 
 class CubeTypeConverters {
 
@@ -25,7 +24,10 @@ class CubeTypeConverters {
     }
 
     @TypeConverter
-    fun toMode(value: String?): Mode {
+    fun toMode(value: String?): Mode = parseMode(value) ?: Mode.CUBE_3x3
+
+    /** The [Mode] named by [value], or null for an event this app has no [Mode] for (e.g. "skewb"). */
+    private fun parseMode(value: String?): Mode? {
         return when (value?.lowercase()?.trim()) {
             "2x2", "cube_2x2" -> Mode.CUBE_2x2
             "3x3", "cube_3x3" -> Mode.CUBE_3x3
@@ -33,9 +35,18 @@ class CubeTypeConverters {
             "5x5", "cube_5x5" -> Mode.CUBE_5x5
             "megaminx" -> Mode.MEGAMINX
             "pyraminx" -> Mode.PYRAMINX
-            else -> Mode.CUBE_3x3
+            else -> null
         }
     }
+
+    /**
+     * The event string to store when a domain model carrying [mode] is written back over a row that
+     * currently stores [storedEvent]. [toMode] turns an event this app doesn't know into 3x3, so
+     * that fallback must not overwrite the stored string: it would corrupt the row for the client
+     * that created it, and be uploaded.
+     */
+    fun eventForRewrite(storedEvent: String, mode: Mode): String =
+        if (mode == Mode.CUBE_3x3 && parseMode(storedEvent) == null) storedEvent else fromMode(mode)
 
     // --- Penalty Converters ---
     @TypeConverter
@@ -58,29 +69,7 @@ class CubeTypeConverters {
         }
     }
 
-    // --- Timestamp Helpers (RFC 3339 / ISO 8601 UTC) ---
-    @TypeConverter
-    fun instantToString(instant: Instant?): String? {
-        return instant?.toString()
-    }
-
-    @TypeConverter
-    fun stringToInstant(value: String?): Instant? {
-        return value?.let {
-            try {
-                Instant.parse(it)
-            } catch (e: DateTimeParseException) {
-                null
-            } catch (e: Exception) {
-                null
-            }
-        }
-    }
-
     companion object {
-        /** Duration added to a solve's raw time when it carries a "+2" penalty. */
-        const val PLUS_TWO_PENALTY_MS: Long = 2000L
-
         // Single shared instance backing the static helpers below so they don't allocate a new
         // CubeTypeConverters() on every call (these are invoked per-row from the mappers).
         private val instance = CubeTypeConverters()
@@ -120,7 +109,6 @@ class CubeTypeConverters {
         fun toMode(value: String?): Mode = instance.toMode(value)
         fun fromPenalty(penalty: Penalty?): String = instance.fromPenalty(penalty)
         fun toPenalty(value: String?): Penalty = instance.toPenalty(value)
-        fun instantToString(instant: Instant?): String? = instance.instantToString(instant)
-        fun stringToInstant(value: String?): Instant? = instance.stringToInstant(value)
+        fun eventForRewrite(storedEvent: String, mode: Mode): String = instance.eventForRewrite(storedEvent, mode)
     }
 }

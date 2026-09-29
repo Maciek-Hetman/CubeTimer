@@ -132,24 +132,6 @@ interface SolveDao {
         excludeSolveId: String? = null
     ): Long?
 
-    @Query("""
-        SELECT * FROM solves 
-        WHERE owner_id = :ownerId 
-          AND event = :event 
-          AND (:excludeSolveId IS NULL OR id != :excludeSolveId)
-          AND solved_at < :solvedAt 
-          AND deleted_at IS NULL 
-          AND penalty != 'dnf'
-        ORDER BY (CASE WHEN penalty = 'plus_two' THEN duration_ms + 2000 ELSE duration_ms END) ASC 
-        LIMIT 1
-    """)
-    suspend fun getPriorBestSolve(
-        ownerId: String,
-        event: String,
-        solvedAt: String,
-        excludeSolveId: String? = null
-    ): SolveEntity?
-
     // --- One-Shot Queries ---
 
     @Query("SELECT id FROM solves WHERE id IN (:ids)")
@@ -241,9 +223,6 @@ interface SolveDao {
 
     @Query("DELETE FROM solves WHERE id = :id")
     suspend fun deleteById(id: String): Int
-
-    @Query("DELETE FROM solves WHERE owner_id = :ownerId")
-    suspend fun deleteSolvesForOwner(ownerId: String): Int
 
     // --- Guest Adoption & Bulk Updates ---
 

@@ -53,8 +53,3 @@ data class SyncOutboxEntity(
     @ColumnInfo(name = "last_error")
     val lastError: String? = null
 )
-
-val SyncOutboxEntity.entity: String get() = entityType
-val SyncOutboxEntity.operation: String get() = action
-val SyncOutboxEntity.createdAt: String get() = clientTime
-val SyncOutboxEntity.mutationId: String get() = id

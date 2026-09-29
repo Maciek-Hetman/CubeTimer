@@ -59,14 +59,6 @@ object AutomaticSessionHelper {
     }
 
     /**
-     * Backward-compatible alias for generateBaseSessionName.
-     */
-    fun generateBaseSessionName(
-        instant: Instant = Instant.now(),
-        zoneId: ZoneId = ZoneId.systemDefault()
-    ): String = automaticSessionName(instant, zoneId)
-
-    /**
      * Disambiguates duplicate automatic session names by appending " 2", " 3", etc.
      */
     fun uniqueAutomaticSessionName(

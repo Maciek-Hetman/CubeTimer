@@ -86,7 +86,7 @@ class SyncOutboxDaoTest {
         assertEquals(0, pending.size)
 
         // Mark failed
-        syncOutboxDao.markFailed("mut-flight", "HTTP 500 Internal Error", attemptAt = 1725000001000L)
+        syncOutboxDao.markAllFailed(listOf("mut-flight"), "HTTP 500 Internal Error", attemptAt = 1725000001000L)
         val failed = syncOutboxDao.getMutationById("mut-flight")
         assertNotNull(failed)
         assertEquals("failed", failed?.status)

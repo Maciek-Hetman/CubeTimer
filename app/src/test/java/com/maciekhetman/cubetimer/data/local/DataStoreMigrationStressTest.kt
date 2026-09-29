@@ -47,6 +47,11 @@ class DataStoreMigrationStressTest {
         database.close()
     }
 
+    private suspend fun deleteAllGuestSolves() {
+        val solveDao = database.solveDao()
+        solveDao.getAllSolvesForOwner("guest").forEach { solveDao.deleteById(it.id) }
+    }
+
     @Test
     fun testEmptyAndNullDataStoreVariations() = runTest {
         val variations = listOf(
@@ -63,7 +68,7 @@ class DataStoreMigrationStressTest {
             context.solvesDataStore.edit { preferences ->
                 preferences[SOLVES_LIST_KEY] = variant
             }
-            database.solveDao().deleteSolvesForOwner("guest")
+            deleteAllGuestSolves()
 
             migration.migrateIfNeeded()
 
@@ -91,7 +96,7 @@ class DataStoreMigrationStressTest {
             context.solvesDataStore.edit { preferences ->
                 preferences[SOLVES_LIST_KEY] = payload
             }
-            database.solveDao().deleteSolvesForOwner("guest")
+            deleteAllGuestSolves()
 
             migration.migrateIfNeeded()
 

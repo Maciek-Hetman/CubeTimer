@@ -165,6 +165,33 @@ class SessionRepositoryTest {
     }
 
     @Test
+    fun testGetActiveSessionsExcludesArchivedDeletedAndOtherModeOrOwner() = runTest {
+        fun session(id: String, ownerId: String = "user-abc", event: Mode = Mode.CUBE_3x3, archived: Boolean = false) = Session(
+            id = id,
+            ownerId = ownerId,
+            name = id,
+            event = event,
+            kind = SessionKind.MANUAL,
+            startedAt = Instant.now().toString(),
+            archived = archived
+        )
+        listOf(
+            session("active-a"),
+            session("active-b"),
+            session("archived", archived = true),
+            session("deleted"),
+            session("other-mode", event = Mode.CUBE_2x2),
+            session("other-owner", ownerId = "user-other")
+        ).forEach { repository.createSession(it) }
+        repository.deleteSession("deleted", "user-abc")
+
+        val active = repository.getActiveSessions("user-abc", Mode.CUBE_3x3)
+
+        assertEquals(setOf("active-a", "active-b"), active.map { it.id }.toSet())
+        assertEquals(2, active.size)
+    }
+
+    @Test
     fun testGetSessionNamesWithPrefix() = runTest {
         repository.createSession(Session(name = "30 aug 2026 morning", event = Mode.CUBE_3x3, startedAt = Instant.now().toString()))
         repository.createSession(Session(name = "30 aug 2026 morning 2", event = Mode.CUBE_3x3, startedAt = Instant.now().toString()))
