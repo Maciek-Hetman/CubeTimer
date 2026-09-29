@@ -6,12 +6,13 @@ import com.maciekhetman.cubetimer.data.local.converter.CubeTypeConverters
 import com.maciekhetman.cubetimer.data.local.dao.SessionDao
 import com.maciekhetman.cubetimer.data.local.dao.SolveDao
 import com.maciekhetman.cubetimer.data.local.dao.SyncOutboxDao
+import com.maciekhetman.cubetimer.data.local.dao.getSolvesByIdsChunked
 import com.maciekhetman.cubetimer.data.local.entity.SessionEntity
 import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
 import com.maciekhetman.cubetimer.data.local.mapper.toUpsertMutation
 import com.maciekhetman.cubetimer.data.remote.NetworkModule
-import com.maciekhetman.cubetimer.model.Penalty
 import com.maciekhetman.cubetimer.model.SessionKind
+import com.maciekhetman.cubetimer.model.TimingDevice
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -20,7 +21,6 @@ import kotlinx.serialization.json.Json
 import java.io.InputStream
 import java.io.InputStreamReader
 import java.nio.charset.StandardCharsets
-import java.time.Instant
 import java.util.UUID
 
 class CsvImporter(
@@ -64,11 +64,7 @@ class CsvImporter(
                 } else {
                     // Tolerant fallback: Check if firstRecord itself is the header row
                     val candidateCols = firstRecord.map { it.trim().lowercase() }.toSet()
-                    val requiredCols = listOf(
-                        "solve_id", "session_id", "session_name", "puzzle",
-                        "timestamp", "time", "penalty", "scramble"
-                    )
-                    if (requiredCols.all { it in candidateCols }) {
+                    if (CsvFormat.REQUIRED_COLUMNS.all { it in candidateCols }) {
                         firstRecord
                     } else {
                         return@withContext CsvImportStatus.InvalidFile("File missing required '# Source: CubeTimer' comment header.")
@@ -76,24 +72,21 @@ class CsvImporter(
                 }
 
                 val colMap = headerRecord.mapIndexed { idx, name -> name.trim().lowercase() to idx }.toMap()
-                val requiredCols = listOf(
-                    "solve_id", "session_id", "session_name", "puzzle",
-                    "timestamp", "time", "penalty", "scramble"
-                )
-                val missingCols = requiredCols.filter { it !in colMap }
+                val missingCols = CsvFormat.REQUIRED_COLUMNS.filter { it !in colMap }
                 if (missingCols.isNotEmpty()) {
                     return@withContext CsvImportStatus.InvalidFile("Missing required column(s): ${missingCols.joinToString()}")
                 }
 
                 // Indices
-                val solveIdIdx = colMap["solve_id"]!!
-                val sessionIdIdx = colMap["session_id"]!!
-                val sessionNameIdx = colMap["session_name"]!!
-                val puzzleIdx = colMap["puzzle"]!!
-                val timestampIdx = colMap["timestamp"]!!
-                val timeIdx = colMap["time"]!!
-                val penaltyIdx = colMap["penalty"]!!
-                val scrambleIdx = colMap["scramble"]!!
+                val solveIdIdx = colMap.getValue("solve_id")
+                val sessionIdIdx = colMap.getValue("session_id")
+                val sessionNameIdx = colMap.getValue("session_name")
+                val puzzleIdx = colMap.getValue("puzzle")
+                val timestampIdx = colMap.getValue("timestamp")
+                val timeIdx = colMap.getValue("time")
+                val penaltyIdx = colMap.getValue("penalty")
+                val scrambleIdx = colMap.getValue("scramble")
+                val timingDeviceIdx = colMap[CsvFormat.TIMING_DEVICE_COLUMN]
 
                 val maxIdx = maxOf(
                     solveIdIdx, sessionIdIdx, sessionNameIdx, puzzleIdx,
@@ -117,14 +110,15 @@ class CsvImporter(
                         continue
                     }
 
-                    val rawSolveId = row[solveIdIdx].trim()
-                    val rawSessionId = row[sessionIdIdx].trim()
-                    val sessionName = row[sessionNameIdx].trim()
+                    val rawSolveId = CsvFormat.unescapeFormula(row[solveIdIdx].trim())
+                    val rawSessionId = CsvFormat.unescapeFormula(row[sessionIdIdx].trim())
+                    val sessionName = CsvFormat.unescapeFormula(row[sessionNameIdx].trim())
                     val rawPuzzle = row[puzzleIdx].trim()
                     val rawTimestamp = row[timestampIdx].trim()
                     val rawTime = row[timeIdx].trim()
                     val rawPenalty = row[penaltyIdx].trim()
-                    val scramble = row[scrambleIdx]
+                    val scramble = CsvFormat.unescapeFormula(row[scrambleIdx])
+                    val timingDevice = timingDeviceIdx?.let { row.getOrNull(it) }?.let { TimingDevice.fromString(it) }
 
                     val timestamp = rawTimestamp.toLongOrNull()
                     val time = rawTime.toLongOrNull()
@@ -151,7 +145,8 @@ class CsvImporter(
                             timestamp = timestamp,
                             time = time,
                             penalty = penalty,
-                            scramble = scramble
+                            scramble = scramble,
+                            timingDevice = timingDevice
                         )
                     )
                 }
@@ -165,113 +160,147 @@ class CsvImporter(
                     )
                 }
 
-                // 4. Check DB Duplicates (chunked by 500)
-                val candidateSolveIds = validRecords.map { it.solveId }
-                val existingDbSolveIds = mutableSetOf<String>()
-                candidateSolveIds.chunked(500).forEach { chunk ->
-                    val existing = solveDao.getExistingSolveIds(chunk)
-                    existingDbSolveIds.addAll(existing)
-                }
-
-                val solvesToInsert = validRecords.filter { it.solveId !in existingDbSolveIds }
-                val dbDuplicates = validRecords.size - solvesToInsert.size
-                duplicateCount += dbDuplicates
-
-                if (solvesToInsert.isEmpty()) {
-                    return@withContext CsvImportStatus.Success(
-                        importedCount = 0,
-                        duplicateCount = duplicateCount,
-                        malformedCount = malformedCount,
-                        sessionsCreatedCount = 0
-                    )
-                }
-
-                // 5. Check & Auto-Recreate Missing Sessions (chunked by 500)
-                val referencedSessionIds = solvesToInsert.map { it.sessionId }.distinct()
-                val existingDbSessionIds = mutableSetOf<String>()
-                referencedSessionIds.chunked(500).forEach { chunk ->
-                    val existing = sessionDao.getSessionsByIds(chunk)
-                    existingDbSessionIds.addAll(existing.map { it.id })
-                }
-
-                val missingSessionIds = referencedSessionIds.filter { it !in existingDbSessionIds }
-                val nowIso = CubeTypeConverters.nowIso()
-
-                // Grouped once up front; filtering the whole import per missing session was
-                // O(sessions x solves).
-                val solvesBySessionId = solvesToInsert.groupBy { it.sessionId }
-                val sessionsToCreate = missingSessionIds.map { sId ->
-                    val sessionSolves = solvesBySessionId.getValue(sId)
-                    val firstSolve = sessionSolves.first()
-                    val minTimestamp = sessionSolves.minOf { it.timestamp }
-                    val maxTimestamp = sessionSolves.maxOf { it.timestamp }
-
-                    SessionEntity(
-                        id = sId,
-                        ownerId = ownerId,
-                        name = firstSolve.sessionName.ifBlank { "Imported Session" },
-                        event = CubeTypeConverters.fromMode(firstSolve.puzzle),
-                        // Imported sessions are closed (ended_at = last solve), so the automatic
-                        // session policy never picks one up as the open session to append to.
-                        kind = SessionKind.AUTOMATIC.value,
-                        startedAt = CubeTypeConverters.epochMillisToIso(minTimestamp),
-                        endedAt = CubeTypeConverters.epochMillisToIso(maxTimestamp),
-                        archived = false,
-                        version = 0L,
-                        updatedAt = nowIso,
-                        deletedAt = null
-                    )
-                }
-
-                val solveEntitiesToInsert = solvesToInsert.map { record ->
-                    val iso = CubeTypeConverters.epochMillisToIso(record.timestamp)
-                    val penaltyStr = when (record.penalty) {
-                        Penalty.NONE -> "none"
-                        Penalty.PLUS_TWO -> "plus_two"
-                        Penalty.DNF -> "dnf"
-                    }
-                    SolveEntity(
-                        id = record.solveId,
-                        ownerId = ownerId,
-                        sessionId = record.sessionId,
-                        event = CubeTypeConverters.fromMode(record.puzzle),
-                        durationMs = record.time,
-                        penalty = penaltyStr,
-                        solvedAt = iso,
-                        scramble = record.scramble,
-                        version = 0L,
-                        updatedAt = iso,
-                        deletedAt = null
-                    )
-                }
-
-                // 6. Transactional Write to Room & Sync Outbox
-                database.withTransaction {
-                    if (sessionsToCreate.isNotEmpty()) {
-                        sessionDao.insertAll(sessionsToCreate)
-                        if (ownerId != "guest") {
-                            syncOutboxDao.enqueueAll(
-                                sessionsToCreate.map { it.toUpsertMutation(ownerId = ownerId, clientTime = nowIso, json = json) }
-                            )
+                // 4-6. Reconcile with the database and write, all in one transaction: the restored rows
+                // are copies of what was read, so a sync landing between a read and the write would
+                // otherwise be overwritten with the old row and its outbox mutation would carry a stale
+                // base version.
+                val status = database.withTransaction {
+                    // 4. Reconcile with existing solves (chunked by 500). solves.id is the table's only
+                    // primary key, so an id held by another owner can be neither inserted (REPLACE would
+                    // overwrite that account's row) nor restored: it counts as a duplicate. A live row of
+                    // this owner is a duplicate too; a soft-deleted row of this owner is brought back.
+                    val existingById = solveDao.getSolvesByIdsChunked(validRecords.map { it.solveId }).associateBy { it.id }
+                    val solvesToInsert = mutableListOf<CsvSolveRecord>()
+                    val solvesToRestore = mutableListOf<Pair<CsvSolveRecord, SolveEntity>>()
+                    for (record in validRecords) {
+                        val existing = existingById[record.solveId]
+                        when {
+                            existing == null -> solvesToInsert += record
+                            existing.ownerId == ownerId && existing.deletedAt != null -> solvesToRestore += record to existing
+                            else -> duplicateCount++
                         }
                     }
 
-                    solveDao.insertAll(solveEntitiesToInsert)
-                    if (ownerId != "guest") {
-                        syncOutboxDao.enqueueAll(
-                            solveEntitiesToInsert.map { it.toUpsertMutation(ownerId = ownerId, clientTime = nowIso, json = json) }
+                    if (solvesToInsert.isEmpty() && solvesToRestore.isEmpty()) {
+                        return@withTransaction CsvImportStatus.Success(
+                            importedCount = 0,
+                            duplicateCount = duplicateCount,
+                            malformedCount = malformedCount,
+                            sessionsCreatedCount = 0
                         )
                     }
+
+                    // 5. Check & Auto-Recreate Missing Sessions (chunked by 500). A session of this owner
+                    // that was soft-deleted is restored, so imported solves don't land in a session
+                    // History hides.
+                    val importedRecords = solvesToInsert + solvesToRestore.map { it.first }
+                    val referencedSessionIds = importedRecords.map { it.sessionId }.distinct()
+                    val existingSessionsById = mutableMapOf<String, SessionEntity>()
+                    referencedSessionIds.chunked(500).forEach { chunk ->
+                        sessionDao.getSessionsByIds(chunk).forEach { existingSessionsById[it.id] = it }
+                    }
+
+                    val missingSessionIds = referencedSessionIds.filter { it !in existingSessionsById }
+                    val nowIso = CubeTypeConverters.nowIso()
+
+                    // Grouped once up front; filtering the whole import per missing session was
+                    // O(sessions x solves).
+                    val solvesBySessionId = importedRecords.groupBy { it.sessionId }
+                    val sessionsToCreate = missingSessionIds.map { sId ->
+                        val sessionSolves = solvesBySessionId.getValue(sId)
+                        val firstSolve = sessionSolves.first()
+                        val minTimestamp = sessionSolves.minOf { it.timestamp }
+                        val maxTimestamp = sessionSolves.maxOf { it.timestamp }
+
+                        SessionEntity(
+                            id = sId,
+                            ownerId = ownerId,
+                            name = firstSolve.sessionName.ifBlank { "Imported Session" },
+                            event = CubeTypeConverters.fromMode(firstSolve.puzzle),
+                            // Imported sessions are closed (ended_at = last solve), so the automatic
+                            // session policy never picks one up as the open session to append to.
+                            kind = SessionKind.AUTOMATIC.value,
+                            startedAt = CubeTypeConverters.epochMillisToIso(minTimestamp),
+                            endedAt = CubeTypeConverters.epochMillisToIso(maxTimestamp),
+                            archived = false,
+                            version = 0L,
+                            updatedAt = nowIso,
+                            deletedAt = null
+                        )
+                    }
+                    val sessionsToRestore = existingSessionsById.values
+                        .filter { it.ownerId == ownerId && it.deletedAt != null }
+                        .map { it.copy(deletedAt = null, updatedAt = nowIso) }
+
+                    val solveEntitiesToInsert = solvesToInsert.map { record ->
+                        SolveEntity(
+                            id = record.solveId,
+                            ownerId = ownerId,
+                            sessionId = record.sessionId,
+                            event = CubeTypeConverters.fromMode(record.puzzle),
+                            durationMs = record.time,
+                            penalty = CubeTypeConverters.fromPenalty(record.penalty),
+                            solvedAt = CubeTypeConverters.epochMillisToIso(record.timestamp),
+                            scramble = record.scramble,
+                            version = 0L,
+                            updatedAt = CubeTypeConverters.epochMillisToIso(record.timestamp),
+                            deletedAt = null,
+                            timingDevice = (record.timingDevice ?: TimingDevice.KEYBOARD).value
+                        )
+                    }
+                    // The server version is kept, so sync doesn't send a stale base version for a row it knows.
+                    val solveEntitiesToRestore = solvesToRestore.map { (record, existing) ->
+                        existing.copy(
+                            sessionId = record.sessionId,
+                            event = CubeTypeConverters.fromMode(record.puzzle),
+                            durationMs = record.time,
+                            penalty = CubeTypeConverters.fromPenalty(record.penalty),
+                            solvedAt = CubeTypeConverters.epochMillisToIso(record.timestamp),
+                            scramble = record.scramble,
+                            timingDevice = record.timingDevice?.value ?: existing.timingDevice,
+                            deletedAt = null,
+                            updatedAt = nowIso
+                        )
+                    }
+
+                    // 6. Write to Room & Sync Outbox
+                    if (sessionsToCreate.isNotEmpty()) {
+                        sessionDao.insertAll(sessionsToCreate)
+                    }
+                    if (sessionsToRestore.isNotEmpty()) {
+                        sessionDao.upsertAll(sessionsToRestore)
+                    }
+                    if (ownerId != "guest") {
+                        val sessionMutations = (sessionsToCreate + sessionsToRestore)
+                            .map { it.toUpsertMutation(ownerId = ownerId, clientTime = nowIso, json = json) }
+                        if (sessionMutations.isNotEmpty()) syncOutboxDao.enqueueAll(sessionMutations)
+                    }
+
+                    if (solveEntitiesToInsert.isNotEmpty()) {
+                        solveDao.insertAll(solveEntitiesToInsert)
+                    }
+                    if (solveEntitiesToRestore.isNotEmpty()) {
+                        solveDao.upsertAll(solveEntitiesToRestore)
+                    }
+                    if (ownerId != "guest") {
+                        syncOutboxDao.enqueueAll(
+                            (solveEntitiesToInsert + solveEntitiesToRestore)
+                                .map { it.toUpsertMutation(ownerId = ownerId, clientTime = nowIso, json = json) }
+                        )
+                    }
+
+                    CsvImportStatus.Success(
+                        importedCount = solveEntitiesToInsert.size + solveEntitiesToRestore.size,
+                        duplicateCount = duplicateCount,
+                        malformedCount = malformedCount,
+                        sessionsCreatedCount = sessionsToCreate.size
+                    )
                 }
 
-                syncTrigger?.invoke()
-
-                CsvImportStatus.Success(
-                    importedCount = solveEntitiesToInsert.size,
-                    duplicateCount = duplicateCount,
-                    malformedCount = malformedCount,
-                    sessionsCreatedCount = sessionsToCreate.size
-                )
+                if (status.importedCount > 0) {
+                    syncTrigger?.invoke()
+                }
+                status
             }
         } catch (ce: CancellationException) {
             throw ce

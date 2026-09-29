@@ -289,7 +289,7 @@ class CsvParserAndExporterStressChallengeTest {
             // 1 comment record + 1 header record + 1 data record = 3 records
             assertEquals(3, records.size)
             val dataRow = records[2]
-            assertEquals(8, dataRow.size)
+            assertEquals(CsvFormat.COLUMNS.size, dataRow.size)
             assertEquals(scramble, dataRow[7])
         }
     }
@@ -310,7 +310,7 @@ class CsvParserAndExporterStressChallengeTest {
 
         assertEquals(3, records.size)
         val dataRow = records[2]
-        assertEquals(8, dataRow.size)
+        assertEquals(CsvFormat.COLUMNS.size, dataRow.size)
         assertEquals("solve-patho-scramble", dataRow[0])
         assertEquals("sess-mega", dataRow[1])
         assertEquals("Mega Session", dataRow[2])
@@ -351,7 +351,7 @@ class CsvParserAndExporterStressChallengeTest {
 
         for (i in sessionNames.indices) {
             val row = records[2 + i]
-            assertEquals(8, row.size)
+            assertEquals(CsvFormat.COLUMNS.size, row.size)
             assertEquals("solve-$i", row[0])
             assertEquals("sess-$i", row[1])
             assertEquals(sessionNames[i], row[2])
@@ -444,7 +444,7 @@ class CsvParserAndExporterStressChallengeTest {
                 for (i in 0 until solveCount) {
                     val record = reader.readNextRecord()
                     assertNotNull("Record $i should not be null", record)
-                    assertEquals("Record $i must have 8 columns", 8, record!!.size)
+                    assertEquals("Record $i must have every column", CsvFormat.COLUMNS.size, record!!.size)
 
                     val expectedSolve = generatedSolves[i]
                     val expectedSessionId = expectedSolve.sessionId ?: ""
@@ -484,7 +484,7 @@ class CsvParserAndExporterStressChallengeTest {
 
     @Test
     fun bom_prefixedBeforeComment_strippedCleanly() {
-        val csv = "\uFEFF# Source: CubeTimer\r\nsolve_id,session_id,session_name,puzzle,timestamp,time,penalty,scramble\r\n"
+        val csv = "\uFEFF# Source: CubeTimer\r\nsolve_id,session_id,session_name,puzzle,timestamp,time,penalty,scramble,timing_device\r\n"
         val records = parseStringRecords(csv)
 
         assertEquals(2, records.size)
@@ -579,7 +579,7 @@ class CsvParserAndExporterStressChallengeTest {
 
         assertEquals(3, records.size)
         val dataRow = records[2]
-        assertEquals(8, dataRow.size)
+        assertEquals(CsvFormat.COLUMNS.size, dataRow.size)
         assertEquals("solve-massive", dataRow[0])
         assertEquals(massiveScramble, dataRow[7])
     }

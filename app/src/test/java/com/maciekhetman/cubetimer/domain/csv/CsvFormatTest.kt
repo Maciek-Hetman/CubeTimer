@@ -129,4 +129,46 @@ class CsvFormatTest {
         val reader = CsvFormat.createBomStrippingReader(StringReader(""))
         assertEquals(-1, reader.read())
     }
+
+    // --- Formula injection neutralization ---
+
+    @Test
+    fun escapeFormula_prefixesEveryFormulaTrigger() {
+        for (trigger in listOf("=", "+", "-", "@", "\t", "\r")) {
+            assertEquals("'${trigger}x", CsvFormat.escapeFormula("${trigger}x"))
+        }
+    }
+
+    @Test
+    fun escapeFormula_leavesOrdinaryTextAlone() {
+        for (value in listOf("", "R U R' U'", "Practice 1", "x=1", "a-b", "3x3", "'quoted", "'", "''", " =padded")) {
+            assertEquals(value, CsvFormat.escapeFormula(value))
+        }
+    }
+
+    @Test
+    fun unescapeFormula_stripsExactlyOneLeadingQuoteBeforeATrigger() {
+        assertEquals("=1+1", CsvFormat.unescapeFormula("'=1+1"))
+        assertEquals("-5", CsvFormat.unescapeFormula("'-5"))
+        assertEquals("\t=x", CsvFormat.unescapeFormula("'\t=x"))
+        assertEquals("'=x", CsvFormat.unescapeFormula("''=x"))
+    }
+
+    @Test
+    fun unescapeFormula_leavesEveryOtherValueAlone() {
+        for (value in listOf("", "R U", "'quoted", "'", "''", "'x=1", "=1+1", "  '=x")) {
+            assertEquals(value, CsvFormat.unescapeFormula(value))
+        }
+    }
+
+    @Test
+    fun formulaEscaping_roundTripsLosslessly() {
+        val values = listOf(
+            "=1+1", "+2", "-", "@", "\t", "\r\n", "'=x", "''=x", "'+'", "'", "''", "'x", "plain", "",
+            "=HYPERLINK(\"http://evil\",\"x\")"
+        )
+        for (value in values) {
+            assertEquals("round trip of '$value'", value, CsvFormat.unescapeFormula(CsvFormat.escapeFormula(value)))
+        }
+    }
 }
