@@ -1,6 +1,7 @@
 package com.maciekhetman.cubetimer.data
 
 import android.content.Context
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
@@ -30,33 +31,42 @@ class SettingsRepository(private val context: Context) {
     private val FOCUS_MODE_KEY = booleanPreferencesKey("focus_mode")
     private val HAPTICS_ENABLED_KEY = booleanPreferencesKey("haptics_enabled")
     private val TIMING_DEVICE_KEY = stringPreferencesKey("timing_device")
+    private val SETTINGS_MIGRATED_FROM_LEGACY_KEY = booleanPreferencesKey("settings_migrated_from_legacy")
+
+    /** Preferences that used to live in the legacy solves datastore. */
+    private val legacySettingKeys: List<Preferences.Key<*>> = listOf(
+        DYNAMIC_COLOR_KEY, DEFAULT_MODE_KEY, AMOLED_ENABLED_KEY, SHOW_SCRAMBLE_REFRESH_KEY,
+        SCRAMBLE_SCALE_PERCENT_KEY, TIMER_START_DELAY_MILLIS_KEY, TIMER_AVERAGES_KEY,
+        RUNNING_TIMER_DISPLAY_KEY, HIDE_SCRAMBLE_DURING_SOLVE_KEY, HIDE_AVERAGES_DURING_SOLVE_KEY,
+        HIDE_LAST_RESULTS_DURING_SOLVE_KEY, HIDE_LAST_RESULTS_ON_TIMER_KEY, HIDE_START_HINT_KEY,
+        FOCUS_MODE_KEY, HAPTICS_ENABLED_KEY
+    )
 
     /**
      * One-time migration: settings used to live in the solves datastore.
      * Copy them to the dedicated settings datastore so existing users keep their preferences.
+     *
+     * Guarded by its own flag rather than "the settings store is empty": DataStoreMigration writes
+     * its flag into the same store concurrently at startup, which used to make this skip for good.
+     * Check, copy and flag happen in one edit, and a key already set in the new store is never
+     * overwritten. Nothing is written when there is nothing to migrate, and the legacy store is
+     * read before the edit: DataStore runs the edit's transform on the caller's dispatcher while
+     * holding its write lock, so the transform must not suspend.
      */
     suspend fun migrateFromLegacyIfNeeded() {
+        if (context.settingsDataStore.data.first()[SETTINGS_MIGRATED_FROM_LEGACY_KEY] == true) return
         val legacy = context.solvesDataStore.data.first()
-        if (legacy.asMap().isEmpty()) return
-        val current = context.settingsDataStore.data.first()
-        if (current.asMap().isNotEmpty()) return
+        if (legacySettingKeys.none { legacy.contains(it) }) return
 
-        context.settingsDataStore.edit { prefs ->
-            legacy[DYNAMIC_COLOR_KEY]?.let { prefs[DYNAMIC_COLOR_KEY] = it }
-            legacy[DEFAULT_MODE_KEY]?.let { prefs[DEFAULT_MODE_KEY] = it }
-            legacy[AMOLED_ENABLED_KEY]?.let { prefs[AMOLED_ENABLED_KEY] = it }
-            legacy[SHOW_SCRAMBLE_REFRESH_KEY]?.let { prefs[SHOW_SCRAMBLE_REFRESH_KEY] = it }
-            legacy[SCRAMBLE_SCALE_PERCENT_KEY]?.let { prefs[SCRAMBLE_SCALE_PERCENT_KEY] = it }
-            legacy[TIMER_START_DELAY_MILLIS_KEY]?.let { prefs[TIMER_START_DELAY_MILLIS_KEY] = it }
-            legacy[TIMER_AVERAGES_KEY]?.let { prefs[TIMER_AVERAGES_KEY] = it }
-            legacy[RUNNING_TIMER_DISPLAY_KEY]?.let { prefs[RUNNING_TIMER_DISPLAY_KEY] = it }
-            legacy[HIDE_SCRAMBLE_DURING_SOLVE_KEY]?.let { prefs[HIDE_SCRAMBLE_DURING_SOLVE_KEY] = it }
-            legacy[HIDE_AVERAGES_DURING_SOLVE_KEY]?.let { prefs[HIDE_AVERAGES_DURING_SOLVE_KEY] = it }
-            legacy[HIDE_LAST_RESULTS_DURING_SOLVE_KEY]?.let { prefs[HIDE_LAST_RESULTS_DURING_SOLVE_KEY] = it }
-            legacy[HIDE_LAST_RESULTS_ON_TIMER_KEY]?.let { prefs[HIDE_LAST_RESULTS_ON_TIMER_KEY] = it }
-            legacy[HIDE_START_HINT_KEY]?.let { prefs[HIDE_START_HINT_KEY] = it }
-            legacy[FOCUS_MODE_KEY]?.let { prefs[FOCUS_MODE_KEY] = it }
-            legacy[HAPTICS_ENABLED_KEY]?.let { prefs[HAPTICS_ENABLED_KEY] = it }
+        context.settingsDataStore.edit { current ->
+            if (current[SETTINGS_MIGRATED_FROM_LEGACY_KEY] == true) return@edit
+            for (key in legacySettingKeys) {
+                @Suppress("UNCHECKED_CAST")
+                val anyKey = key as Preferences.Key<Any>
+                val value = legacy[anyKey] ?: continue
+                if (current[anyKey] == null) current[anyKey] = value
+            }
+            current[SETTINGS_MIGRATED_FROM_LEGACY_KEY] = true
         }
     }
 

@@ -247,24 +247,25 @@ class SolvesRepository(
         sessionId: String? = solve.sessionId
     ) = withContext(ioDispatcher) {
         val nowIso = CubeTypeConverters.nowIso()
-        val existing = solveDao.getSolveById(solve.id)
-        val entity = if (existing != null) {
-            existing.copy(
-                ownerId = ownerId,
-                sessionId = sessionId ?: solve.sessionId,
-                event = CubeTypeConverters.fromMode(solve.mode),
-                durationMs = solve.timeInMillis,
-                penalty = CubeTypeConverters.fromPenalty(solve.penalty),
-                solvedAt = CubeTypeConverters.epochMillisToIso(solve.timestamp),
-                scramble = solve.scramble,
-                deletedAt = null,
-                updatedAt = nowIso
-            )
-        } else {
-            solve.toSolveEntity(ownerId = ownerId, sessionId = sessionId ?: solve.sessionId)
-        }
 
         runInTransaction {
+            val existing = solveDao.getSolveById(solve.id)
+            val entity = if (existing != null) {
+                existing.copy(
+                    ownerId = ownerId,
+                    sessionId = sessionId ?: solve.sessionId,
+                    event = CubeTypeConverters.fromMode(solve.mode),
+                    durationMs = solve.timeInMillis,
+                    penalty = CubeTypeConverters.fromPenalty(solve.penalty),
+                    solvedAt = CubeTypeConverters.epochMillisToIso(solve.timestamp),
+                    scramble = solve.scramble,
+                    deletedAt = null,
+                    updatedAt = nowIso
+                )
+            } else {
+                solve.toSolveEntity(ownerId = ownerId, sessionId = sessionId ?: solve.sessionId)
+            }
+
             solveDao.upsert(entity)
             if (ownerId != "guest") {
                 syncOutboxDao.enqueue(entity.toUpsertMutation(ownerId = ownerId, clientTime = nowIso, json = json))
@@ -305,21 +306,24 @@ class SolvesRepository(
     ): List<SolveTime> = withContext(ioDispatcher) {
         if (ids.isEmpty()) return@withContext emptyList()
 
-        val existing = solveDao.getSolvesByIdsChunked(ids).filter { it.deletedAt == null && it.ownerId == ownerId }
-        if (existing.isEmpty()) return@withContext emptyList()
-
         val nowIso = CubeTypeConverters.nowIso()
-        val targetIds = existing.map { it.id }
+        val deletedSolves = mutableListOf<SolveTime>()
 
         runInTransaction {
+            val existing = solveDao.getSolvesByIdsChunked(ids).filter { it.deletedAt == null && it.ownerId == ownerId }
+            if (existing.isEmpty()) return@runInTransaction
+
+            val targetIds = existing.map { it.id }
+            deletedSolves.addAll(existing.map { it.toSolveTime() })
+
             solveDao.softDeleteAllChunked(targetIds, deletedAt = nowIso, updatedAt = nowIso)
             if (ownerId != "guest") {
                 syncOutboxDao.enqueueAll(existing.map { it.toDeleteMutation(ownerId = ownerId, clientTime = nowIso) })
             }
         }
 
-        syncTrigger?.invoke()
-        existing.map { it.toSolveTime() }
+        if (deletedSolves.isNotEmpty()) syncTrigger?.invoke()
+        deletedSolves
     }
 
     /**
@@ -330,18 +334,19 @@ class SolvesRepository(
         penalty: Penalty,
         ownerId: String = "guest"
     ) = withContext(ioDispatcher) {
-        val existing = solveDao.getSolveById(solve.id)
         val nowIso = CubeTypeConverters.nowIso()
-        val updated = if (existing != null) {
-            existing.copy(
-                penalty = penalty.toDbString(),
-                updatedAt = nowIso
-            )
-        } else {
-            solve.copy(penalty = penalty).toSolveEntity(ownerId = ownerId)
-        }
 
         runInTransaction {
+            val existing = solveDao.getSolveById(solve.id)
+            val updated = if (existing != null) {
+                existing.copy(
+                    penalty = penalty.toDbString(),
+                    updatedAt = nowIso
+                )
+            } else {
+                solve.copy(penalty = penalty).toSolveEntity(ownerId = ownerId)
+            }
+
             solveDao.upsert(updated)
             if (ownerId != "guest") {
                 syncOutboxDao.enqueue(updated.toUpsertMutation(ownerId = ownerId, clientTime = nowIso, json = json))
@@ -450,27 +455,28 @@ class SolvesRepository(
         }
 
         val nowIso = CubeTypeConverters.nowIso()
-        val existingById = solveDao.getSolvesByIdsChunked(solves.map { it.id }).associateBy { it.id }
-        val entities = solves.map { solve ->
-            val existing = existingById[solve.id]
-            if (existing != null) {
-                existing.copy(
-                    ownerId = ownerId,
-                    sessionId = solve.sessionId,
-                    event = CubeTypeConverters.fromMode(solve.mode),
-                    durationMs = solve.timeInMillis,
-                    penalty = CubeTypeConverters.fromPenalty(solve.penalty),
-                    solvedAt = CubeTypeConverters.epochMillisToIso(solve.timestamp),
-                    scramble = solve.scramble,
-                    deletedAt = null,
-                    updatedAt = nowIso
-                )
-            } else {
-                solve.toSolveEntity(ownerId = ownerId, deletedAt = null)
-            }
-        }
 
         runInTransaction {
+            val existingById = solveDao.getSolvesByIdsChunked(solves.map { it.id }).associateBy { it.id }
+            val entities = solves.map { solve ->
+                val existing = existingById[solve.id]
+                if (existing != null) {
+                    existing.copy(
+                        ownerId = ownerId,
+                        sessionId = solve.sessionId,
+                        event = CubeTypeConverters.fromMode(solve.mode),
+                        durationMs = solve.timeInMillis,
+                        penalty = CubeTypeConverters.fromPenalty(solve.penalty),
+                        solvedAt = CubeTypeConverters.epochMillisToIso(solve.timestamp),
+                        scramble = solve.scramble,
+                        deletedAt = null,
+                        updatedAt = nowIso
+                    )
+                } else {
+                    solve.toSolveEntity(ownerId = ownerId, deletedAt = null)
+                }
+            }
+
             solveDao.upsertAll(entities)
             if (ownerId != "guest") {
                 syncOutboxDao.enqueueAll(entities.map { it.toUpsertMutation(ownerId = ownerId, clientTime = nowIso, json = json) })
