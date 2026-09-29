@@ -65,6 +65,8 @@ class AndroidSha1PrngProvider : Provider("SUN", 1.0, "Android SHA1PRNG provider 
                 // anywhere on the JVM, which should never happen on Android or in the Robolectric/JVM
                 // test environment. Try one more explicit lookup before giving up and accepting it.
                 try {
+                    // API 26+; on older devices the NoSuchMethodError lands in the catch below.
+                    @Suppress("NewApi")
                     val strong = SecureRandom.getInstanceStrong()
                     if (strong.provider !is AndroidSha1PrngProvider) return strong
                 } catch (_: Throwable) {

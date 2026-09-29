@@ -114,7 +114,7 @@ class TokenRefresher(
             .build()
 
         return refreshClient.newCall(request).execute().use { resp ->
-            val responseBody = resp.body?.string().orEmpty()
+            val responseBody = resp.body.string()
             when (resp.code) {
                 200 -> HttpOutcome.Success(json.decodeFromString(AuthResponse.serializer(), responseBody))
                 // Definitive auth failures per the CubeSync refresh contract: the refresh token is

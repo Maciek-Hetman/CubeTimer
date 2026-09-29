@@ -50,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.draw
+import androidx.core.graphics.createBitmap
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
@@ -93,7 +94,7 @@ class PictureCaptureState {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 Bitmap.createBitmap(picture)
             } else {
-                val bitmap = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888)
+                val bitmap = createBitmap(widthPx, heightPx)
                 val canvas = android.graphics.Canvas(bitmap)
                 canvas.drawPicture(picture)
                 bitmap
@@ -235,9 +236,9 @@ fun ShareableSolveCardDialog(
     priorBestTime: Long?,
     isPb: Boolean,
     pbDelta: Long?,
+    modifier: Modifier = Modifier,
     formattedPbDelta: String? = null,
-    onDismiss: () -> Unit,
-    modifier: Modifier = Modifier
+    onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -364,7 +365,6 @@ fun ShareableSolveCardDialog(
                                     color = when (solve.penalty) {
                                         Penalty.DNF -> MaterialTheme.colorScheme.errorContainer
                                         Penalty.PLUS_TWO -> MaterialTheme.colorScheme.tertiaryContainer
-                                        else -> Color.Transparent
                                     },
                                     shape = RoundedCornerShape(16.dp)
                                 ) {
@@ -372,7 +372,6 @@ fun ShareableSolveCardDialog(
                                         text = when (solve.penalty) {
                                             Penalty.DNF -> "DNF"
                                             Penalty.PLUS_TWO -> "+2"
-                                            else -> ""
                                         },
                                         style = MaterialTheme.typography.labelMedium,
                                         fontWeight = FontWeight.Bold,
@@ -380,7 +379,6 @@ fun ShareableSolveCardDialog(
                                         color = when (solve.penalty) {
                                             Penalty.DNF -> MaterialTheme.colorScheme.onErrorContainer
                                             Penalty.PLUS_TWO -> MaterialTheme.colorScheme.onTertiaryContainer
-                                            else -> Color.Unspecified
                                         }
                                     )
                                 }

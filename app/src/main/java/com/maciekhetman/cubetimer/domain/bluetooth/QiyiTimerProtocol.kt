@@ -47,6 +47,8 @@ object QiyiTimerProtocol {
 
     private fun aes(mode: Int, blocks: List<IntArray>): List<IntArray> {
         require(blocks.all { it.size == 16 }) { "AES block must be 16 bytes" }
+        // ECB is what the timer speaks; this is wire framing with a published key, not confidentiality.
+        @Suppress("GetInstance")
         val cipher = Cipher.getInstance("AES/ECB/NoPadding")
         cipher.init(mode, SecretKeySpec(KEY, "AES"))
         return blocks.map { block ->

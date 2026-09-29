@@ -280,7 +280,7 @@ class SyncEngineCursorExpiredRuleTest {
             val dead = database.syncOutboxDao().getMutationById("mut-solve-4")
             assertNotNull(dead)
             assertEquals("dead", dead!!.status)
-            assertTrue(dead.lastError!!, dead.lastError!!.contains("json: unknown field"))
+            assertTrue(dead.lastError!!, dead.lastError.contains("json: unknown field"))
             assertEquals(0, database.syncOutboxDao().countPending(ROBUSTNESS_OWNER_ID))
         } finally {
             fixture.shutdown()

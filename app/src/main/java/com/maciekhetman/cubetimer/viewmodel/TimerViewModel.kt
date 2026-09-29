@@ -849,7 +849,6 @@ class TimerViewModel(
     }
 
     override fun onCleared() {
-        super.onCleared()
         timerJob?.cancel()
         holdJob?.cancel()
         scrambleJob?.cancel()

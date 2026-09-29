@@ -105,7 +105,7 @@ class ApiClientHttpEdgeCasesMockWebServerTest {
             apiClient.getCurrentUser()
             fail("Expected AuthException was not thrown")
         } catch (e: AuthException) {
-            assertTrue(e.message?.contains("Database replica unavailable") == true)
+            assertTrue(e.message.contains("Database replica unavailable"))
         }
     }
 
@@ -121,8 +121,8 @@ class ApiClientHttpEdgeCasesMockWebServerTest {
         try {
             apiClient.getCurrentUser()
             fail("Expected AuthException was not thrown on 502 HTML")
-        } catch (e: AuthException) {
-            assertTrue("Exception must be caught as AuthException", e is AuthException)
+        } catch (_: AuthException) {
+            // Expected: an HTML error page still surfaces as AuthException, not a parse error.
         }
     }
 
@@ -155,7 +155,7 @@ class ApiClientHttpEdgeCasesMockWebServerTest {
             apiClient.getCurrentUser()
             fail("Expected AuthException.SerializationError was not thrown")
         } catch (e: AuthException.SerializationError) {
-            assertTrue(e.message?.contains("Failed to deserialize") == true)
+            assertTrue(e.message.contains("Failed to deserialize"))
         }
     }
 

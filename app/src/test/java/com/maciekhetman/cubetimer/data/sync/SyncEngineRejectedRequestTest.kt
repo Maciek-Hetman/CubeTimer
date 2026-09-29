@@ -98,7 +98,7 @@ class SyncEngineRejectedRequestTest {
         assertNotNull(dead)
         assertEquals("dead", dead!!.status)
         assertEquals(1, dead.attemptCount)
-        assertTrue(dead.lastError!!, dead.lastError!!.contains("400") && dead.lastError!!.contains("cannot decode mutation"))
+        assertTrue(dead.lastError!!, dead.lastError.contains("400") && dead.lastError.contains("cannot decode mutation"))
         assertEquals("the bad solve never got a server version", 0L, database.solveDao().getSolveById("solve-5")?.version)
         assertEquals("a dead row is not pending", 0, outboxDao.countPending(ROBUSTNESS_OWNER_ID))
     }

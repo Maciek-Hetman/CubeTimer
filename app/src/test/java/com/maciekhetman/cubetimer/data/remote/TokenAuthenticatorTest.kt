@@ -97,7 +97,7 @@ class TokenAuthenticatorTest {
             .build()
 
         val response = okHttpClient.newCall(request).execute()
-        val body = response.body?.string()
+        val body = response.body.string()
         response.close()
 
         assertEquals(200, response.code)

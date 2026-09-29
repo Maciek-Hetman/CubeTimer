@@ -34,11 +34,11 @@ import com.maciekhetman.cubetimer.model.StatsFilter
 fun SessionFilterBar(
     currentFilter: StatsFilter,
     onFilterSelected: (StatsFilter) -> Unit,
+    modifier: Modifier = Modifier,
     activeSession: Session? = null,
     activeSessionSolvesCount: Int = 0,
     allSolvesCount: Int = 0,
-    sessions: List<Session> = emptyList(),
-    modifier: Modifier = Modifier
+    sessions: List<Session> = emptyList()
 ) {
     Row(
         modifier = modifier

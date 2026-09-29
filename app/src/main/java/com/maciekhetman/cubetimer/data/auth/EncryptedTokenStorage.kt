@@ -3,6 +3,7 @@ package com.maciekhetman.cubetimer.data.auth
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
+import androidx.core.content.edit
 import com.maciekhetman.cubetimer.model.User
 import com.maciekhetman.cubetimer.model.UserRole
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -65,13 +66,13 @@ class EncryptedTokenStorage(
     override fun getRefreshToken(): String? = secure { it.getString(KEY_REFRESH_TOKEN, null) }
 
     override fun setRefreshToken(token: String?): Unit = secure {
-        it.edit().apply {
+        it.edit {
             if (token != null) {
                 putString(KEY_REFRESH_TOKEN, token)
             } else {
                 remove(KEY_REFRESH_TOKEN)
             }
-        }.apply()
+        }
     }
 
     override fun getUserId(): String? = secure { it.getString(KEY_USER_ID, null) }
@@ -110,38 +111,34 @@ class EncryptedTokenStorage(
     ) {
         setAccessToken(accessToken)
         secure {
-            it.edit()
-                .putString(KEY_REFRESH_TOKEN, refreshToken)
-                .putString(KEY_USER_ID, userId)
-                .putString(KEY_USER_EMAIL, userEmail)
-                .putString(KEY_USER_ROLE, userRole)
-                .putBoolean(KEY_USER_EMAIL_VERIFIED, emailVerified)
-                .apply {
-                    if (displayName != null) {
-                        putString(KEY_USER_DISPLAY_NAME, displayName)
-                    } else {
-                        remove(KEY_USER_DISPLAY_NAME)
-                    }
+            it.edit {
+                putString(KEY_REFRESH_TOKEN, refreshToken)
+                putString(KEY_USER_ID, userId)
+                putString(KEY_USER_EMAIL, userEmail)
+                putString(KEY_USER_ROLE, userRole)
+                putBoolean(KEY_USER_EMAIL_VERIFIED, emailVerified)
+                if (displayName != null) {
+                    putString(KEY_USER_DISPLAY_NAME, displayName)
+                } else {
+                    remove(KEY_USER_DISPLAY_NAME)
                 }
-                .apply()
+            }
         }
     }
 
     override fun saveUser(user: User) {
         secure {
-            it.edit()
-                .putString(KEY_USER_ID, user.id)
-                .putString(KEY_USER_EMAIL, user.email)
-                .putString(KEY_USER_ROLE, user.userRole.name.lowercase())
-                .putBoolean(KEY_USER_EMAIL_VERIFIED, user.emailVerified)
-                .apply {
-                    if (user.displayName != null) {
-                        putString(KEY_USER_DISPLAY_NAME, user.displayName)
-                    } else {
-                        remove(KEY_USER_DISPLAY_NAME)
-                    }
+            it.edit {
+                putString(KEY_USER_ID, user.id)
+                putString(KEY_USER_EMAIL, user.email)
+                putString(KEY_USER_ROLE, user.userRole.name.lowercase())
+                putBoolean(KEY_USER_EMAIL_VERIFIED, user.emailVerified)
+                if (user.displayName != null) {
+                    putString(KEY_USER_DISPLAY_NAME, user.displayName)
+                } else {
+                    remove(KEY_USER_DISPLAY_NAME)
                 }
-                .apply()
+            }
         }
     }
 
@@ -152,7 +149,7 @@ class EncryptedTokenStorage(
         var deviceId = devicePrefs.getString(KEY_DEVICE_ID, null)
         if (deviceId.isNullOrBlank()) {
             deviceId = UUID.randomUUID().toString()
-            devicePrefs.edit().putString(KEY_DEVICE_ID, deviceId).apply()
+            devicePrefs.edit { putString(KEY_DEVICE_ID, deviceId) }
         }
         deviceId
     }
@@ -160,22 +157,22 @@ class EncryptedTokenStorage(
     override fun clearAuthData() {
         setAccessToken(null)
         secure {
-            it.edit()
-                .remove(KEY_REFRESH_TOKEN)
-                .remove(KEY_USER_ID)
-                .remove(KEY_USER_EMAIL)
-                .remove(KEY_USER_ROLE)
-                .remove(KEY_USER_EMAIL_VERIFIED)
-                .remove(KEY_USER_DISPLAY_NAME)
-                .apply()
+            it.edit {
+                remove(KEY_REFRESH_TOKEN)
+                remove(KEY_USER_ID)
+                remove(KEY_USER_EMAIL)
+                remove(KEY_USER_ROLE)
+                remove(KEY_USER_EMAIL_VERIFIED)
+                remove(KEY_USER_DISPLAY_NAME)
+            }
         }
     }
 
     override fun clearAll() {
         setAccessToken(null)
         synchronized(lock) {
-            secure { it.edit().clear().apply() }
-            devicePrefs.edit().clear().apply()
+            secure { it.edit { clear() } }
+            devicePrefs.edit { clear() }
         }
     }
 
@@ -274,7 +271,7 @@ class EncryptedTokenStorage(
             if (leaked.isEmpty()) return null
 
             val legacyDeviceId = raw.getString(KEY_DEVICE_ID, null)
-            raw.edit().apply { leaked.forEach { remove(it) } }.commit()
+            raw.edit(commit = true) { leaked.forEach { remove(it) } }
             legacyDeviceId
         } catch (e: Exception) {
             Log.w(TAG, "Could not scrub legacy plaintext preferences", e)
@@ -292,10 +289,10 @@ class EncryptedTokenStorage(
             val migrated = secureDeviceId?.takeIf { it.isNotBlank() }
                 ?: legacyPlaintextDeviceId?.takeIf { it.isNotBlank() }
             if (migrated != null && devicePrefs.getString(KEY_DEVICE_ID, null).isNullOrBlank()) {
-                devicePrefs.edit().putString(KEY_DEVICE_ID, migrated).apply()
+                devicePrefs.edit { putString(KEY_DEVICE_ID, migrated) }
             }
             if (secureDeviceId != null) {
-                secure.edit().remove(KEY_DEVICE_ID).apply()
+                secure.edit { remove(KEY_DEVICE_ID) }
             }
         } catch (e: Exception) {
             Log.w(TAG, "Could not migrate the device id", e)

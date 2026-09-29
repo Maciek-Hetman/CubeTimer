@@ -1,3 +1,7 @@
+// androidx.security:security-crypto is deprecated with no drop-in successor; the stored tokens
+// depend on this exact file format, so moving off it needs a migration of its own.
+@file:Suppress("DEPRECATION")
+
 package com.maciekhetman.cubetimer.data.auth
 
 import android.content.Context

@@ -2,7 +2,9 @@ package com.maciekhetman.cubetimer.ui.dialogs
 
 import android.content.Intent
 import android.graphics.Bitmap
+import android.net.Uri
 import androidx.core.content.FileProvider
+import androidx.core.content.IntentCompat
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Penalty
 import com.maciekhetman.cubetimer.model.SolveTime
@@ -137,7 +139,7 @@ class ShareableSolveCardDialogTest {
         try {
             val sCacheField = FileProvider::class.java.getDeclaredField("sCache")
             sCacheField.isAccessible = true
-            (sCacheField.get(null) as? java.util.Map<*, *>)?.clear()
+            (sCacheField.get(null) as? MutableMap<*, *>)?.clear()
         } catch (_: Throwable) {}
         val contentUri = FileProvider.getUriForFile(context, authority, file)
 
@@ -178,7 +180,7 @@ class ShareableSolveCardDialogTest {
         val dummyFile = File(context.cacheDir, "test.png").apply {
             writeBytes(byteArrayOf(1, 2, 3))
         }
-        val dummyUri = android.net.Uri.fromFile(dummyFile)
+        val dummyUri = Uri.fromFile(dummyFile)
         val shareText = "CubeTimer Solve Details"
 
         SolveShareHelper.launchShareIntent(context, dummyUri, shareText)
@@ -187,11 +189,11 @@ class ShareableSolveCardDialogTest {
         assertNotNull(nextStartedActivity)
         assertEquals(Intent.ACTION_CHOOSER, nextStartedActivity.action)
 
-        val targetIntent = nextStartedActivity.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
+        val targetIntent = IntentCompat.getParcelableExtra(nextStartedActivity, Intent.EXTRA_INTENT, Intent::class.java)
         assertNotNull(targetIntent)
         assertEquals(Intent.ACTION_SEND, targetIntent!!.action)
         assertEquals("image/png", targetIntent.type)
-        assertEquals(dummyUri, targetIntent.getParcelableExtra(Intent.EXTRA_STREAM))
+        assertEquals(dummyUri, IntentCompat.getParcelableExtra(targetIntent, Intent.EXTRA_STREAM, Uri::class.java))
         assertEquals(shareText, targetIntent.getStringExtra(Intent.EXTRA_TEXT))
         assertTrue(
             targetIntent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0
@@ -209,7 +211,7 @@ class ShareableSolveCardDialogTest {
         assertNotNull(nextStartedActivity)
         assertEquals(Intent.ACTION_CHOOSER, nextStartedActivity.action)
 
-        val targetIntent = nextStartedActivity.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
+        val targetIntent = IntentCompat.getParcelableExtra(nextStartedActivity, Intent.EXTRA_INTENT, Intent::class.java)
         assertNotNull(targetIntent)
         assertEquals(Intent.ACTION_SEND, targetIntent!!.action)
         assertEquals("text/plain", targetIntent.type)
