@@ -93,6 +93,7 @@ import com.maciekhetman.cubetimer.ui.screens.TimerScreen
 import com.maciekhetman.cubetimer.ui.sync.SyncStatusDialog
 import com.maciekhetman.cubetimer.ui.theme.CubeTimerTheme
 import com.maciekhetman.cubetimer.viewmodel.AuthViewModel
+import com.maciekhetman.cubetimer.viewmodel.ConflictViewModel
 import com.maciekhetman.cubetimer.viewmodel.HistoryViewModel
 import com.maciekhetman.cubetimer.viewmodel.TimerViewModel
 
@@ -190,7 +191,10 @@ fun CubeTimerApp(
     // up (lazily, via viewModel()) inside the HISTORY branch of AppContent. Passing an explicit instance
     // (e.g. from a test) still works.
     historyViewModel: HistoryViewModel? = null,
-    syncStateManager: SyncStateManager = (LocalContext.current.applicationContext as? CubeTimerApplication)?.syncStateManager ?: SyncStateManager()
+    syncStateManager: SyncStateManager = (LocalContext.current.applicationContext as? CubeTimerApplication)?.syncStateManager ?: SyncStateManager(),
+    // Only needed once the sync dialog is opened, so like historyViewModel it is looked up lazily
+    // (via viewModel()) when left null; passing an explicit instance (e.g. from a test) still works.
+    conflictViewModel: ConflictViewModel? = null
 ) {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.TIMER) }
     val currentMode by viewModel.currentMode.collectAsStateWithLifecycle()
@@ -324,11 +328,23 @@ fun CubeTimerApp(
     )
 
     if (showSyncDialog) {
+        val resolvedConflictViewModel = conflictViewModel ?: viewModel()
+        val conflicts by resolvedConflictViewModel.conflicts.collectAsStateWithLifecycle()
+        val resolvingConflictIds by resolvedConflictViewModel.resolvingIds.collectAsStateWithLifecycle()
+        val conflictErrorMessage by resolvedConflictViewModel.errorMessage.collectAsStateWithLifecycle()
         SyncStatusDialog(
             syncState = syncUiState,
             onTriggerSync = { syncStateManager.triggerSync() },
-            onDismiss = { showSyncDialog = false },
-            onLoginClick = { authViewModel.openDialog(AuthDialogType.LOGIN) }
+            onDismiss = {
+                showSyncDialog = false
+                resolvedConflictViewModel.clearError()
+            },
+            onLoginClick = { authViewModel.openDialog(AuthDialogType.LOGIN) },
+            conflicts = conflicts,
+            resolvingConflictIds = resolvingConflictIds,
+            conflictErrorMessage = conflictErrorMessage,
+            onKeepLocal = resolvedConflictViewModel::keepLocal,
+            onKeepServer = resolvedConflictViewModel::keepServer
         )
     }
 }

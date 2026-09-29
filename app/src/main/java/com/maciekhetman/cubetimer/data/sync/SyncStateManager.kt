@@ -100,47 +100,54 @@ class SyncStateManager(
                     ?: "guest"
                 val metadataFlow = database.syncMetadataDao().observeMetadata(ownerId)
                 val pendingFlow = database.syncOutboxDao().observePendingCount(ownerId)
+                val conflictCountFlow = database.conflictDao().observeUnresolvedCount(ownerId)
 
                 combine(
                     metadataFlow,
                     pendingFlow,
+                    conflictCountFlow,
                     localSyncStateFlow
-                ) { metadata, pendingCount, local ->
+                ) { metadata, pendingCount, conflictCount, local ->
                     when {
                         metadata?.lastError != null -> SyncUiState(
                             status = SyncStatusType.ERROR,
                             lastSyncTime = metadata.lastSyncTime,
                             pendingCount = pendingCount,
                             errorMessage = metadata.lastError,
-                            isGuest = false
+                            isGuest = false,
+                            conflictCount = conflictCount
                         )
                         metadata?.isSyncing == true || local.isSyncing -> SyncUiState(
                             status = SyncStatusType.SYNCING,
                             lastSyncTime = metadata?.lastSyncTime,
                             pendingCount = pendingCount,
                             errorMessage = null,
-                            isGuest = false
+                            isGuest = false,
+                            conflictCount = conflictCount
                         )
                         !local.isOnline -> SyncUiState(
                             status = SyncStatusType.OFFLINE,
                             lastSyncTime = metadata?.lastSyncTime,
                             pendingCount = pendingCount,
                             errorMessage = null,
-                            isGuest = false
+                            isGuest = false,
+                            conflictCount = conflictCount
                         )
                         local.syncStatus == SyncStatus.ERROR -> SyncUiState(
                             status = SyncStatusType.ERROR,
                             lastSyncTime = metadata?.lastSyncTime,
                             pendingCount = pendingCount,
                             errorMessage = local.lastErrorMessage ?: "Sync failed",
-                            isGuest = false
+                            isGuest = false,
+                            conflictCount = conflictCount
                         )
                         else -> SyncUiState(
                             status = SyncStatusType.SYNCED,
                             lastSyncTime = metadata?.lastSyncTime,
                             pendingCount = pendingCount,
                             errorMessage = null,
-                            isGuest = false
+                            isGuest = false,
+                            conflictCount = conflictCount
                         )
                     }
                 }
