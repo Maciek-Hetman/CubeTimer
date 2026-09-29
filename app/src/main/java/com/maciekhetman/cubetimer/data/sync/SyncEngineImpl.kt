@@ -10,6 +10,9 @@ import com.maciekhetman.cubetimer.data.local.dao.SessionDao
 import com.maciekhetman.cubetimer.data.local.dao.SolveDao
 import com.maciekhetman.cubetimer.data.local.dao.SyncMetadataDao
 import com.maciekhetman.cubetimer.data.local.dao.SyncOutboxDao
+import com.maciekhetman.cubetimer.data.local.dao.markAllFailedChunked
+import com.maciekhetman.cubetimer.data.local.dao.markInFlightChunked
+import com.maciekhetman.cubetimer.data.local.dao.resetInFlightChunked
 import com.maciekhetman.cubetimer.data.local.entity.ConflictEntity
 import com.maciekhetman.cubetimer.data.local.entity.SessionEntity
 import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
@@ -59,7 +62,13 @@ class SyncEngineImpl(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val defaultConflictPolicy: ConflictPolicy = ConflictPolicy.MANUAL_PROMPT,
     /** Upper bound on waiting for [AuthManager.awaitInitialized] before a sync gives up (retryably). */
-    private val authInitTimeoutMillis: Long = DEFAULT_AUTH_INIT_TIMEOUT_MILLIS
+    private val authInitTimeoutMillis: Long = DEFAULT_AUTH_INIT_TIMEOUT_MILLIS,
+    /**
+     * Safety ceiling on the snapshot pages one bootstrap may fetch. It is not a size limit for the
+     * account (the bootstrap pages until the server says it is done); it only stops a server that
+     * keeps handing out fresh page positions forever. Hitting it fails the bootstrap.
+     */
+    private val maxSnapshotPages: Int = DEFAULT_MAX_SNAPSHOT_PAGES
 ) : SyncEngine {
 
     private val syncMutex = Mutex()
@@ -130,9 +139,7 @@ class SyncEngineImpl(
             setSyncing(resolvedOwnerId, true)
             syncOutboxDao.resetAllInFlight(resolvedOwnerId)
 
-            var totalMutationsSynced = 0
-            var totalChangesApplied = 0
-            var totalConflictsRecorded = 0
+            val run = SyncRun()
             var hasMore = true
             var loopCount = 0
             val maxLoops = 50
@@ -140,102 +147,7 @@ class SyncEngineImpl(
             try {
                 while (hasMore && loopCount < maxLoops) {
                     loopCount++
-
-                    // 1. Fetch pending outbox mutations (up to 500)
-                    val pending = syncOutboxDao.getPendingMutations(resolvedOwnerId, limit = 500)
-                    val pendingIds = pending.map { it.id }
-                    val attemptAt = System.currentTimeMillis()
-
-                    if (pendingIds.isNotEmpty()) {
-                        syncOutboxDao.markInFlight(pendingIds, attemptAt)
-                    }
-
-                    // 2. Fetch current watermark cursor
-                    val metadata = syncMetadataDao.getMetadata(resolvedOwnerId)
-                    val currentCursor = metadata?.cursor ?: 0L
-
-                    // 3. Build device metadata
-                    val device = DeviceDto(
-                        id = tokenStorage.getDeviceId(),
-                        name = metadata?.deviceName ?: "Android Device",
-                        platform = "android"
-                    )
-
-                    // 4. One mutation per entity (see coalescePerEntity), mapped to DTOs
-                    val outgoing = coalescePerEntity(pending)
-                    val mutationDtos = outgoing.mutations.map { mutation ->
-                        SyncMutationDto(
-                            id = mutation.id,
-                            entity = mutation.entityType,
-                            entityId = mutation.entityId,
-                            operation = if (mutation.action == "delete") "delete" else "upsert",
-                            baseVersion = mutation.baseVersion,
-                            data = mutation.payloadJson?.let {
-                                try {
-                                    json.parseToJsonElement(it)
-                                } catch (_: Exception) {
-                                    null
-                                }
-                            }
-                        )
-                    }
-
-                    val syncRequest = SyncRequest(
-                        cursor = currentCursor,
-                        device = device,
-                        mutations = mutationDtos,
-                        limit = 500
-                    )
-
-                    // 5. Send HTTP request with 409 snapshot recovery
-                    val response: SyncResponse = try {
-                        apiClient.sync(syncRequest)
-                    } catch (e: CancellationException) {
-                        // Not a failed attempt: leave the rows in_flight, the next sync resets them.
-                        throw e
-                    } catch (e: AuthException.CursorExpired) {
-                        if (pendingIds.isNotEmpty()) {
-                            syncOutboxDao.resetInFlight(pendingIds)
-                        }
-                        updateCursor(resolvedOwnerId, 0L, CubeTypeConverters.nowIso())
-                        runSnapshotBootstrap(resolvedOwnerId)
-                        continue
-                    } catch (e: AuthException.ApiError) {
-                        if (e.errorCode == "cursor_expired" || e.httpStatusCode == 409) {
-                            if (pendingIds.isNotEmpty()) {
-                                syncOutboxDao.resetInFlight(pendingIds)
-                            }
-                            updateCursor(resolvedOwnerId, 0L, CubeTypeConverters.nowIso())
-                            runSnapshotBootstrap(resolvedOwnerId)
-                            continue
-                        }
-                        if (pendingIds.isNotEmpty()) {
-                            for (id in pendingIds) {
-                                syncOutboxDao.markFailed(id, e.message, attemptAt)
-                            }
-                        }
-                        throw e
-                    } catch (e: Exception) {
-                        if (pendingIds.isNotEmpty()) {
-                            for (id in pendingIds) {
-                                syncOutboxDao.markFailed(id, e.message, attemptAt)
-                            }
-                        }
-                        throw e
-                    }
-
-                    // 6. Apply outcomes and changes inside database transaction
-                    val batchResult = database.withTransaction {
-                        applyBatch(resolvedOwnerId, outgoing, response)
-                    }
-
-                    totalMutationsSynced += batchResult.mutationsSynced
-                    totalChangesApplied += batchResult.changesApplied
-                    totalConflictsRecorded += batchResult.conflictsRecorded
-
-                    // 7. Check if pagination loop should continue
-                    val remainingPending = syncOutboxDao.countPending(resolvedOwnerId)
-                    hasMore = response.hasMore || (pending.size == 500 && remainingPending > 0)
+                    hasMore = sendOutboxBatch(resolvedOwnerId, run)
                 }
 
                 val nowEpoch = System.currentTimeMillis()
@@ -243,11 +155,18 @@ class SyncEngineImpl(
                 setSyncing(resolvedOwnerId, false)
                 updateLastSyncTime(resolvedOwnerId, nowIso)
                 stateManager.setSynced(nowEpoch)
+                if (run.deadLettered > 0) {
+                    // Everything else got through, so this is still a Success (a retry can't help),
+                    // but the user must hear that some changes will never upload. Raised after
+                    // updateLastSyncTime because that clears the sticky error; the next sync that
+                    // completes clears this one in turn.
+                    setSyncError(resolvedOwnerId, deadLetterMessage(run))
+                }
 
                 SyncResult.Success(
-                    mutationsSynced = totalMutationsSynced,
-                    changesApplied = totalChangesApplied,
-                    conflictsRecorded = totalConflictsRecorded
+                    mutationsSynced = run.mutationsSynced,
+                    changesApplied = run.changesApplied,
+                    conflictsRecorded = run.conflictsRecorded
                 )
             } catch (e: CancellationException) {
                 // The worker was stopped (typically WorkManager cancelling it when the network
@@ -318,6 +237,242 @@ class SyncEngineImpl(
         syncMetadataDao.setSyncError(ownerId, error)
     }
 
+    /** Running totals of one [sync] call, across all its outbox passes. */
+    private class SyncRun {
+        var mutationsSynced = 0
+        var changesApplied = 0
+        var conflictsRecorded = 0
+
+        /** Mutations dead-lettered by this run (permanently rejected on their own). */
+        var deadLettered = 0
+        var lastDeadLetterError: String? = null
+
+        /** Requests the server rejected outright (see [isPermanentRejection]) in this run. */
+        var rejectedRequests = 0
+
+        /** Whether the server has accepted at least one request in this run, i.e. the request envelope is sound. */
+        var requestSucceeded = false
+    }
+
+    private enum class Recovery {
+        /** The failed batch was dealt with (split up or queued for a probe); carry on with the queue. */
+        CONTINUE,
+
+        /** The failed batch was a lone mutation the server rejected; it is now dead. Carry on with the queue. */
+        DEAD_LETTERED,
+
+        /** The cursor was reset and a snapshot bootstrap ran; re-read the outbox and start the pass over. */
+        RESTART_PASS
+    }
+
+    /**
+     * One pass over the outbox: sends up to [OUTBOX_BATCH_SIZE] queued mutations (at most one per
+     * entity) and applies the responses. Returns whether another pass is needed.
+     */
+    private suspend fun sendOutboxBatch(ownerId: String, run: SyncRun): Boolean {
+        // 1. Fetch pending outbox mutations
+        val pending = syncOutboxDao.getPendingMutations(ownerId, limit = OUTBOX_BATCH_SIZE)
+        val attemptAt = System.currentTimeMillis()
+        if (pending.isNotEmpty()) {
+            syncOutboxDao.markInFlightChunked(pending.map { it.id }, attemptAt)
+        }
+
+        // 2. One mutation per entity (see coalescePerEntity). Normally this goes out as a single
+        // request. If the server rejects the whole request, the batch is split in halves, both
+        // put back on the front of the queue, to isolate the mutation responsible without
+        // holding up the rest (see handleRequestFailure).
+        val queue = ArrayDeque<OutgoingBatch>()
+        queue.addLast(coalescePerEntity(pending))
+        var responseHasMore = false
+        var reviveSuperseded = false
+
+        while (queue.isNotEmpty()) {
+            val batch = queue.removeFirst()
+
+            // 3. Send. Each request reads the cursor afresh: the previous part's response has
+            // already advanced it.
+            val response: SyncResponse = try {
+                apiClient.sync(buildSyncRequest(ownerId, batch))
+            } catch (e: CancellationException) {
+                // Not a failed attempt: leave the rows in_flight, the next sync resets them.
+                throw e
+            } catch (e: Exception) {
+                // Recovers (returning) or gives up (throwing) - never falls through.
+                when (handleRequestFailure(ownerId, e, batch, queue, run, attemptAt)) {
+                    Recovery.RESTART_PASS -> return true
+                    // The older edits the dead mutation had superseded went back to pending.
+                    Recovery.DEAD_LETTERED -> if (batch.supersededIds.isNotEmpty()) reviveSuperseded = true
+                    Recovery.CONTINUE -> Unit
+                }
+                continue
+            }
+            run.requestSucceeded = true
+
+            // 4. Apply outcomes and changes inside database transaction
+            val batchResult = database.withTransaction {
+                applyBatch(ownerId, batch, response)
+            }
+            run.mutationsSynced += batchResult.mutationsSynced
+            run.changesApplied += batchResult.changesApplied
+            run.conflictsRecorded += batchResult.conflictsRecorded
+            responseHasMore = response.hasMore
+        }
+
+        // 5. Check if pagination loop should continue
+        val remainingPending = syncOutboxDao.countPending(ownerId)
+        return responseHasMore || reviveSuperseded ||
+            (pending.size == OUTBOX_BATCH_SIZE && remainingPending > 0)
+    }
+
+    private suspend fun buildSyncRequest(ownerId: String, batch: OutgoingBatch): SyncRequest {
+        val metadata = syncMetadataDao.getMetadata(ownerId)
+        val device = DeviceDto(
+            id = tokenStorage.getDeviceId(),
+            name = metadata?.deviceName ?: "Android Device",
+            platform = "android"
+        )
+        return SyncRequest(
+            cursor = metadata?.cursor ?: 0L,
+            device = device,
+            mutations = batch.mutations.map { mutation ->
+                SyncMutationDto(
+                    id = mutation.id,
+                    entity = mutation.entityType,
+                    entityId = mutation.entityId,
+                    operation = if (mutation.action == "delete") "delete" else "upsert",
+                    baseVersion = mutation.baseVersion,
+                    data = mutation.payloadJson?.let {
+                        try {
+                            json.parseToJsonElement(it)
+                        } catch (_: Exception) {
+                            null
+                        }
+                    }
+                )
+            },
+            limit = SYNC_PAGE_LIMIT
+        )
+    }
+
+    /**
+     * Decides what a failed `POST /v1/sync` means for the rows that were in flight ([batch] plus
+     * everything still [queue]d behind it).
+     *
+     * - Cursor expired: hand the rows back, reset the cursor and bootstrap from a snapshot.
+     * - The server permanently rejected the request itself ([isPermanentRejection]): almost always
+     *   one malformed mutation (the server decodes strictly), which without this would fail the
+     *   same first batch on every sync and starve everything queued behind it. Split a multi-
+     *   mutation batch in halves to find the offender while the good halves still upload; a lone
+     *   mutation that is rejected on its own is dead-lettered ([deadLetter]).
+     * - Anything else (network, 5xx, 429, auth, ...) is transient: mark the rows `failed`, which
+     *   are retried on the next sync, and rethrow.
+     */
+    private suspend fun handleRequestFailure(
+        ownerId: String,
+        e: Exception,
+        batch: OutgoingBatch,
+        queue: ArrayDeque<OutgoingBatch>,
+        run: SyncRun,
+        attemptAt: Long
+    ): Recovery {
+        if (isCursorExpired(e)) {
+            syncOutboxDao.resetInFlightChunked(inFlightIds(batch, queue))
+            queue.clear()
+            updateCursor(ownerId, 0L, CubeTypeConverters.nowIso())
+            runSnapshotBootstrap(ownerId)
+            return Recovery.RESTART_PASS
+        }
+
+        if (e is AuthException.ApiError && isPermanentRejection(e) && batch.mutations.isNotEmpty() &&
+            ++run.rejectedRequests <= MAX_REJECTED_REQUESTS_PER_SYNC
+        ) {
+            if (batch.mutations.size > 1) {
+                val (first, second) = batch.split()
+                queue.addFirst(second)
+                queue.addFirst(first)
+                return Recovery.CONTINUE
+            }
+
+            if (!run.requestSucceeded) {
+                // A lone mutation is rejected, but nothing has gone through yet in this sync, so the
+                // rejection may not be about the mutation at all (a request the server can't
+                // parse, a cursor or device it dislikes, an unsupported protocol version...).
+                // Dead-lettering on that evidence could write off the whole outbox one row at a
+                // time. First send the same request without mutations: if the server rejects that
+                // too, the fault is not the mutation (empty batches aren't dead-lettered, so it
+                // fails through the transient path below and the row stays retryable); if it
+                // accepts, this attempt is repeated and, with the envelope now vouched for,
+                // dead-lettered.
+                queue.addFirst(batch)
+                queue.addFirst(OutgoingBatch(emptyList(), emptyMap()))
+                return Recovery.CONTINUE
+            }
+
+            deadLetter(batch, e, run, attemptAt)
+            return Recovery.DEAD_LETTERED
+        }
+
+        // Transient (or a rejection that isn't attributable to a mutation).
+        val remaining = inFlightIds(batch, queue)
+        if (remaining.isNotEmpty()) {
+            syncOutboxDao.markAllFailedChunked(remaining, e.message, attemptAt)
+        }
+        throw e
+    }
+
+    /**
+     * Gives up on the single mutation in [batch] (the server rejected it on its own): its row
+     * becomes `dead` - kept with `last_error`, never sent again, no longer counted as pending nor
+     * protecting its entity from incoming remote changes. The older edits it had superseded go back
+     * to pending; they were valid states of the entity and get their own chance on the next pass.
+     */
+    private suspend fun deadLetter(
+        batch: OutgoingBatch,
+        e: AuthException.ApiError,
+        run: SyncRun,
+        attemptAt: Long
+    ) {
+        val mutation = batch.mutations.single()
+        val error = "Rejected by the server (HTTP ${e.httpStatusCode} ${e.errorCode}): ${e.message}"
+        database.withTransaction {
+            syncOutboxDao.markDead(mutation.id, error, attemptAt)
+            batch.supersededIds[mutation.id]?.let { syncOutboxDao.resetInFlightChunked(it) }
+        }
+        run.deadLettered++
+        run.lastDeadLetterError = error
+    }
+
+    private fun deadLetterMessage(run: SyncRun): String {
+        val changes = if (run.deadLettered == 1) "1 change was" else "${run.deadLettered} changes were"
+        return "$changes rejected by the server and won't be retried. ${run.lastDeadLetterError}"
+    }
+
+    /** Ids of every outbox row still in flight if [batch] and everything [queue]d behind it is abandoned. */
+    private fun inFlightIds(batch: OutgoingBatch, queue: Collection<OutgoingBatch>): List<String> =
+        batch.allIds() + queue.flatMap { it.allIds() }
+
+    /**
+     * Whether [e] means the sync cursor is too old (HTTP 409 `cursor_expired`) and only a snapshot
+     * bootstrap can catch the client up. A 409 that names some other error code is not that and
+     * must not trigger a full re-download; a 409 that names no usable code is taken as cursor
+     * expiry, since that is the only 409 `/v1/sync` documents.
+     */
+    private fun isCursorExpired(e: Exception): Boolean = when (e) {
+        is AuthException.CursorExpired -> true
+        is AuthException.ApiError ->
+            e.errorCode.equals("cursor_expired", ignoreCase = true) ||
+                (e.httpStatusCode == 409 && (e.errorCode.isBlank() || e.errorCode == UNKNOWN_ERROR_CODE))
+        else -> false
+    }
+
+    /**
+     * Whether the server refused the request itself in a way retrying the same request can never
+     * fix: a 4xx other than the ones that say "not now / not you" - 401/403 (auth, handled by the
+     * token refresh and re-login flow), 408/425/429 (timeouts, back-off), and 409 (cursor state).
+     */
+    private fun isPermanentRejection(e: AuthException.ApiError): Boolean =
+        e.httpStatusCode in 400..499 && e.httpStatusCode !in RETRYABLE_4XX_STATUSES
+
     private data class BatchResult(
         val mutationsSynced: Int,
         val changesApplied: Int,
@@ -331,7 +486,21 @@ class SyncEngineImpl(
     private class OutgoingBatch(
         val mutations: List<SyncOutboxEntity>,
         val supersededIds: Map<String, List<String>>
-    )
+    ) {
+        /** Every outbox row this batch stands for: the mutations sent and the ones they supersede. */
+        fun allIds(): List<String> = mutations.flatMap { listOf(it.id) + supersededIds[it.id].orEmpty() }
+
+        /** Splits into the first half and the rest, each mutation keeping its superseded rows. Needs >= 2 mutations. */
+        fun split(): Pair<OutgoingBatch, OutgoingBatch> {
+            val mid = mutations.size / 2
+            return part(mutations.subList(0, mid)) to part(mutations.subList(mid, mutations.size))
+        }
+
+        private fun part(subset: List<SyncOutboxEntity>) = OutgoingBatch(
+            subset,
+            subset.mapNotNull { m -> supersededIds[m.id]?.let { m.id to it } }.toMap()
+        )
+    }
 
     /**
      * The server applies a request's mutations one at a time, each checked against the entity's
@@ -578,13 +747,28 @@ class SyncEngineImpl(
         return BatchResult(mutationsSynced, changesApplied, conflictsRecorded)
     }
 
+    /**
+     * Pages `POST /v1/snapshot` (all sessions, then all solves) until the server says it is done -
+     * however many pages that takes - and only then commits the watermark cursor.
+     *
+     * The cursor is the point the client resumes incremental sync from, so committing it means
+     * "everything before this has arrived". A bootstrap that stops early must therefore never
+     * commit it, or whatever wasn't fetched is skipped for good. Hence the guards: a server that
+     * doesn't advance (a page position asked for twice, `has_more` with nowhere to go on from) or
+     * that never stops offering new positions ([maxSnapshotPages]) fails the bootstrap with a
+     * [SnapshotBootstrapException] instead. Pages already fetched stay applied (upserts of
+     * server rows, harmless to repeat); the next sync starts the bootstrap over.
+     */
     override suspend fun runSnapshotBootstrap(ownerId: String): Long = withContext(ioDispatcher) {
         var watermarkCursor = 0L
         var currentEntity = "session"
         var afterId = ZERO_UUID
         var hasMore = true
         var pageCount = 0
-        val maxPages = 100
+        // Every (entity, after_id) position requested so far. Paging is keyset-based, so being
+        // sent to a position again means the server is going round in circles.
+        val requested = HashSet<Pair<String, String>>()
+        requested += currentEntity to afterId
 
         val device = DeviceDto(
             id = tokenStorage.getDeviceId(),
@@ -592,7 +776,7 @@ class SyncEngineImpl(
             platform = "android"
         )
 
-        while (hasMore && pageCount < maxPages) {
+        while (hasMore) {
             pageCount++
             val request = SnapshotRequest(
                 device = device,
@@ -664,19 +848,41 @@ class SyncEngineImpl(
             // run out it answers has_more = false with next_entity = "solve": that is a hand-over to
             // the solve pages (starting again from the zero UUID), not the end of the bootstrap.
             val nextEntity = response.nextEntity
-            if (response.hasMore) {
+            val nextPosition: Pair<String, String>? = if (response.hasMore) {
                 val entity = nextEntity ?: currentEntity
-                afterId = if (entity == currentEntity) {
-                    response.nextAfterId ?: ZERO_UUID
+                if (entity == currentEntity) {
+                    // Continuing this entity needs the id to resume after; without one the next
+                    // request would restart from the zero UUID and fetch the same page again.
+                    val resumeAfter = response.nextAfterId ?: throw SnapshotBootstrapException(
+                        "Snapshot bootstrap stalled: server reported has_more for '$currentEntity' " +
+                            "after page $pageCount without a next_after_id"
+                    )
+                    entity to resumeAfter
                 } else {
-                    ZERO_UUID
+                    entity to ZERO_UUID
                 }
-                currentEntity = entity
             } else if (nextEntity != null && nextEntity != currentEntity) {
-                currentEntity = nextEntity
-                afterId = ZERO_UUID
+                nextEntity to ZERO_UUID
             } else {
+                null
+            }
+
+            if (nextPosition == null) {
                 hasMore = false
+            } else {
+                if (!requested.add(nextPosition)) {
+                    throw SnapshotBootstrapException(
+                        "Snapshot bootstrap is not advancing: server sent the client back to " +
+                            "'${nextPosition.first}' after ${nextPosition.second} on page $pageCount"
+                    )
+                }
+                if (pageCount >= maxSnapshotPages) {
+                    throw SnapshotBootstrapException(
+                        "Snapshot bootstrap exceeded the safety limit of $maxSnapshotPages pages"
+                    )
+                }
+                currentEntity = nextPosition.first
+                afterId = nextPosition.second
             }
         }
 
@@ -688,6 +894,32 @@ class SyncEngineImpl(
     private companion object {
         const val ZERO_UUID = "00000000-0000-0000-0000-000000000000"
 
+        /** Outbox rows fetched (and mutations sent, after coalescing) per request. */
+        const val OUTBOX_BATCH_SIZE = 500
+
+        /** The `limit` sent with every sync request: how many remote changes the server may return. */
+        const val SYNC_PAGE_LIMIT = 500
+
+        /**
+         * Requests the server may reject outright in one [sync] before it stops hunting for the
+         * offending mutation and fails the sync (rows stay retryable). Isolating one bad mutation
+         * in a full batch takes about 2 * log2(500) = 18 of these, so this leaves room for several
+         * offenders while bounding the traffic (and the number of rows that can be dead-lettered)
+         * when the server rejects everything it is sent.
+         */
+        const val MAX_REJECTED_REQUESTS_PER_SYNC = 128
+
+        /** [AuthException.ApiError.errorCode] that [ErrorParser] substitutes when the server sent none. */
+        const val UNKNOWN_ERROR_CODE = "unknown_error"
+
+        /** 4xx statuses that are about timing, auth or cursor state rather than the request's content. */
+        val RETRYABLE_4XX_STATUSES = setOf(401, 403, 408, 409, 425, 429)
+
+        /**
+         * Default for [maxSnapshotPages]: 25 million rows at 500 per page, far beyond any account.
+         */
+        const val DEFAULT_MAX_SNAPSHOT_PAGES = 50_000
+
         /**
          * The startup refresh is one request under OkHttp's 15 s connect and 15 s read timeouts: a
          * refresh that times out ends in ~15 s, and even one slow in both phases fits. Anything
@@ -696,3 +928,10 @@ class SyncEngineImpl(
         const val DEFAULT_AUTH_INIT_TIMEOUT_MILLIS = 30_000L
     }
 }
+
+/**
+ * A snapshot bootstrap that could not be brought to a trustworthy end (the server stopped
+ * advancing, or never stopped). The watermark cursor is not committed when this is thrown, so the
+ * next sync retries the bootstrap instead of treating a partial download as complete.
+ */
+class SnapshotBootstrapException(message: String) : IllegalStateException(message)

@@ -13,8 +13,9 @@ import kotlinx.coroutines.flow.Flow
 interface SyncOutboxDao {
 
     /**
-     * Mutations ready to send: everything except rows currently `in_flight`. This includes
-     * both `pending` rows and previously-`failed` rows, which are retried on the next sync.
+     * Mutations ready to send: everything except rows currently `in_flight` and rows that were
+     * dead-lettered (`dead`, see [markDead]). This includes both `pending` rows and
+     * previously-`failed` rows, which are retried on the next sync.
      *
      * Ordered by `client_time` with a `rowid` tiebreak: mutations enqueued together in the same
      * write transaction (e.g. a session create + its first solve) share the same client_time, so
@@ -23,7 +24,7 @@ interface SyncOutboxDao {
      */
     @Query("""
         SELECT * FROM sync_outbox
-        WHERE owner_id = :ownerId AND status != 'in_flight'
+        WHERE owner_id = :ownerId AND status NOT IN ('in_flight', 'dead')
         ORDER BY client_time ASC, rowid ASC
         LIMIT :limit
     """)
@@ -33,7 +34,7 @@ interface SyncOutboxDao {
     suspend fun getPendingMutations(ownerId: String): List<SyncOutboxEntity> =
         getPendingMutations(ownerId, 500)
 
-    /** All outbox rows for an owner regardless of status (pending, in_flight, or failed). */
+    /** All outbox rows for an owner regardless of status (pending, in_flight, failed or dead). */
     @Query("""
         SELECT * FROM sync_outbox
         WHERE owner_id = :ownerId
@@ -49,29 +50,41 @@ interface SyncOutboxDao {
     @Query("SELECT * FROM sync_outbox WHERE id = :id LIMIT 1")
     suspend fun getMutationById(id: String): SyncOutboxEntity?
 
+    /**
+     * The newest live mutation queued for the entity (pending, in_flight or failed). Dead rows are
+     * skipped: they will never be sent, so they are not a "newer local edit" to rebase.
+     */
     @Query("""
         SELECT * FROM sync_outbox
         WHERE owner_id = :ownerId AND entity_type = :entityType AND entity_id = :entityId
+          AND status != 'dead'
         ORDER BY client_time DESC, rowid DESC
         LIMIT 1
     """)
     suspend fun getPendingMutationForEntity(ownerId: String, entityType: String, entityId: String): SyncOutboxEntity?
 
-    @Query("SELECT COUNT(*) FROM sync_outbox WHERE owner_id = :ownerId")
+    /** Live outbox rows for the owner (pending, in_flight, failed); dead rows never upload, so aren't "pending". */
+    @Query("SELECT COUNT(*) FROM sync_outbox WHERE owner_id = :ownerId AND status != 'dead'")
     fun observePendingCount(ownerId: String): Flow<Int>
 
-    /** Counts every outbox row for the owner regardless of status (pending, in_flight, failed). */
-    @Query("SELECT COUNT(*) FROM sync_outbox WHERE owner_id = :ownerId")
+    /** Counts the live outbox rows for the owner (pending, in_flight, failed), i.e. everything except `dead`. */
+    @Query("SELECT COUNT(*) FROM sync_outbox WHERE owner_id = :ownerId AND status != 'dead'")
     suspend fun countPending(ownerId: String): Int
 
     /**
      * Filters on all three columns of `idx_outbox_owner_entity_entity_id` so this is an index
      * lookup; without `entity_type` SQLite can only use the `owner_id` prefix and scans every
      * outbox row for the owner, once per incoming change during sync.
+     *
+     * Dead rows are not counted. This count is what shields an entity's local edit from incoming
+     * remote changes, and a dead mutation's edit is never going to reach the server: keeping it
+     * "protected" would freeze the entity against every other device's changes forever. So once a
+     * mutation is dead, the server's copy wins over it.
      */
     @Query("""
         SELECT COUNT(*) FROM sync_outbox
         WHERE owner_id = :ownerId AND entity_type = :entityType AND entity_id = :entityId
+          AND status != 'dead'
     """)
     suspend fun countPendingForEntity(ownerId: String, entityType: String, entityId: String): Int
 
@@ -100,6 +113,30 @@ interface SyncOutboxDao {
     """)
     suspend fun markFailed(id: String, error: String?, attemptAt: Long): Int
 
+    /**
+     * [markFailed] for many rows in one statement. At most [MAX_IN_LIST_SIZE] ids per call; use
+     * [markAllFailedChunked] for arbitrary lists.
+     */
+    @Query("""
+        UPDATE sync_outbox
+        SET status = 'failed', attempt_count = attempt_count + 1, last_attempt_at = :attemptAt, last_error = :error
+        WHERE id IN (:ids)
+    """)
+    suspend fun markAllFailed(ids: List<String>, error: String?, attemptAt: Long): Int
+
+    /**
+     * Dead-letters a mutation the server permanently rejected on its own (a request-level 4xx that
+     * retrying can never fix). A `dead` row is kept for diagnostics (`last_error`) but is excluded
+     * from [getPendingMutations], [countPending], [observePendingCount], [countPendingForEntity]
+     * and [getPendingMutationForEntity], so it is never sent again and blocks nothing.
+     */
+    @Query("""
+        UPDATE sync_outbox
+        SET status = 'dead', attempt_count = attempt_count + 1, last_attempt_at = :attemptAt, last_error = :error
+        WHERE id = :id
+    """)
+    suspend fun markDead(id: String, error: String?, attemptAt: Long): Int
+
     @Query("DELETE FROM sync_outbox WHERE id = :id")
     suspend fun deleteById(id: String): Int
 
@@ -109,3 +146,18 @@ interface SyncOutboxDao {
     @Query("DELETE FROM sync_outbox WHERE owner_id = :ownerId")
     suspend fun clearOutbox(ownerId: String): Int
 }
+
+// Chunked variants of the bulk status updates above. Extension functions (not DAO default methods)
+// so they dispatch through the receiver's own overrides, like the helpers in ChunkedQueries.kt.
+
+/** [SyncOutboxDao.markInFlight] split into batches that stay under SQLite's bind-variable limit. */
+suspend fun SyncOutboxDao.markInFlightChunked(ids: List<String>, attemptAt: Long): Int =
+    ids.chunked(MAX_IN_LIST_SIZE).sumOf { markInFlight(it, attemptAt) }
+
+/** [SyncOutboxDao.resetInFlight] split into batches that stay under SQLite's bind-variable limit. */
+suspend fun SyncOutboxDao.resetInFlightChunked(ids: List<String>): Int =
+    ids.chunked(MAX_IN_LIST_SIZE).sumOf { resetInFlight(it) }
+
+/** [SyncOutboxDao.markAllFailed] split into batches that stay under SQLite's bind-variable limit. */
+suspend fun SyncOutboxDao.markAllFailedChunked(ids: List<String>, error: String?, attemptAt: Long): Int =
+    ids.chunked(MAX_IN_LIST_SIZE).sumOf { markAllFailed(it, error, attemptAt) }
