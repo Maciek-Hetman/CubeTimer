@@ -51,10 +51,10 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.draw
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -241,7 +241,7 @@ fun ShareableSolveCardDialog(
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    val clipboardManager = LocalClipboardManager.current
+    val clipboard = LocalClipboard.current
     val haptic = LocalHapticFeedback.current
     val pictureCaptureState = remember { PictureCaptureState() }
 
@@ -488,8 +488,10 @@ fun ShareableSolveCardDialog(
                                     IconButton(
                                         onClick = {
                                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            clipboardManager.setText(AnnotatedString(solve.scramble))
-                                            Toast.makeText(context, "Scramble copied!", Toast.LENGTH_SHORT).show()
+                                            coroutineScope.launch {
+                                                clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("Scramble", solve.scramble)))
+                                                Toast.makeText(context, "Scramble copied!", Toast.LENGTH_SHORT).show()
+                                            }
                                         },
                                         modifier = Modifier.size(36.dp)
                                     ) {
@@ -567,7 +569,7 @@ fun ShareableSolveCardDialog(
                                     }
                                 } catch (e: Exception) {
                                     Log.e("ShareableSolveCard", "Sharing failed", e)
-                                    Toast.makeText(context, "Could not share solve: ${e.message}", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "Could not share solve", Toast.LENGTH_SHORT).show()
                                 } finally {
                                     isSharing = false
                                 }

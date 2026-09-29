@@ -140,9 +140,7 @@ class StatsFilterTest {
         val solveA2 = SolveTime(id = UUID.randomUUID().toString(), timeInMillis = 14000L, mode = Mode.CUBE_3x3, timestamp = now + 1000, sessionId = sessionAId)
         val solveB1 = SolveTime(id = UUID.randomUUID().toString(), timeInMillis = 9000L, mode = Mode.CUBE_3x3, timestamp = now + 2000, sessionId = sessionBId)
 
-        timerViewModel.addSolve(solveA1)
-        timerViewModel.addSolve(solveA2)
-        timerViewModel.addSolve(solveB1)
+        timerViewModel.restoreSolves(listOf(solveA1, solveA2, solveB1))
         advanceUntilIdle()
 
         // Switch to ActiveSession filter (Session A active) -> should show 2 solves
@@ -172,8 +170,7 @@ class StatsFilterTest {
         val solveA = SolveTime(id = UUID.randomUUID().toString(), timeInMillis = 12000L, mode = Mode.CUBE_3x3, timestamp = now, sessionId = sessionAId)
         val solveB = SolveTime(id = UUID.randomUUID().toString(), timeInMillis = 9500L, mode = Mode.CUBE_3x3, timestamp = now + 1000, sessionId = sessionBId)
 
-        timerViewModel.addSolve(solveA)
-        timerViewModel.addSolve(solveB)
+        timerViewModel.restoreSolves(listOf(solveA, solveB))
         timerViewModel.setStatsFilter(StatsFilter.ActiveSession)
         advanceUntilIdle()
 
@@ -186,27 +183,6 @@ class StatsFilterTest {
 
         assertEquals(1, timerViewModel.statsFilteredSolves.value.size)
         assertEquals(sessionBId, timerViewModel.statsFilteredSolves.value.first().sessionId)
-    }
-
-    @Test
-    fun testClearFilteredSolvesClearsOnlyActiveSessionWhenActiveSessionFilterIsSet() = runTest(testDispatcher) {
-        val now = System.currentTimeMillis()
-        val solveA = SolveTime(id = UUID.randomUUID().toString(), timeInMillis = 12000L, mode = Mode.CUBE_3x3, timestamp = now, sessionId = sessionAId)
-        val solveB = SolveTime(id = UUID.randomUUID().toString(), timeInMillis = 9500L, mode = Mode.CUBE_3x3, timestamp = now + 1000, sessionId = sessionBId)
-
-        timerViewModel.addSolve(solveA)
-        timerViewModel.addSolve(solveB)
-        timerViewModel.setStatsFilter(StatsFilter.ActiveSession)
-        advanceUntilIdle()
-
-        assertEquals(1, timerViewModel.statsFilteredSolves.value.size)
-
-        timerViewModel.clearFilteredSolves()
-        advanceUntilIdle()
-
-        assertEquals(0, timerViewModel.statsFilteredSolves.value.size)
-        assertEquals(1, timerViewModel.solves.value.size)
-        assertEquals(sessionBId, timerViewModel.solves.value.first().sessionId)
     }
 
     private class FakeSessionManager(

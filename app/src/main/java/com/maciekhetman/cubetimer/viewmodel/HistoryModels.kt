@@ -8,7 +8,6 @@ import com.maciekhetman.cubetimer.model.Penalty
 import com.maciekhetman.cubetimer.model.Session
 import com.maciekhetman.cubetimer.model.SessionKind
 import com.maciekhetman.cubetimer.model.SolveTime
-import com.maciekhetman.cubetimer.model.StatsFilter
 
 /**
  * Ordering options for session groups on HistoryScreen.
@@ -115,8 +114,6 @@ data class SessionGroupUiModel(
     val isOpen: Boolean get() = session.isOpen
     val isEmpty: Boolean get() = solveCount == 0
 
-    val averageDurationMs: Long? get() = avgDurationMs
-
     val formattedBest: String?
         get() = bestDurationMs?.let { TimeFormatter.formatTime(it) }
 
@@ -150,17 +147,11 @@ data class HistoryUiState(
     val isFilterSheetOpen: Boolean = false,
     val activeFilterSheetTab: Int = 0, // 0 = Sessions, 1 = Solves
 
-    // Preserved fields for backwards compatibility
-    val solves: List<SolveTime> = emptyList(),
+    // True until the session list has been read for the first time.
     val isLoading: Boolean = true,
-    val isLoadingMore: Boolean = false,
-    val hasMore: Boolean = false,
-    val totalCount: Int = 0,
     val currentMode: Mode = Mode.CUBE_3x3,
-    val currentFilter: StatsFilter = StatsFilter.AllSessions,
     val activeSession: Session? = null,
     val sessions: List<Session> = emptyList(),
-    val errorMessage: String? = null,
     val selectedSolve: SolveDetailState? = null
 ) {
     val activeSessionFilterCount: Int

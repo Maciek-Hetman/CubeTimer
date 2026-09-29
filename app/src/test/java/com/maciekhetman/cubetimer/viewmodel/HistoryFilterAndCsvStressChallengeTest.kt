@@ -1,5 +1,7 @@
 package com.maciekhetman.cubetimer.viewmodel
 
+import kotlinx.coroutines.test.TestScope
+import com.maciekhetman.cubetimer.testutil.keepUiStateActive
 import android.app.Application
 import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
@@ -114,8 +116,8 @@ class HistoryFilterAndCsvStressChallengeTest {
         Dispatchers.resetMain()
     }
 
-    private fun createViewModel(): HistoryViewModel {
-        return HistoryViewModel(
+    private fun TestScope.createViewModel(): HistoryViewModel {
+        return keepUiStateActive(HistoryViewModel(
             application = application,
             solvesRepository = solvesRepository,
             sessionManager = sessionManager,
@@ -127,7 +129,7 @@ class HistoryFilterAndCsvStressChallengeTest {
             syncOutboxDao = database.syncOutboxDao(),
             defaultDispatcher = testDispatcher,
             ioDispatcher = testDispatcher
-        )
+        ))
     }
 
     private suspend fun insertSessionEntity(
@@ -603,7 +605,7 @@ class HistoryFilterAndCsvStressChallengeTest {
         tempFile.createNewFile()
         val uri = Uri.fromFile(tempFile)
 
-        viewModel.uiEffect.test {
+        viewModel.effects.test {
             viewModel.exportSession(application, emptySession.toDomain(), uri)
             advanceUntilIdle()
 
@@ -619,7 +621,7 @@ class HistoryFilterAndCsvStressChallengeTest {
         tempFileAll.createNewFile()
         val uriAll = Uri.fromFile(tempFileAll)
 
-        viewModel.uiEffect.test {
+        viewModel.effects.test {
             viewModel.exportAllSolves(application, uriAll)
             advanceUntilIdle()
 
@@ -631,7 +633,7 @@ class HistoryFilterAndCsvStressChallengeTest {
         tempFileAll.delete()
 
         // Export selected solves when 0 solves selected (checked before stream opening)
-        viewModel.uiEffect.test {
+        viewModel.effects.test {
             val dummyUri = Uri.parse("content://dummy/selected.csv")
             viewModel.exportSelectedSolves(application, dummyUri)
             advanceUntilIdle()
@@ -658,7 +660,7 @@ class HistoryFilterAndCsvStressChallengeTest {
         tempFileAll.createNewFile()
         val uriAll = Uri.fromFile(tempFileAll)
 
-        viewModel.uiEffect.test {
+        viewModel.effects.test {
             viewModel.exportAllSolves(application, uriAll)
             advanceUntilIdle()
 
@@ -684,7 +686,7 @@ class HistoryFilterAndCsvStressChallengeTest {
         viewModel.startSelection(solves[0].id)
         advanceUntilIdle()
 
-        viewModel.uiEffect.test {
+        viewModel.effects.test {
             viewModel.exportSelectedSolves(application, uriSelected)
             advanceUntilIdle()
 
@@ -710,14 +712,15 @@ class HistoryFilterAndCsvStressChallengeTest {
 
         val invalidUri = Uri.parse("invalid://scheme/not/existing/file.csv")
 
-        viewModel.uiEffect.test {
+        viewModel.effects.test {
             viewModel.exportAllSolves(application, invalidUri)
             advanceUntilIdle()
 
             val effect = awaitItem()
             assertTrue("Expected ShowMessage, got: $effect", effect is HistoryUiEffect.ShowMessage)
             val msg = (effect as HistoryUiEffect.ShowMessage).message
-            assertTrue("Expected message starting with 'Failed to export', got: $msg", msg.startsWith("Failed to export solves:"))
+            assertEquals("Failed to export solves", msg)
+            assertFalse("Message must not leak the URI or exception text, got: $msg", msg.contains("invalid://"))
         }
     }
 
@@ -727,7 +730,7 @@ class HistoryFilterAndCsvStressChallengeTest {
         advanceUntilIdle()
 
         val invalidImportUri = Uri.parse("invalid://scheme/not/existing/import.csv")
-        viewModel.uiEffect.test {
+        viewModel.effects.test {
             viewModel.importSolvesFromUri(application, invalidImportUri)
             advanceUntilIdle()
 
@@ -736,8 +739,9 @@ class HistoryFilterAndCsvStressChallengeTest {
             val msg = (effect as HistoryUiEffect.ShowMessage).message
             assertTrue(
                 "Expected import failure message, got: $msg",
-                msg.startsWith("Failed to import solves:") || msg.startsWith("CSV import error:")
+                msg == "Failed to import solves" || msg == "CSV import failed"
             )
+            assertFalse("Message must not leak the URI or exception text, got: $msg", msg.contains("invalid://"))
         }
     }
 

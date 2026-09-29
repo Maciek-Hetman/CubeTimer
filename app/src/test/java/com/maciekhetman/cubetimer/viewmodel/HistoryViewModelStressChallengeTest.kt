@@ -1,5 +1,7 @@
 package com.maciekhetman.cubetimer.viewmodel
 
+import kotlinx.coroutines.test.TestScope
+import com.maciekhetman.cubetimer.testutil.keepUiStateActive
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import app.cash.turbine.test
@@ -115,8 +117,8 @@ class HistoryViewModelStressChallengeTest {
         Dispatchers.resetMain()
     }
 
-    private fun createViewModel(): HistoryViewModel {
-        return HistoryViewModel(
+    private fun TestScope.createViewModel(): HistoryViewModel {
+        return keepUiStateActive(HistoryViewModel(
             application = application,
             solvesRepository = solvesRepository,
             sessionManager = sessionManager,
@@ -128,7 +130,7 @@ class HistoryViewModelStressChallengeTest {
             syncOutboxDao = database.syncOutboxDao(),
             defaultDispatcher = testDispatcher,
             ioDispatcher = testDispatcher
-        )
+        ))
     }
 
     private suspend fun createSessionWithSolves(

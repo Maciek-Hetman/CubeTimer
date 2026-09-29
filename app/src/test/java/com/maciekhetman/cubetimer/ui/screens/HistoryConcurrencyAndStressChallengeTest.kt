@@ -1,5 +1,7 @@
 package com.maciekhetman.cubetimer.ui.screens
 
+import kotlinx.coroutines.test.TestScope
+import com.maciekhetman.cubetimer.testutil.keepUiStateActive
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import com.maciekhetman.cubetimer.data.SolvesRepository
@@ -113,8 +115,8 @@ class HistoryConcurrencyAndStressChallengeTest {
         Dispatchers.resetMain()
     }
 
-    private fun createViewModel(): HistoryViewModel {
-        return HistoryViewModel(
+    private fun TestScope.createViewModel(): HistoryViewModel {
+        return keepUiStateActive(HistoryViewModel(
             application = application,
             solvesRepository = solvesRepository,
             sessionManager = sessionManager,
@@ -126,7 +128,7 @@ class HistoryConcurrencyAndStressChallengeTest {
             syncOutboxDao = database.syncOutboxDao(),
             defaultDispatcher = testDispatcher,
             ioDispatcher = testDispatcher
-        )
+        ))
     }
 
     // =========================================================================
@@ -332,7 +334,6 @@ class HistoryConcurrencyAndStressChallengeTest {
 
         val state = viewModel.uiState.value
         assertTrue(state.sessionGroups.isEmpty())
-        assertEquals(0, state.totalCount)
         assertFalse(state.isLoading)
 
         // Filter operations on empty state should be completely safe

@@ -1,5 +1,7 @@
 package com.maciekhetman.cubetimer.viewmodel
 
+import kotlinx.coroutines.test.TestScope
+import com.maciekhetman.cubetimer.testutil.keepUiStateActive
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import app.cash.turbine.test
@@ -8,6 +10,7 @@ import com.maciekhetman.cubetimer.data.auth.AuthManager
 import com.maciekhetman.cubetimer.data.auth.AuthResult
 import com.maciekhetman.cubetimer.data.local.CubeDatabase
 import com.maciekhetman.cubetimer.data.local.converter.CubeTypeConverters
+import com.maciekhetman.cubetimer.data.local.entity.SessionEntity
 import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
 import com.maciekhetman.cubetimer.data.session.SessionManagerImpl
 import com.maciekhetman.cubetimer.data.session.SessionRepositoryImpl
@@ -22,6 +25,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -39,7 +43,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.time.Instant
-import java.time.temporal.ChronoUnit
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -92,8 +95,28 @@ class HistoryEmpiricalGateChallengeTest {
         Dispatchers.resetMain()
     }
 
-    private fun createViewModel(): HistoryViewModel {
-        return HistoryViewModel(
+    private fun seedSession(ownerId: String): String {
+        val sessionId = "session-$ownerId"
+        runBlocking {
+            database.sessionDao().insert(
+                SessionEntity(
+                    id = sessionId,
+                    ownerId = ownerId,
+                    name = "Seeded Session",
+                    event = "3x3",
+                    kind = "manual",
+                    startedAt = "2026-08-30T09:00:00.000Z"
+                )
+            )
+        }
+        return sessionId
+    }
+
+    private fun HistoryViewModel.expandedSolves(sessionId: String): List<SolveTime> =
+        uiState.value.sessionGroups.single { it.session.id == sessionId }.solves
+
+    private fun TestScope.createViewModel(): HistoryViewModel {
+        return keepUiStateActive(HistoryViewModel(
             application = application,
             solvesRepository = solvesRepository,
             sessionManager = sessionManager,
@@ -104,241 +127,7 @@ class HistoryEmpiricalGateChallengeTest {
             solveDao = database.solveDao(),
             syncOutboxDao = database.syncOutboxDao(),
             defaultDispatcher = testDispatcher
-        )
-    }
-
-    // =========================================================================
-    // TASK 1: Chunked pagination and infinite scroll boundary tests
-    // Boundaries: 0 solves, 1 solve, 49 solves, 50 solves, 100 solves, 250 solves.
-    // Verify offset calculations and deduplication in HistoryViewModel.
-    // =========================================================================
-
-    @Test
-    fun testPaginationBoundary0Solves() = runTest(testDispatcher) {
-        val vm = createViewModel()
-        advanceUntilIdle()
-
-        val state = vm.uiState.value
-        assertEquals(0, state.solves.size)
-        assertEquals(0, state.totalCount)
-        assertFalse("hasMore should be false for 0 solves", state.hasMore)
-        assertFalse(state.isLoading)
-        assertFalse(state.isLoadingMore)
-
-        // Calling loadMore should be a no-op
-        vm.loadMore()
-        advanceUntilIdle()
-        assertEquals(0, vm.uiState.value.solves.size)
-        assertFalse(vm.uiState.value.hasMore)
-    }
-
-    @Test
-    fun testPaginationBoundary1Solve() = runTest(testDispatcher) {
-        val solve = SolveEntity(
-            id = "solve-single",
-            ownerId = "guest",
-            event = "3x3",
-            durationMs = 12500L,
-            penalty = "none",
-            solvedAt = "2026-08-30T10:00:00.100Z",
-            scramble = "R U R'",
-            version = 0L
-        )
-        database.solveDao().insert(solve)
-
-        val vm = createViewModel()
-        advanceUntilIdle()
-
-        val state = vm.uiState.value
-        assertEquals(1, state.solves.size)
-        assertEquals("solve-single", state.solves.first().id)
-        assertEquals(1, state.totalCount)
-        assertFalse("hasMore should be false for 1 solve (< 50)", state.hasMore)
-
-        // loadMore is no-op
-        vm.loadMore()
-        advanceUntilIdle()
-        assertEquals(1, vm.uiState.value.solves.size)
-    }
-
-    @Test
-    fun testPaginationBoundary49Solves() = runTest(testDispatcher) {
-        val baseTime = Instant.parse("2026-08-30T10:00:00.100Z")
-        val solves = (0 until 49).map { i ->
-            SolveEntity(
-                id = "solve-$i",
-                ownerId = "guest",
-                event = "3x3",
-                durationMs = 10000L + i,
-                penalty = "none",
-                solvedAt = baseTime.plus(i.toLong(), ChronoUnit.SECONDS).toString(),
-                scramble = "R U #$i",
-                version = 0L
-            )
-        }
-        database.solveDao().insertAll(solves)
-
-        val vm = createViewModel()
-        advanceUntilIdle()
-
-        val state = vm.uiState.value
-        assertEquals(49, state.solves.size)
-        assertEquals(49, state.totalCount)
-        assertFalse("hasMore should be false for 49 solves (PAGE_SIZE = 50)", state.hasMore)
-        assertEquals("solve-48", state.solves.first().id)
-        assertEquals("solve-0", state.solves.last().id)
-    }
-
-    @Test
-    fun testPaginationBoundary50Solves() = runTest(testDispatcher) {
-        val baseTime = Instant.parse("2026-08-30T10:00:00.100Z")
-        val solves = (0 until 50).map { i ->
-            SolveEntity(
-                id = "solve-$i",
-                ownerId = "guest",
-                event = "3x3",
-                durationMs = 10000L + i,
-                penalty = "none",
-                solvedAt = baseTime.plus(i.toLong(), ChronoUnit.SECONDS).toString(),
-                scramble = "R U #$i",
-                version = 0L
-            )
-        }
-        database.solveDao().insertAll(solves)
-
-        val vm = createViewModel()
-        advanceUntilIdle()
-
-        val state = vm.uiState.value
-        assertEquals(50, state.solves.size)
-        assertEquals(50, state.totalCount)
-        assertFalse("hasMore should be false when all 50 solves are loaded", state.hasMore)
-
-        vm.loadMore()
-        advanceUntilIdle()
-        assertEquals(50, vm.uiState.value.solves.size)
-    }
-
-    @Test
-    fun testPaginationBoundary100Solves() = runTest(testDispatcher) {
-        val baseTime = Instant.parse("2026-08-30T10:00:00.100Z")
-        val solves = (0 until 100).map { i ->
-            SolveEntity(
-                id = "solve-$i",
-                ownerId = "guest",
-                event = "3x3",
-                durationMs = 10000L + i,
-                penalty = "none",
-                solvedAt = baseTime.plus(i.toLong(), ChronoUnit.SECONDS).toString(),
-                scramble = "R U #$i",
-                version = 0L
-            )
-        }
-        database.solveDao().insertAll(solves)
-
-        val vm = createViewModel()
-        advanceUntilIdle()
-
-        // Page 1 loaded (50 items)
-        assertEquals(50, vm.uiState.value.solves.size)
-        assertEquals(100, vm.uiState.value.totalCount)
-        assertTrue("hasMore should be true after page 1 of 100", vm.uiState.value.hasMore)
-        assertEquals("solve-99", vm.uiState.value.solves.first().id)
-        assertEquals("solve-50", vm.uiState.value.solves.last().id)
-
-        // Load Page 2 (next 50 items)
-        vm.loadMore()
-        advanceUntilIdle()
-
-        assertEquals(100, vm.uiState.value.solves.size)
-        assertEquals("solve-99", vm.uiState.value.solves.first().id)
-        assertEquals("solve-0", vm.uiState.value.solves.last().id)
-        assertFalse("hasMore should be false after page 2 of 100", vm.uiState.value.hasMore)
-    }
-
-    @Test
-    fun testPaginationBoundary250SolvesAndOffsetDeduplication() = runTest(testDispatcher) {
-        val baseTime = Instant.parse("2026-08-30T10:00:00.100Z")
-        val solves = (0 until 250).map { i ->
-            SolveEntity(
-                id = "s-$i",
-                ownerId = "guest",
-                event = "3x3",
-                durationMs = 10000L + i,
-                penalty = "none",
-                solvedAt = baseTime.plus(i.toLong(), ChronoUnit.SECONDS).toString(),
-                scramble = "R U #$i",
-                version = 0L
-            )
-        }
-        database.solveDao().insertAll(solves)
-
-        val vm = createViewModel()
-        advanceUntilIdle()
-
-        assertEquals(50, vm.uiState.value.solves.size)
-        assertEquals(250, vm.uiState.value.totalCount)
-        assertTrue(vm.uiState.value.hasMore)
-
-        // Load remaining pages: 50 -> 100 -> 150 -> 200 -> 250
-        for (expectedCount in listOf(100, 150, 200, 250)) {
-            vm.loadMore()
-            advanceUntilIdle()
-            assertEquals(expectedCount, vm.uiState.value.solves.size)
-        }
-
-        assertFalse("hasMore should be false after all 250 loaded", vm.uiState.value.hasMore)
-        assertEquals("s-249", vm.uiState.value.solves.first().id)
-        assertEquals("s-0", vm.uiState.value.solves.last().id)
-
-        // Verify deduplication: all 250 IDs must be strictly unique
-        val ids = vm.uiState.value.solves.map { it.id }
-        assertEquals(250, ids.toSet().size)
-    }
-
-    @Test
-    fun testMidScrollInsertDeduplicationMechanics() = runTest(testDispatcher) {
-        val baseTime = Instant.parse("2026-08-30T10:00:00.100Z")
-        val initialSolves = (0 until 60).map { i ->
-            SolveEntity(
-                id = "initial-$i",
-                ownerId = "guest",
-                event = "3x3",
-                durationMs = 10000L + i,
-                penalty = "none",
-                solvedAt = baseTime.plus(i.toLong(), ChronoUnit.SECONDS).toString(),
-                scramble = "R",
-                version = 0L
-            )
-        }
-        database.solveDao().insertAll(initialSolves)
-
-        val vm = createViewModel()
-        advanceUntilIdle()
-
-        // Page 1 loaded: 50 solves (initial-59 down to initial-10)
-        assertEquals(50, vm.uiState.value.solves.size)
-
-        // Simulate concurrent insert of 1 new solve with a newer timestamp
-        val newSolve = SolveEntity(
-            id = "new-top-solve",
-            ownerId = "guest",
-            event = "3x3",
-            durationMs = 9000L,
-            penalty = "none",
-            solvedAt = baseTime.plus(100L, ChronoUnit.SECONDS).toString(),
-            scramble = "U",
-            version = 0L
-        )
-        database.solveDao().insert(newSolve)
-
-        // Now trigger loadMore()
-        vm.loadMore()
-        advanceUntilIdle()
-
-        // Verify deduplication prevented duplicates and list contains no duplicate IDs
-        val allIds = vm.uiState.value.solves.map { it.id }
-        assertEquals("IDs in list must be distinct", allIds.toSet().size, allIds.size)
+        ))
     }
 
     // =========================================================================
@@ -352,10 +141,12 @@ class HistoryEmpiricalGateChallengeTest {
         // Authenticate user
         val testUser = User(id = "user-auth-1", email = "test@cubesync.com")
         fakeAuthManager.setAuthenticated(testUser)
+        val sessionId = seedSession("user-auth-1")
 
         val initialSolve = SolveEntity(
             id = "solve-pen-test",
             ownerId = "user-auth-1",
+            sessionId = sessionId,
             event = "3x3",
             durationMs = 11000L,
             penalty = "none",
@@ -367,16 +158,16 @@ class HistoryEmpiricalGateChallengeTest {
 
         val vm = createViewModel()
         advanceUntilIdle()
+        vm.expandSession(sessionId)
+        advanceUntilIdle()
 
-        val solveTime = vm.uiState.value.solves.first()
+        val solveTime = vm.expandedSolves(sessionId).single()
         assertEquals(Penalty.NONE, solveTime.penalty)
 
         // 1. Transition NONE -> PLUS_TWO
         vm.updateSolvePenalty(solveTime, Penalty.PLUS_TWO)
-        // Check optimistic state on solves StateFlow immediately
-        assertEquals(Penalty.PLUS_TWO, vm.solves.value.first().penalty)
         advanceUntilIdle()
-        assertEquals(Penalty.PLUS_TWO, vm.uiState.value.solves.first().penalty)
+        assertEquals(Penalty.PLUS_TWO, vm.expandedSolves(sessionId).single().penalty)
 
         // Verify Room persistence
         val inDbPlusTwo = database.solveDao().getSolveById("solve-pen-test")
@@ -390,11 +181,10 @@ class HistoryEmpiricalGateChallengeTest {
         assertTrue(outbox1[0].payloadJson?.contains("\"penalty\":\"plus_two\"") == true)
 
         // 2. Transition PLUS_TWO -> DNF
-        val currentSolve = vm.uiState.value.solves.first()
+        val currentSolve = vm.expandedSolves(sessionId).single()
         vm.updateSolvePenalty(currentSolve, Penalty.DNF)
-        assertEquals(Penalty.DNF, vm.solves.value.first().penalty)
         advanceUntilIdle()
-        assertEquals(Penalty.DNF, vm.uiState.value.solves.first().penalty)
+        assertEquals(Penalty.DNF, vm.expandedSolves(sessionId).single().penalty)
 
         val inDbDnf = database.solveDao().getSolveById("solve-pen-test")
         assertEquals("dnf", inDbDnf?.penalty)
@@ -405,11 +195,10 @@ class HistoryEmpiricalGateChallengeTest {
         assertTrue(outbox2[1].payloadJson?.contains("\"penalty\":\"dnf\"") == true)
 
         // 3. Transition DNF -> NONE
-        val dnfSolve = vm.uiState.value.solves.first()
+        val dnfSolve = vm.expandedSolves(sessionId).single()
         vm.updateSolvePenalty(dnfSolve, Penalty.NONE)
-        assertEquals(Penalty.NONE, vm.solves.value.first().penalty)
         advanceUntilIdle()
-        assertEquals(Penalty.NONE, vm.uiState.value.solves.first().penalty)
+        assertEquals(Penalty.NONE, vm.expandedSolves(sessionId).single().penalty)
 
         val inDbNone = database.solveDao().getSolveById("solve-pen-test")
         assertEquals("none", inDbNone?.penalty)
@@ -423,10 +212,12 @@ class HistoryEmpiricalGateChallengeTest {
     @Test
     fun testGuestPenaltyUpdateDoesNotEnqueueOutbox() = runTest(testDispatcher) {
         fakeAuthManager.setGuest()
+        val sessionId = seedSession("guest")
 
         val solve = SolveEntity(
             id = "guest-solve",
             ownerId = "guest",
+            sessionId = sessionId,
             event = "3x3",
             durationMs = 15000L,
             penalty = "none",
@@ -438,12 +229,14 @@ class HistoryEmpiricalGateChallengeTest {
 
         val vm = createViewModel()
         advanceUntilIdle()
+        vm.expandSession(sessionId)
+        advanceUntilIdle()
 
-        val item = vm.uiState.value.solves.first()
+        val item = vm.expandedSolves(sessionId).single()
         vm.updateSolvePenalty(item, Penalty.PLUS_TWO)
         advanceUntilIdle()
 
-        assertEquals(Penalty.PLUS_TWO, vm.uiState.value.solves.first().penalty)
+        assertEquals(Penalty.PLUS_TWO, vm.expandedSolves(sessionId).single().penalty)
         // Outbox must remain empty for guests
         val outbox = database.syncOutboxDao().getPendingMutations(ownerId = "guest", limit = 10)
         assertTrue("Guest mutations should not be enqueued in outbox", outbox.isEmpty())
@@ -453,10 +246,12 @@ class HistoryEmpiricalGateChallengeTest {
     fun testSolveDeletionWithUndoAndOutbox() = runTest(testDispatcher) {
         val testUser = User(id = "user-del-test", email = "del@test.com")
         fakeAuthManager.setAuthenticated(testUser)
+        val sessionId = seedSession("user-del-test")
 
         val s1 = SolveEntity(
             id = "del-s1",
             ownerId = "user-del-test",
+            sessionId = sessionId,
             event = "3x3",
             durationMs = 12000L,
             penalty = "none",
@@ -467,6 +262,7 @@ class HistoryEmpiricalGateChallengeTest {
         val s2 = SolveEntity(
             id = "del-s2",
             ownerId = "user-del-test",
+            sessionId = sessionId,
             event = "3x3",
             durationMs = 13000L,
             penalty = "none",
@@ -478,16 +274,15 @@ class HistoryEmpiricalGateChallengeTest {
 
         val vm = createViewModel()
         advanceUntilIdle()
+        vm.expandSession(sessionId)
+        advanceUntilIdle()
 
-        assertEquals(2, vm.uiState.value.solves.size)
-        val solveToDelete = vm.uiState.value.solves.first { it.id == "del-s2" }
+        assertEquals(2, vm.expandedSolves(sessionId).size)
+        val solveToDelete = vm.expandedSolves(sessionId).first { it.id == "del-s2" }
 
         // Test effect emission for undo snackbar
         vm.effects.test {
             vm.deleteSolve(solveToDelete)
-            // solves StateFlow updated immediately
-            assertEquals(1, vm.solves.value.size)
-            assertEquals("del-s1", vm.solves.value.first().id)
 
             val effect = awaitItem()
             assertTrue("Expected ShowUndoSnackbar effect", effect is HistoryUiEffect.ShowUndoSnackbar)
@@ -497,8 +292,7 @@ class HistoryEmpiricalGateChallengeTest {
         }
         advanceUntilIdle()
 
-        assertEquals(1, vm.uiState.value.solves.size)
-        assertEquals(1, vm.uiState.value.totalCount)
+        assertEquals(listOf("del-s1"), vm.expandedSolves(sessionId).map { it.id })
 
         // Room DB soft-deleted
         val softDeleted = database.solveDao().getSolveById("del-s2")
@@ -515,10 +309,7 @@ class HistoryEmpiricalGateChallengeTest {
         advanceUntilIdle()
 
         // Restored in UI
-        assertEquals(2, vm.uiState.value.solves.size)
-        assertEquals(2, vm.uiState.value.totalCount)
-        assertEquals("del-s2", vm.uiState.value.solves[0].id)
-        assertEquals("del-s1", vm.uiState.value.solves[1].id)
+        assertEquals(listOf("del-s2", "del-s1"), vm.expandedSolves(sessionId).map { it.id })
 
         // Room DB restored (deletedAt = null)
         val restored = database.solveDao().getSolveById("del-s2")
@@ -535,11 +326,13 @@ class HistoryEmpiricalGateChallengeTest {
     fun testClearHistoryWithUndoAndOutbox() = runTest(testDispatcher) {
         val testUser = User(id = "user-clear-test", email = "clear@test.com")
         fakeAuthManager.setAuthenticated(testUser)
+        val sessionId = seedSession("user-clear-test")
 
         val solves = (1..3).map { i ->
             SolveEntity(
                 id = "clear-s$i",
                 ownerId = "user-clear-test",
+                sessionId = sessionId,
                 event = "3x3",
                 durationMs = 10000L + i * 1000,
                 penalty = "none",
@@ -552,14 +345,12 @@ class HistoryEmpiricalGateChallengeTest {
 
         val vm = createViewModel()
         advanceUntilIdle()
-        assertEquals(3, vm.uiState.value.solves.size)
+        assertEquals(3, vm.uiState.value.sessionGroups.single().solveCount)
 
         vm.clearHistory()
         advanceUntilIdle()
 
-        assertEquals(0, vm.uiState.value.solves.size)
-        assertEquals(0, vm.uiState.value.totalCount)
-        assertFalse(vm.uiState.value.hasMore)
+        assertEquals(0, vm.uiState.value.sessionGroups.single().solveCount)
 
         // Verify outbox has 3 delete mutations
         val deleteMutations = database.syncOutboxDao().getPendingMutations(ownerId = "user-clear-test", limit = 10)
@@ -570,8 +361,7 @@ class HistoryEmpiricalGateChallengeTest {
         vm.undoClearHistory()
         advanceUntilIdle()
 
-        assertEquals(3, vm.uiState.value.solves.size)
-        assertEquals(3, vm.uiState.value.totalCount)
+        assertEquals(3, vm.uiState.value.sessionGroups.single().solveCount)
 
         // Verify in DB all 3 are active
         val activeSolves = database.solveDao().getAllActiveSolvesForOwner("user-clear-test")
@@ -610,15 +400,14 @@ class HistoryEmpiricalGateChallengeTest {
         val vm = createViewModel()
         advanceUntilIdle()
 
-        vm.selectSolveForDetail(solve)
+        vm.selectSolveForDetail(solve, solveNumber = 1)
         advanceUntilIdle()
 
-        val detail = vm.selectedSolveDetail.value
+        val detail = vm.uiState.value.selectedSolve
         assertNotNull(detail)
         assertNull("Prior best time must be null for the very first solve", detail?.priorBestTime)
         assertTrue("First non-DNF solve is always considered PB", detail?.isPb == true)
         assertNull("pbDelta must be null when there was no previous PB", detail?.pbDelta)
-        assertEquals(1, detail?.solveNumber)
     }
 
     @Test
@@ -628,37 +417,44 @@ class HistoryEmpiricalGateChallengeTest {
         val t2 = "2026-08-30T10:02:00.100Z"
         val t3 = "2026-08-30T10:03:00.100Z"
         val t4 = "2026-08-30T10:04:00.100Z"
+        val sessionId = seedSession("guest")
 
         // Solve 0: 15.00s clean at t0
         database.solveDao().insert(
-            SolveEntity(id = "s0", ownerId = "guest", event = "3x3", durationMs = 15000L, penalty = "none", solvedAt = t0, scramble = "R", version = 0L)
+            SolveEntity(id = "s0", ownerId = "guest", sessionId = sessionId, event = "3x3", durationMs = 15000L, penalty = "none", solvedAt = t0, scramble = "R", version = 0L)
         )
         // Solve 1: 10.00s raw with +2 penalty = 12.00s effective at t1 (New PB!)
         database.solveDao().insert(
-            SolveEntity(id = "s1", ownerId = "guest", event = "3x3", durationMs = 10000L, penalty = "plus_two", solvedAt = t1, scramble = "R U", version = 0L)
+            SolveEntity(id = "s1", ownerId = "guest", sessionId = sessionId, event = "3x3", durationMs = 10000L, penalty = "plus_two", solvedAt = t1, scramble = "R U", version = 0L)
         )
         // Solve 2: 8.00s raw with DNF at t2 (Must be ignored for prior best!)
         database.solveDao().insert(
-            SolveEntity(id = "s2", ownerId = "guest", event = "3x3", durationMs = 8000L, penalty = "dnf", solvedAt = t2, scramble = "R U2", version = 0L)
+            SolveEntity(id = "s2", ownerId = "guest", sessionId = sessionId, event = "3x3", durationMs = 8000L, penalty = "dnf", solvedAt = t2, scramble = "R U2", version = 0L)
         )
         // Solve 3: 13.00s clean at t3 (Slower than 12.00s effective PB -> Not a PB)
         database.solveDao().insert(
-            SolveEntity(id = "s3", ownerId = "guest", event = "3x3", durationMs = 13000L, penalty = "none", solvedAt = t3, scramble = "R U'", version = 0L)
+            SolveEntity(id = "s3", ownerId = "guest", sessionId = sessionId, event = "3x3", durationMs = 13000L, penalty = "none", solvedAt = t3, scramble = "R U'", version = 0L)
         )
         // Solve 4: 9.00s clean at t4 (Beats 12.00s PB by 3.00s -> PB!)
         database.solveDao().insert(
-            SolveEntity(id = "s4", ownerId = "guest", event = "3x3", durationMs = 9000L, penalty = "none", solvedAt = t4, scramble = "R U R'", version = 0L)
+            SolveEntity(id = "s4", ownerId = "guest", sessionId = sessionId, event = "3x3", durationMs = 9000L, penalty = "none", solvedAt = t4, scramble = "R U R'", version = 0L)
         )
 
         val vm = createViewModel()
         advanceUntilIdle()
+        vm.expandSession(sessionId)
+        advanceUntilIdle()
+        val group = vm.uiState.value.sessionGroups.single()
+        fun select(id: String) {
+            val solve = group.solves.first { it.id == id }
+            vm.selectSolveForDetail(solve, group.solveNumbers.getValue(id))
+        }
 
         // Check Solve 1 (+2 penalty): Effective duration = 12000L, prior best = 15000L, isPb = true, delta = 3000L
-        val solve1 = vm.uiState.value.solves.first { it.id == "s1" }
-        vm.selectSolveForDetail(solve1)
+        select("s1")
         advanceUntilIdle()
 
-        val detail1 = vm.selectedSolveDetail.value
+        val detail1 = vm.uiState.value.selectedSolve
         assertNotNull(detail1)
         assertEquals(15000L, detail1?.priorBestTime)
         assertTrue("Solve 1 (12s effective vs 15s) must be PB", detail1?.isPb == true)
@@ -666,11 +462,10 @@ class HistoryEmpiricalGateChallengeTest {
         assertEquals(2, detail1?.solveNumber)
 
         // Check Solve 2 (DNF): Cannot be a PB
-        val solve2 = vm.uiState.value.solves.first { it.id == "s2" }
-        vm.selectSolveForDetail(solve2)
+        select("s2")
         advanceUntilIdle()
 
-        val detail2 = vm.selectedSolveDetail.value
+        val detail2 = vm.uiState.value.selectedSolve
         assertNotNull(detail2)
         assertEquals(12000L, detail2?.priorBestTime) // DNF ignored, prior best remains 12000L
         assertFalse("DNF solve can never be a PB", detail2?.isPb == true)
@@ -678,11 +473,10 @@ class HistoryEmpiricalGateChallengeTest {
         assertEquals(3, detail2?.solveNumber)
 
         // Check Solve 3: 13.00s vs prior best 12.00s (+2 from s1)
-        val solve3 = vm.uiState.value.solves.first { it.id == "s3" }
-        vm.selectSolveForDetail(solve3)
+        select("s3")
         advanceUntilIdle()
 
-        val detail3 = vm.selectedSolveDetail.value
+        val detail3 = vm.uiState.value.selectedSolve
         assertNotNull(detail3)
         assertEquals(12000L, detail3?.priorBestTime)
         assertFalse("13.00s is slower than prior best 12.00s", detail3?.isPb == true)
@@ -690,11 +484,10 @@ class HistoryEmpiricalGateChallengeTest {
         assertEquals(4, detail3?.solveNumber)
 
         // Check Solve 4: 9.00s vs prior best 12.00s -> New PB with delta 3000L
-        val solve4 = vm.uiState.value.solves.first { it.id == "s4" }
-        vm.selectSolveForDetail(solve4)
+        select("s4")
         advanceUntilIdle()
 
-        val detail4 = vm.selectedSolveDetail.value
+        val detail4 = vm.uiState.value.selectedSolve
         assertNotNull(detail4)
         assertEquals(12000L, detail4?.priorBestTime)
         assertTrue("9.00s is faster than prior best 12.00s", detail4?.isPb == true)

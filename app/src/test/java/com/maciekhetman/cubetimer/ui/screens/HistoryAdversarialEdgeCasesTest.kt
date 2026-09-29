@@ -1,5 +1,7 @@
 package com.maciekhetman.cubetimer.ui.screens
 
+import kotlinx.coroutines.test.TestScope
+import com.maciekhetman.cubetimer.testutil.keepUiStateActive
 import android.app.Application
 import android.net.Uri
 import androidx.activity.OnBackPressedCallback
@@ -132,8 +134,8 @@ class HistoryAdversarialEdgeCasesTest {
         Dispatchers.resetMain()
     }
 
-    private fun createViewModel(): HistoryViewModel {
-        return HistoryViewModel(
+    private fun TestScope.createViewModel(): HistoryViewModel {
+        return keepUiStateActive(HistoryViewModel(
             application = application,
             solvesRepository = solvesRepository,
             sessionManager = sessionManager,
@@ -144,7 +146,7 @@ class HistoryAdversarialEdgeCasesTest {
             solveDao = database.solveDao(),
             syncOutboxDao = database.syncOutboxDao(),
             defaultDispatcher = testDispatcher
-        )
+        ))
     }
 
     private class TestDispatcherOwner(val dispatcher: OnBackPressedDispatcher) :
@@ -236,7 +238,6 @@ class HistoryAdversarialEdgeCasesTest {
                 sessionId = sessionId
             )
         )
-        vm.refresh()
         advanceUntilIdle()
 
         val dispatcher = OnBackPressedDispatcher()
