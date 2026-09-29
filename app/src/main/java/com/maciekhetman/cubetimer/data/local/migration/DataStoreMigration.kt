@@ -1,16 +1,23 @@
 package com.maciekhetman.cubetimer.data.local.migration
 
 import android.content.Context
+import android.util.Log
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.room.withTransaction
 import com.maciekhetman.cubetimer.data.local.CubeDatabase
 import com.maciekhetman.cubetimer.data.local.converter.CubeTypeConverters
+import com.maciekhetman.cubetimer.data.local.entity.SessionEntity
 import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
 import com.maciekhetman.cubetimer.data.settingsDataStore
 import com.maciekhetman.cubetimer.data.solvesDataStore
+import com.maciekhetman.cubetimer.domain.session.AutomaticSessionHelper
+import com.maciekhetman.cubetimer.model.SessionKind
+import java.time.Instant
+import java.time.ZoneId
 import java.util.UUID
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -21,9 +28,11 @@ import kotlinx.coroutines.sync.withLock
 
 class DataStoreMigration(
     private val context: Context,
-    private val database: CubeDatabase
+    private val database: CubeDatabase,
+    private val zoneId: ZoneId = ZoneId.systemDefault()
 ) {
     companion object {
+        private const val TAG = "DataStoreMigration"
         val DATASTORE_SOLVES_MIGRATED_KEY = booleanPreferencesKey("datastore_solves_migrated")
         private val SOLVES_LIST_KEY = stringPreferencesKey("solves_list")
         private val migrationMutex = Mutex()
@@ -32,28 +41,97 @@ class DataStoreMigration(
     suspend fun migrateIfNeeded() = withContext(Dispatchers.IO) {
         migrationMutex.withLock {
             val settings = context.settingsDataStore.data.first()
-            if (settings[DATASTORE_SOLVES_MIGRATED_KEY] == true) {
-                return@withLock
+            if (settings[DATASTORE_SOLVES_MIGRATED_KEY] != true) {
+                importLegacySolves()
             }
-
-            val solvesPrefs = context.solvesDataStore.data.first()
-            val rawJson = solvesPrefs[SOLVES_LIST_KEY]
-
-            if (rawJson.isNullOrBlank() || rawJson.trim() == "[]") {
-                markMigrated()
-                return@withLock
+            // Runs on every start, not only right after an import: earlier builds imported the
+            // legacy solves without a session, and those installs are already marked migrated.
+            // Best effort: callers fire this and forget it, and the next start simply retries.
+            try {
+                attachSessionlessGuestSolves()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not attach session-less guest solves", e)
             }
+        }
+    }
 
+    private suspend fun importLegacySolves() {
+        val rawJson = context.solvesDataStore.data.first()[SOLVES_LIST_KEY]
+
+        if (!rawJson.isNullOrBlank() && rawJson.trim() != "[]") {
             val entities = parseLegacySolvesJson(rawJson)
-
             if (entities.isNotEmpty()) {
                 database.withTransaction {
                     database.solveDao().upsertAll(entities)
+                    attachSessionlessGuestSolves()
                 }
             }
-
-            markMigrated()
         }
+
+        markMigrated()
+    }
+
+    /**
+     * History lists solves by session, so a guest solve without one is invisible there. Such
+     * solves (the legacy import's, or any left behind by older builds) are grouped per event
+     * into runs split at the automatic-session inactivity gap, and each run gets the closed
+     * automatic session the app would have opened for it. Guest rows have no outbox, and
+     * signed-in owners are left alone: the server accepts session-less solves, and re-homing
+     * them here would rewrite the server's copy.
+     */
+    private suspend fun attachSessionlessGuestSolves() = database.withTransaction {
+        val orphans = database.solveDao().getActiveSolvesWithoutSession("guest")
+        if (orphans.isEmpty()) return@withTransaction
+
+        val sessionDao = database.sessionDao()
+        val activeSessions = sessionDao.getAllActiveSessionsForOwner("guest")
+        val nowIso = CubeTypeConverters.nowIso()
+        val newSessions = ArrayList<SessionEntity>()
+        val attachedSolves = ArrayList<SolveEntity>(orphans.size)
+
+        orphans.groupBy { it.event }.forEach { (event, eventSolves) ->
+            val takenNames = activeSessions.filter { it.event == event }.mapTo(ArrayList()) { it.name }
+            val timed = eventSolves
+                .map { CubeTypeConverters.isoToEpochMillis(it.solvedAt) to it }
+                .sortedBy { it.first }
+
+            var runStart = 0
+            for (i in timed.indices) {
+                val runEnds = i == timed.lastIndex ||
+                    timed[i + 1].first - timed[i].first > AutomaticSessionHelper.DEFAULT_INACTIVITY_GAP_MILLIS
+                if (!runEnds) continue
+
+                val run = timed.subList(runStart, i + 1)
+                val firstMs = run.first().first
+                val name = AutomaticSessionHelper.uniqueAutomaticSessionName(
+                    Instant.ofEpochMilli(firstMs), takenNames, zoneId
+                )
+                takenNames += name
+                val session = SessionEntity(
+                    id = UUID.randomUUID().toString(),
+                    ownerId = "guest",
+                    name = name,
+                    event = event,
+                    // Closed (ended_at = last solve), so the automatic session policy never
+                    // picks one up as the open session to append to.
+                    kind = SessionKind.AUTOMATIC.value,
+                    startedAt = CubeTypeConverters.epochMillisToIso(firstMs),
+                    endedAt = CubeTypeConverters.epochMillisToIso(run.last().first),
+                    archived = false,
+                    version = 0L,
+                    updatedAt = nowIso,
+                    deletedAt = null
+                )
+                newSessions += session
+                run.mapTo(attachedSolves) { (_, solve) -> solve.copy(sessionId = session.id) }
+                runStart = i + 1
+            }
+        }
+
+        sessionDao.insertAll(newSessions)
+        database.solveDao().upsertAll(attachedSolves)
     }
 
     private suspend fun markMigrated() {

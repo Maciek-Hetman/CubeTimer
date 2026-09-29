@@ -193,6 +193,13 @@ interface SolveDao {
     @Query("SELECT * FROM solves WHERE owner_id = :ownerId")
     suspend fun getAllSolvesForOwner(ownerId: String): List<SolveEntity>
 
+    /** Non-deleted solves of [ownerId] that belong to no session (History only lists solves by session). */
+    @Query("""
+        SELECT * FROM solves
+        WHERE owner_id = :ownerId AND session_id IS NULL AND deleted_at IS NULL
+    """)
+    suspend fun getActiveSolvesWithoutSession(ownerId: String): List<SolveEntity>
+
     // --- Insert / Update / Upsert Operations ---
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
