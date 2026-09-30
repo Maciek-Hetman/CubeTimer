@@ -39,6 +39,8 @@ android {
     }
     buildFeatures {
         compose = true
+        // Settings' "About" section shows BuildConfig.VERSION_NAME.
+        buildConfig = true
     }
     testOptions {
         unitTests {
