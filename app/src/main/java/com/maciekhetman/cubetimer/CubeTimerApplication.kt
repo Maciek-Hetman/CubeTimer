@@ -242,7 +242,7 @@ class CubeTimerApplication : Application(), Configuration.Provider {
     }
 
     companion object {
-        const val BASE_URL = "https://cubesync.example.com"
+        const val BASE_URL = "https://api.cubetimer.cc"
 
         @Volatile
         private var instance: CubeTimerApplication? = null

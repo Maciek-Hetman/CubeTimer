@@ -11,6 +11,7 @@ import com.maciekhetman.cubetimer.data.remote.ErrorParser
 import com.maciekhetman.cubetimer.data.remote.RefreshResult
 import com.maciekhetman.cubetimer.data.remote.TokenRefresher
 import com.maciekhetman.cubetimer.data.remote.dto.AuthResponse
+import com.maciekhetman.cubetimer.data.remote.dto.ChangePasswordRequest
 import com.maciekhetman.cubetimer.data.remote.dto.GoogleAuthRequest
 import com.maciekhetman.cubetimer.data.remote.dto.LoginRequest
 import com.maciekhetman.cubetimer.data.remote.dto.RegisterRequest
@@ -454,6 +455,43 @@ class AuthManagerImpl(
             database.conflictDao().deleteForOwner(userId)
             database.syncMetadataDao().deleteForOwner(userId)
         }
+    }
+
+    override suspend fun changePassword(currentPassword: String, newPassword: String): AuthResult<Unit> = withContext(ioDispatcher) {
+        val user = currentUser
+            ?: return@withContext AuthResult.Error(AuthException.Unauthorized("Not signed in"))
+
+        try {
+            apiClient.changePassword(
+                ChangePasswordRequest(currentPassword = currentPassword, newPassword = newPassword)
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: AuthException) {
+            return@withContext AuthResult.Error(e)
+        } catch (e: Exception) {
+            return@withContext AuthResult.Error(AuthException.NetworkError("Password change failed: ${e.localizedMessage}", e))
+        }
+
+        // The server has revoked every refresh token of the user, this device's included, so the
+        // stored session is already dead. Signing in again must complete even if the caller is
+        // cancelled from here on, or the access token would quietly stop working within minutes.
+        withContext(NonCancellable) {
+            try {
+                val response = apiClient.login(LoginRequest(email = user.email, password = newPassword))
+                // Not a new login: it is the same user continuing, so guest data must not be adopted.
+                handleAuthSuccess(response, isNewLogin = false)
+            } catch (e: CancellationException) {
+                onSessionExpired()
+                throw e
+            } catch (e: Exception) {
+                // The password did change; only this device is left without a usable session.
+                Log.w(TAG, "Signing in again after a password change failed", e)
+                onSessionExpired()
+            }
+        }
+
+        AuthResult.Success(Unit)
     }
 
     override fun onSessionExpired() {

@@ -15,6 +15,8 @@ import com.maciekhetman.cubetimer.data.session.SessionManager
 import com.maciekhetman.cubetimer.domain.AverageCalculator
 import com.maciekhetman.cubetimer.domain.ScrambleGenerator
 import com.maciekhetman.cubetimer.domain.bluetooth.SmartTimerEvent
+import com.maciekhetman.cubetimer.model.Inspection
+import com.maciekhetman.cubetimer.model.InspectionStartGesture
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Penalty
 import com.maciekhetman.cubetimer.model.RecordCelebration
@@ -67,6 +69,12 @@ class TimerViewModel(
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
+    /** True while a solve is running or inspection is counting down: mode, device and navigation stay locked. */
+    val isTimerBusy: StateFlow<Boolean> = _timerState
+        .map { it is TimerState.Running || it is TimerState.Inspecting }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
     private val _currentMode = MutableStateFlow(Mode.CUBE_3x3)
     val currentMode: StateFlow<Mode> = _currentMode.asStateFlow()
 
@@ -114,6 +122,12 @@ class TimerViewModel(
 
     val hapticsEnabled: StateFlow<Boolean> = settingsRepository.hapticsEnabledFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    val inspectionEnabled: StateFlow<Boolean> = settingsRepository.inspectionEnabledFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    val inspectionStartGesture: StateFlow<InspectionStartGesture> = settingsRepository.inspectionStartGestureFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, InspectionStartGesture.HOLD)
 
     /** Touch timing, or a Bluetooth timer driving the timer instead of the screen. */
     val timingDevice: StateFlow<TimingDevice> = settingsRepository.timingDeviceFlow
@@ -279,6 +293,18 @@ class TimerViewModel(
     private var scrambleJob: Job? = null
     private var startTime: Long = 0
 
+    // Inspection bookkeeping (touch input only). The ticker publishes the elapsed inspection time and
+    // the hold progress; the penalty is always computed from the press/release timestamps instead.
+    private var inspectionJob: Job? = null
+    private var inspectionStartTime: Long = 0
+    private var inspectionHoldStart: Long? = null
+    private var inspectionHoldDuration: Long = 0
+    /** The press that began inspection is still down; its release must not start anything. */
+    private var inspectionStartPressDown = false
+    /** Tap gesture: a press happened during inspection and its release starts the solve. */
+    private var inspectionTapDown = false
+    private var activeInspectionPenalty: Penalty = Penalty.NONE
+
     /** Puzzle and scramble captured when the solve started, so a later refresh or mode change cannot be saved with it. */
     private var activeSolveMode: Mode? = null
     private var activeSolveScramble: String? = null
@@ -381,7 +407,19 @@ class TimerViewModel(
 
         when (_timerState.value) {
             is TimerState.Idle -> {
-                startHoldTimer(eventUptimeMillis)
+                if (inspectionEnabled.value) {
+                    startInspection(eventUptimeMillis)
+                } else {
+                    startHoldTimer(eventUptimeMillis)
+                }
+            }
+            is TimerState.Inspecting -> {
+                // A new press means the release of the one that began inspection was lost.
+                inspectionStartPressDown = false
+                when (inspectionStartGesture.value) {
+                    InspectionStartGesture.HOLD -> if (inspectionHoldStart == null) startInspectionHold(eventUptimeMillis)
+                    InspectionStartGesture.TAP -> inspectionTapDown = true
+                }
             }
             is TimerState.Running -> {
                 stopTimer(eventUptimeMillis)
@@ -406,8 +444,77 @@ class TimerViewModel(
                 holdJob?.cancel()
                 startTimer(eventUptimeMillis)
             }
+            is TimerState.Inspecting -> onInspectionRelease(eventUptimeMillis)
             else -> {}
         }
+    }
+
+    private fun startInspection(pressUptimeMillis: Long) {
+        clearInspection()
+        inspectionStartTime = pressUptimeMillis
+        // The finger that began inspection is still down; its release does nothing.
+        inspectionStartPressDown = true
+        _timerState.value = TimerState.Inspecting(elapsedMillis = 0)
+        inspectionJob = viewModelScope.launch {
+            while (true) {
+                // Finer ticks only while the hold progress bar is animating.
+                delay((if (inspectionHoldStart != null) 16L else 50L).milliseconds)
+                publishInspection(timeSource())
+            }
+        }
+    }
+
+    private fun startInspectionHold(pressUptimeMillis: Long) {
+        inspectionHoldStart = pressUptimeMillis
+        inspectionHoldDuration = timerStartDelayMillis.value.toLong()
+        publishInspection(pressUptimeMillis)
+    }
+
+    private fun publishInspection(nowMillis: Long) {
+        if (_timerState.value !is TimerState.Inspecting) return
+        val holdStart = inspectionHoldStart
+        val progress = holdStart?.let {
+            ((nowMillis - it).toFloat() / inspectionHoldDuration).coerceIn(0f, 1f)
+        }
+        _timerState.value = TimerState.Inspecting((nowMillis - inspectionStartTime).coerceAtLeast(0L), progress)
+    }
+
+    private fun onInspectionRelease(releaseUptimeMillis: Long) {
+        if (inspectionStartPressDown) {
+            inspectionStartPressDown = false
+            return
+        }
+        val holdStart = inspectionHoldStart
+        if (holdStart != null) {
+            inspectionHoldStart = null
+            // Judged from the timestamps, not the last published progress, which lags by a tick.
+            if (releaseUptimeMillis - holdStart >= inspectionHoldDuration) {
+                startSolveFromInspection(releaseUptimeMillis)
+            } else {
+                publishInspection(releaseUptimeMillis)
+            }
+        } else if (inspectionTapDown) {
+            inspectionTapDown = false
+            startSolveFromInspection(releaseUptimeMillis)
+        }
+    }
+
+    private fun startSolveFromInspection(startUptimeMillis: Long) {
+        val penalty = Inspection.penaltyFor(startUptimeMillis - inspectionStartTime)
+        startTimer(startUptimeMillis, inspectionPenalty = penalty)
+    }
+
+    /** Abandons inspection and returns to Idle without saving anything. */
+    fun cancelInspection() {
+        if (_timerState.value is TimerState.Inspecting) resetTimer()
+    }
+
+    private fun clearInspection() {
+        inspectionJob?.cancel()
+        inspectionJob = null
+        inspectionHoldStart = null
+        inspectionStartPressDown = false
+        inspectionTapDown = false
     }
 
     private fun startHoldTimer(pressStartUptimeMillis: Long) {
@@ -428,8 +535,10 @@ class TimerViewModel(
         }
     }
 
-    private fun startTimer(startUptimeMillis: Long) {
+    private fun startTimer(startUptimeMillis: Long, inspectionPenalty: Penalty = Penalty.NONE) {
+        clearInspection()
         startTime = startUptimeMillis
+        activeInspectionPenalty = inspectionPenalty
         activeSolveMode = _currentMode.value
         activeSolveScramble = _currentScramble.value
         _timerState.value = TimerState.Running(0)
@@ -459,7 +568,7 @@ class TimerViewModel(
     private fun stopTimer(stopUptimeMillis: Long) {
         timerJob?.cancel()
         val elapsed = stopUptimeMillis - startTime
-        _timerState.value = TimerState.Finished(elapsed)
+        _timerState.value = TimerState.Finished(elapsed, inspectionPenalty = activeInspectionPenalty)
     }
 
     fun saveSolveWithPenalty(penalty: Penalty) {
@@ -491,7 +600,7 @@ class TimerViewModel(
 
                     val newSolve = SolveTime(
                         timeInMillis = currentState.time,
-                        penalty = penalty,
+                        penalty = Inspection.moreSevere(penalty, currentState.inspectionPenalty),
                         scramble = capturedScramble,
                         mode = currentModeValue,
                         timestamp = nowMs,
@@ -551,6 +660,8 @@ class TimerViewModel(
     private fun resetTimer() {
         timerJob?.cancel()
         holdJob?.cancel()
+        clearInspection()
+        activeInspectionPenalty = Penalty.NONE
         _timerState.value = TimerState.Idle
     }
 
@@ -694,6 +805,18 @@ class TimerViewModel(
         }
     }
 
+    fun setInspectionEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setInspectionEnabled(enabled)
+        }
+    }
+
+    fun setInspectionStartGesture(gesture: InspectionStartGesture) {
+        viewModelScope.launch {
+            settingsRepository.setInspectionStartGesture(gesture)
+        }
+    }
+
     fun setTimingDevice(device: TimingDevice) {
         viewModelScope.launch {
             settingsRepository.setTimingDevice(device)
@@ -702,6 +825,9 @@ class TimerViewModel(
             bluetoothTimer?.disconnect()
             // Drop a half-started Bluetooth solve; a finished one stays so it can still be saved.
             if (_timerState.value !is TimerState.Finished) resetTimer()
+        } else if (_timerState.value is TimerState.Inspecting) {
+            // The Bluetooth timer runs its own inspection.
+            resetTimer()
         }
     }
 
@@ -864,6 +990,7 @@ class TimerViewModel(
     }
 
     override fun onCleared() {
+        inspectionJob?.cancel()
         timerJob?.cancel()
         holdJob?.cancel()
         scrambleJob?.cancel()

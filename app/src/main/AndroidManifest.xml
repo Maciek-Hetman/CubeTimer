@@ -40,11 +40,28 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.CubeTimer">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Verification and password-reset links from CubeSync emails (see AuthLink). They
+                 only open here by default once https://cubetimer.cc/.well-known/assetlinks.json
+                 lists this app's signing certificate; until then they open the web client, which
+                 completes them too. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="https" />
+                <data android:host="cubetimer.cc" />
+                <data android:path="/verify-email" />
+                <data android:path="/reset-password" />
             </intent-filter>
         </activity>
 

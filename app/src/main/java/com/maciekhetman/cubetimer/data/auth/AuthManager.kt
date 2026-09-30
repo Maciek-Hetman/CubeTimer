@@ -114,6 +114,21 @@ interface AuthManager {
         AuthResult.Error(AuthException.Unknown("Account deletion is not supported"))
 
     /**
+     * Changes the signed-in user's password. The server answers by revoking every refresh token of
+     * the user, this device's included, so on success the implementation signs in again with the new
+     * password to keep this device's session alive (without treating it as a new login: guest data
+     * is not adopted). If that follow-up sign-in fails the password is still changed, but the
+     * session is over: the result is still [AuthResult.Success] and [authState] ends as
+     * [AuthState.Guest].
+     *
+     * On failure (wrong current password, no password set on the account, offline) the user stays
+     * signed in and nothing changes locally. The default reports failure so implementations that
+     * don't support it (test fakes) need not override it.
+     */
+    suspend fun changePassword(currentPassword: String, newPassword: String): AuthResult<Unit> =
+        AuthResult.Error(AuthException.Unknown("Password change is not supported"))
+
+    /**
      * Atomically reassigns all guest solves and guest sessions to the newly authenticated user
      * and enqueues sync outbox mutations.
      */

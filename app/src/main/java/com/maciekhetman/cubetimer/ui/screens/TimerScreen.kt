@@ -45,6 +45,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.maciekhetman.cubetimer.domain.AverageCalculator
 import com.maciekhetman.cubetimer.domain.TimeFormatter
+import com.maciekhetman.cubetimer.model.Inspection
+import com.maciekhetman.cubetimer.model.InspectionStartGesture
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Penalty
 import com.maciekhetman.cubetimer.model.RecordCelebration
@@ -83,7 +85,8 @@ fun TimerScreen(
     // `timerState.value`; everything else here derives cheap, rarely-changing booleans instead.
     val timerState = viewModel.timerState.collectAsStateWithLifecycle()
     val isTimerRunning by viewModel.isTimerRunning.collectAsStateWithLifecycle()
-    val isHolding by remember { derivedStateOf { timerState.value is TimerState.Holding } }
+    val isHolding by remember { derivedStateOf { timerState.value.isHoldInProgress() } }
+    val isInspecting by remember { derivedStateOf { timerState.value is TimerState.Inspecting } }
     val isFinished by remember { derivedStateOf { timerState.value is TimerState.Finished } }
     val canEditScramble by remember { derivedStateOf { timerState.value is TimerState.Idle } }
     // Switching input mid-solve would strand the running timer, so only allow it between solves.
@@ -104,6 +107,8 @@ fun TimerScreen(
     val hideLastResultsOnTimer by viewModel.hideLastResultsOnTimer.collectAsStateWithLifecycle()
     val hideStartHint by viewModel.hideStartHint.collectAsStateWithLifecycle()
     val hapticsEnabled by viewModel.hapticsEnabled.collectAsStateWithLifecycle()
+    val inspectionEnabled by viewModel.inspectionEnabled.collectAsStateWithLifecycle()
+    val inspectionStartGesture by viewModel.inspectionStartGesture.collectAsStateWithLifecycle()
     val focusMode by viewModel.focusMode.collectAsStateWithLifecycle()
     val timingDevice by viewModel.timingDevice.collectAsStateWithLifecycle()
     val bluetoothTimerState by viewModel.bluetoothTimerState.collectAsStateWithLifecycle()
@@ -153,10 +158,31 @@ fun TimerScreen(
             pulses.forEach { (fraction, amplitude) ->
                 val targetDelay = (holdDuration * fraction).toLong()
                 delay((targetDelay - previousDelay).milliseconds)
-                if (timerState.value !is TimerState.Holding) return@LaunchedEffect
+                if (!timerState.value.isHoldInProgress()) return@LaunchedEffect
                 vibrateOneShot(context, durationMillis = 8L, amplitude = amplitude)
                 previousDelay = targetDelay
             }
+        }
+    }
+
+    // The WCA inspection calls: one pulse at 8 s, two at 12 s. Reads the tick in the coroutine, not in
+    // composition, so the screen is not recomposed by it.
+    LaunchedEffect(isInspecting, hapticsEnabled) {
+        if (isInspecting && hapticsEnabled) {
+            snapshotFlow { ((timerState.value as? TimerState.Inspecting)?.elapsedMillis ?: 0L) / 1000L }
+                .collect { seconds ->
+                    val pulses = when (seconds) {
+                        8L -> 1
+                        12L -> 2
+                        else -> 0
+                    }
+                    repeat(pulses) { index ->
+                        if (index > 0) delay(120.milliseconds)
+                        if (!vibrateOneShot(context, durationMillis = 40L, amplitude = 200)) {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        }
+                    }
+                }
         }
     }
 
@@ -254,6 +280,11 @@ fun TimerScreen(
                         contentDescription = when {
                             bluetoothMode -> "Timer controlled by Bluetooth timer"
                             isSolving -> "Tap to stop timer"
+                            isInspecting -> when (inspectionStartGesture) {
+                                InspectionStartGesture.HOLD -> "Hold and release to start timer"
+                                InspectionStartGesture.TAP -> "Tap to start timer"
+                            }
+                            inspectionEnabled -> "Tap to start inspection"
                             else -> "Tap and hold to start timer"
                         }
                     }
@@ -284,6 +315,8 @@ fun TimerScreen(
                     runningTimerDisplay = runningTimerDisplay,
                     focusModeActive = focusModeActive,
                     hideStartHint = hideStartHint,
+                    inspectionEnabled = inspectionEnabled,
+                    inspectionStartGesture = inspectionStartGesture,
                     bluetoothMode = bluetoothMode,
                     bluetoothConnected = bluetoothTimerState.isConnected,
                     onConnectBluetoothTimer = { showBluetoothDialog = true }
@@ -366,6 +399,8 @@ private fun TimerContent(
     focusModeActive: Boolean,
     modifier: Modifier = Modifier,
     hideStartHint: Boolean = false,
+    inspectionEnabled: Boolean = false,
+    inspectionStartGesture: InspectionStartGesture = InspectionStartGesture.HOLD,
     bluetoothMode: Boolean = false,
     bluetoothConnected: Boolean = false,
     onConnectBluetoothTimer: () -> Unit = {}
@@ -383,22 +418,35 @@ private fun TimerContent(
         val showTimerDisplay = (state !is TimerState.Running) ||
             (!focusModeActive && runningTimerDisplay != RunningTimerDisplay.HIDDEN)
         if (showTimerDisplay) {
-            TimerDisplay(
-                time = when (state) {
-                    is TimerState.Running -> state.elapsedTime
-                    is TimerState.Finished -> state.time
-                    else -> 0
-                },
-                color = when (state) {
-                    is TimerState.Holding -> MaterialTheme.colorScheme.error
-                    is TimerState.Ready -> MaterialTheme.colorScheme.primary
-                    is TimerState.Running -> MaterialTheme.colorScheme.primary
-                    is TimerState.Finished -> MaterialTheme.colorScheme.primary
-                    else -> MaterialTheme.colorScheme.onBackground
-                },
-                showDecimals = state !is TimerState.Running ||
-                    runningTimerDisplay == RunningTimerDisplay.FULL
-            )
+            if (state is TimerState.Inspecting) {
+                InspectionDisplay(
+                    text = Inspection.displayText(state.elapsedMillis),
+                    color = when {
+                        state.isHolding -> MaterialTheme.colorScheme.error
+                        state.isReady -> MaterialTheme.colorScheme.primary
+                        state.penalty == Penalty.DNF -> MaterialTheme.colorScheme.error
+                        state.penalty == Penalty.PLUS_TWO -> MaterialTheme.colorScheme.tertiary
+                        else -> MaterialTheme.colorScheme.onBackground
+                    }
+                )
+            } else {
+                TimerDisplay(
+                    time = when (state) {
+                        is TimerState.Running -> state.elapsedTime
+                        is TimerState.Finished -> state.time
+                        else -> 0
+                    },
+                    color = when (state) {
+                        is TimerState.Holding -> MaterialTheme.colorScheme.error
+                        is TimerState.Ready -> MaterialTheme.colorScheme.primary
+                        is TimerState.Running -> MaterialTheme.colorScheme.primary
+                        is TimerState.Finished -> MaterialTheme.colorScheme.primary
+                        else -> MaterialTheme.colorScheme.onBackground
+                    },
+                    showDecimals = state !is TimerState.Running ||
+                        runningTimerDisplay == RunningTimerDisplay.FULL
+                )
+            }
             if (state !is TimerState.Idle || !hideStartHint || (bluetoothMode && !bluetoothConnected)) {
                 Spacer(modifier = Modifier.height(24.dp))
             }
@@ -415,10 +463,57 @@ private fun TimerContent(
                     }
                 } else if (!hideStartHint) {
                     Text(
-                        text = if (bluetoothMode) "Place both hands on the timer" else "Tap and hold to start",
+                        text = when {
+                            bluetoothMode -> "Place both hands on the timer"
+                            inspectionEnabled -> "Tap to start inspection"
+                            else -> "Tap and hold to start"
+                        },
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+            }
+            is TimerState.Inspecting -> {
+                if (state.holdProgress != null) {
+                    val color = if (state.isHolding) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.tertiary
+                    }
+                    LinearProgressIndicator(
+                        progress = { state.holdProgress },
+                        modifier = Modifier
+                            .width(200.dp)
+                            .height(4.dp),
+                        color = color,
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = if (state.isHolding) "Hold..." else "Release to start!",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = color,
+                        fontWeight = if (state.isHolding) null else FontWeight.Bold
+                    )
+                } else if (!hideStartHint) {
+                    Text(
+                        text = when (inspectionStartGesture) {
+                            InspectionStartGesture.HOLD -> "Hold and release to start"
+                            InspectionStartGesture.TAP -> "Tap to start"
+                        },
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                // A button consumes its own touches, so this does not also count as a timer press.
+                TextButton(
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        viewModel.cancelInspection()
+                    },
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Text("Cancel")
                 }
             }
             is TimerState.Holding -> {
@@ -466,6 +561,18 @@ private fun TimerContent(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.padding(horizontal = 16.dp)
                 ) {
+                    if (state.inspectionPenalty != Penalty.NONE) {
+                        Text(
+                            text = "Inspection penalty: " +
+                                if (state.inspectionPenalty == Penalty.DNF) "DNF" else "+2",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (state.inspectionPenalty == Penalty.DNF) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.tertiary
+                            }
+                        )
+                    }
                     Button(
                         onClick = {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -612,6 +719,26 @@ private fun TimerDisplay(
         }
     }
 }
+
+/** The inspection countdown ("15" to "1", then "+2" / "DNF"), in the big display's style. */
+@Composable
+private fun InspectionDisplay(
+    text: String,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Text(
+        text = text,
+        fontSize = 96.sp,
+        fontWeight = FontWeight.Bold,
+        color = color,
+        modifier = modifier.padding(bottom = 8.dp)
+    )
+}
+
+/** A hold for the start delay is under way: the plain hold, or the one during inspection. */
+private fun TimerState.isHoldInProgress(): Boolean =
+    this is TimerState.Holding || (this is TimerState.Inspecting && isHolding)
 
 @Composable
 private fun AveragesDisplay(
