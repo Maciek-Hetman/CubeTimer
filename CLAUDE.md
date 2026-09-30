@@ -137,6 +137,11 @@ signed-in owners' session-less solves are left alone, as the server accepts them
   (`SettingsScreen.kt`), not the shared top bar — `TopBar.kt`'s `TimerTopHeader`/`CollapsingTopBar` no
   longer take `syncUiState`/`authState`/click-handler params. Tapping the rows opens the same
   `SyncStatusDialog` / `AuthDialog` (`UserProfileDialog`, which also offers "Delete account") as before.
+- Verification and password-reset emails carry links to the web client (`CLIENT_URL/verify-email?token=…`,
+  `/reset-password?token=…`), which completes them there. The app never asks for a token: the
+  `EMAIL_VERIFICATION` dialog points at the link and offers "Resend email" (a sign-in refused with
+  `EmailNotVerified` lands there too), and `RESET_PASSWORD` is a "Check your email" notice. The manifest has no
+  link handling, so `AuthViewModel.submitVerifyEmail` / `submitResetPassword` have no UI caller yet.
 - Settings ends with an "About" section (`AboutSection` in `SettingsScreen.kt`): version
   (`BuildConfig.VERSION_NAME`), source code / issue tracker links, and `OpenSourceLicensesDialog`, whose
   component list is maintained by hand. Its "Privacy policy" row stays hidden while `PRIVACY_POLICY_URL` is null.

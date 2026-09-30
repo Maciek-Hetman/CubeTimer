@@ -90,9 +90,9 @@ fun AuthDialog(
         AuthDialogType.RESET_PASSWORD -> {
             ResetPasswordDialog(
                 formState = formState,
-                viewModel = viewModel,
                 onDismiss = onDismiss,
                 onNavigateToLogin = { viewModel.openDialog(AuthDialogType.LOGIN) },
+                onNavigateToForgotPassword = { viewModel.openDialog(AuthDialogType.FORGOT_PASSWORD) },
                 modifier = modifier
             )
         }
@@ -398,7 +398,7 @@ private fun ForgotPasswordDialog(
                     .verticalScroll(rememberScrollState())
             ) {
                 Text(
-                    text = "Enter your account email to receive password reset instructions.",
+                    text = "Enter your account email and we'll send you a link to reset your password.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -456,7 +456,7 @@ private fun ForgotPasswordDialog(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                 }
-                Text("Send Instructions")
+                Text("Send Link")
             }
         },
         dismissButton = {
@@ -472,106 +472,82 @@ private fun ForgotPasswordDialog(
     )
 }
 
+/**
+ * Shown after a reset was requested. The emailed link opens the web client, where the new password
+ * is chosen; the app only points the user there and back to sign-in.
+ */
 @Composable
 private fun ResetPasswordDialog(
     formState: AuthFormState,
-    viewModel: AuthViewModel,
     onDismiss: () -> Unit,
     onNavigateToLogin: () -> Unit,
+    onNavigateToForgotPassword: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val email = formState.email.trim()
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(24.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        title = { Text("Reset Password") },
+        title = { Text("Check your email") },
         text = {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
             ) {
-                if (formState.successMessage != null) {
-                    SuccessBanner(formState.successMessage)
-                    Spacer(modifier = Modifier.height(12.dp))
+                // The server answers the same way whether or not the address has an account.
+                Text(
+                    text = "If an account exists for ${email.ifEmpty { "that address" }}, we sent a link to " +
+                        "reset your password. Open it to choose a new password, then sign in here.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "Didn't get it? ",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "Send again",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clickable(onClick = onNavigateToForgotPassword)
+                    )
                 }
-
-                if (formState.errorMessage != null) {
-                    ErrorBanner(formState.errorMessage)
-                    Spacer(modifier = Modifier.height(12.dp))
-                }
-
-                OutlinedTextField(
-                    value = formState.token,
-                    onValueChange = viewModel::onTokenChanged,
-                    label = { Text("Reset Token") },
-                    singleLine = true,
-                    isError = formState.tokenError != null,
-                    supportingText = formState.tokenError?.let { { Text(it) } },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                OutlinedTextField(
-                    value = formState.password,
-                    onValueChange = viewModel::onPasswordChanged,
-                    label = { Text("New Password (min 10 chars)") },
-                    leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
-                    visualTransformation = if (formState.isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    isError = formState.passwordError != null,
-                    supportingText = formState.passwordError?.let { { Text(it) } },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                OutlinedTextField(
-                    value = formState.confirmPassword,
-                    onValueChange = viewModel::onConfirmPasswordChanged,
-                    label = { Text("Confirm New Password") },
-                    leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
-                    visualTransformation = if (formState.isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    isError = formState.confirmPasswordError != null,
-                    supportingText = formState.confirmPasswordError?.let { { Text(it) } },
-                    modifier = Modifier.fillMaxWidth()
-                )
             }
         },
         confirmButton = {
             Button(
                 shape = RoundedCornerShape(20.dp),
-                onClick = viewModel::submitResetPassword,
-                enabled = !formState.isLoading
+                onClick = onNavigateToLogin
             ) {
-                if (formState.isLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                }
-                Text("Set Password")
+                Text("Sign In")
             }
         },
         dismissButton = {
             TextButton(
                 shape = RoundedCornerShape(20.dp),
-                onClick = onDismiss,
-                enabled = !formState.isLoading
+                onClick = onDismiss
             ) {
-                Text("Cancel")
+                Text("Close")
             }
         },
         modifier = modifier
     )
 }
 
+/**
+ * Shown after registering, and when a sign-in is refused because the email is unverified. The
+ * emailed link opens the web client, which verifies the account; the user then signs in here.
+ */
 @Composable
 private fun EmailVerificationDialog(
     formState: AuthFormState,
@@ -580,11 +556,12 @@ private fun EmailVerificationDialog(
     onNavigateToLogin: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val email = formState.email.trim()
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(24.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        title = { Text("Verify Email") },
+        title = { Text("Verify your email") },
         text = {
             Column(
                 modifier = Modifier
@@ -601,41 +578,52 @@ private fun EmailVerificationDialog(
                     Spacer(modifier = Modifier.height(12.dp))
                 }
 
-                OutlinedTextField(
-                    value = formState.token,
-                    onValueChange = viewModel::onTokenChanged,
-                    label = { Text("Verification Token") },
-                    singleLine = true,
-                    isError = formState.tokenError != null,
-                    supportingText = formState.tokenError?.let { { Text(it) } },
-                    modifier = Modifier.fillMaxWidth()
+                Text(
+                    text = "We sent a verification link to ${email.ifEmpty { "your email address" }}. " +
+                        "Open it to verify your account, then sign in here.",
+                    style = MaterialTheme.typography.bodyMedium
                 )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Can't find it? Check your spam folder or send it again.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                OutlinedButton(
+                    shape = RoundedCornerShape(20.dp),
+                    onClick = viewModel::submitResendVerification,
+                    enabled = !formState.isLoading,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (formState.isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    Text("Resend email")
+                }
             }
         },
         confirmButton = {
             Button(
                 shape = RoundedCornerShape(20.dp),
-                onClick = viewModel::submitVerifyEmail,
+                onClick = onNavigateToLogin,
                 enabled = !formState.isLoading
             ) {
-                if (formState.isLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                }
-                Text("Verify")
+                Text("Sign In")
             }
         },
         dismissButton = {
             TextButton(
                 shape = RoundedCornerShape(20.dp),
-                onClick = onDismiss,
-                enabled = !formState.isLoading
+                onClick = onDismiss
             ) {
-                Text("Cancel")
+                Text("Close")
             }
         },
         modifier = modifier
