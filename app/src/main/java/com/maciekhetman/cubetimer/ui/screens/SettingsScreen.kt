@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -56,10 +57,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import android.widget.Toast
+import com.maciekhetman.cubetimer.BuildConfig
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.RunningTimerDisplay
 import com.maciekhetman.cubetimer.model.TimerAverageOptions
@@ -67,6 +72,7 @@ import com.maciekhetman.cubetimer.model.TimingDevice
 import com.maciekhetman.cubetimer.ui.bluetooth.BluetoothTimerDialog
 import com.maciekhetman.cubetimer.ui.bluetooth.bluetoothStatusLabel
 import com.maciekhetman.cubetimer.ui.components.CollapsingTopBar
+import com.maciekhetman.cubetimer.ui.dialogs.OpenSourceLicensesDialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.maciekhetman.cubetimer.viewmodel.TimerViewModel
 import kotlin.math.roundToInt
@@ -76,6 +82,13 @@ import com.maciekhetman.cubetimer.model.SyncStatusType
 import com.maciekhetman.cubetimer.model.SyncUiState
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
+
+const val SOURCE_CODE_URL = "https://github.com/Maciek-Hetman/CubeTimer"
+const val ISSUES_URL = "$SOURCE_CODE_URL/issues"
+const val LICENSE_URL = "$SOURCE_CODE_URL/blob/main/LICENSE"
+
+/** No policy is published yet; the About section shows its "Privacy policy" row once this is set. */
+val PRIVACY_POLICY_URL: String? = null
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -107,6 +120,8 @@ fun SettingsScreen(
     val timingDevice by viewModel.timingDevice.collectAsStateWithLifecycle()
     val bluetoothTimerState by viewModel.bluetoothTimerState.collectAsStateWithLifecycle()
     val haptic = LocalHapticFeedback.current
+    val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
 
     var defaultModeMenuExpanded by remember { mutableStateOf(value = false) }
@@ -114,6 +129,16 @@ fun SettingsScreen(
     var timerAveragesExpanded by remember { mutableStateOf(value = false) }
     var timingDeviceMenuExpanded by remember { mutableStateOf(value = false) }
     var showBluetoothDialog by remember { mutableStateOf(value = false) }
+    var showLicensesDialog by remember { mutableStateOf(value = false) }
+
+    val openUrl: (String) -> Unit = { url ->
+        try {
+            uriHandler.openUri(url)
+        } catch (e: IllegalArgumentException) {
+            // Thrown when nothing on the device can open a web link.
+            Toast.makeText(context, "No app available to open this link", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     Scaffold(
         modifier = modifier
@@ -360,11 +385,26 @@ fun SettingsScreen(
                     }
                 }
             }
+
+            item {
+                AboutSection(
+                    versionName = BuildConfig.VERSION_NAME,
+                    onOpenUrl = openUrl,
+                    onLicensesClick = { showLicensesDialog = true }
+                )
+            }
         }
     }
 
     if (showBluetoothDialog) {
         BluetoothTimerDialog(viewModel = viewModel, onDismiss = { showBluetoothDialog = false })
+    }
+
+    if (showLicensesDialog) {
+        OpenSourceLicensesDialog(
+            onViewLicense = { openUrl(LICENSE_URL) },
+            onDismiss = { showLicensesDialog = false }
+        )
     }
 }
 
@@ -423,6 +463,72 @@ fun AccountSection(
                     AccountStatusIcon(authState)
                 }
             }
+        }
+    }
+}
+
+/**
+ * The "About" settings section: app version, links to the source code, the issue tracker and (once
+ * [privacyPolicyUrl] is set) the privacy policy, and the open-source licenses. Links are handed to
+ * [onOpenUrl].
+ */
+@Composable
+fun AboutSection(
+    versionName: String,
+    onOpenUrl: (String) -> Unit,
+    onLicensesClick: () -> Unit,
+    privacyPolicyUrl: String? = PRIVACY_POLICY_URL,
+) {
+    SettingsSection(title = "About") {
+        SettingsRow(title = "Version") {
+            Text(
+                text = versionName,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        SettingsDivider()
+        AboutLinkRow(title = "Source code", onClick = { onOpenUrl(SOURCE_CODE_URL) })
+        SettingsDivider()
+        AboutLinkRow(title = "Report a problem", onClick = { onOpenUrl(ISSUES_URL) })
+        if (privacyPolicyUrl != null) {
+            SettingsDivider()
+            AboutLinkRow(title = "Privacy policy", onClick = { onOpenUrl(privacyPolicyUrl) })
+        }
+        SettingsDivider()
+        AboutLinkRow(
+            title = "Open-source licenses",
+            onClick = onLicensesClick,
+            opensExternally = false
+        )
+    }
+}
+
+@Composable
+private fun AboutLinkRow(
+    title: String,
+    onClick: () -> Unit,
+    opensExternally: Boolean = true
+) {
+    val haptic = LocalHapticFeedback.current
+    Surface(
+        onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            onClick()
+        },
+        color = androidx.compose.ui.graphics.Color.Transparent
+    ) {
+        SettingsRow(title = title) {
+            Icon(
+                imageVector = if (opensExternally) {
+                    Icons.AutoMirrored.Filled.OpenInNew
+                } else {
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight
+                },
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 }

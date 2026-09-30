@@ -137,6 +137,9 @@ signed-in owners' session-less solves are left alone, as the server accepts them
   (`SettingsScreen.kt`), not the shared top bar — `TopBar.kt`'s `TimerTopHeader`/`CollapsingTopBar` no
   longer take `syncUiState`/`authState`/click-handler params. Tapping the rows opens the same
   `SyncStatusDialog` / `AuthDialog` (`UserProfileDialog`, which also offers "Delete account") as before.
+- Settings ends with an "About" section (`AboutSection` in `SettingsScreen.kt`): version
+  (`BuildConfig.VERSION_NAME`), source code / issue tracker links, and `OpenSourceLicensesDialog`, whose
+  component list is maintained by hand. Its "Privacy policy" row stays hidden while `PRIVACY_POLICY_URL` is null.
 - The top bar only carries the mode picker (plus screen-specific actions via `extraActions`); there is no
   session picker.
 - Timing input is a setting (`SettingsRepository.timingDeviceFlow`), switchable from Settings → "Timing device"
