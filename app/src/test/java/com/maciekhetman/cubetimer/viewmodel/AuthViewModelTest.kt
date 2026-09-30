@@ -165,6 +165,101 @@ class AuthViewModelTest {
     }
 
     @Test
+    fun testForgotPasswordFailureStaysOnTheFormWithReadableError() = testScope.runTest {
+        viewModel.openDialog(AuthDialogType.FORGOT_PASSWORD)
+        viewModel.onEmailChanged("cuber@example.com")
+        fakeAuthManager.requestPasswordResetResult = AuthResult.Error(AuthException.RateLimited())
+
+        viewModel.submitForgotPassword()
+        advanceUntilIdle()
+
+        assertEquals(AuthDialogType.FORGOT_PASSWORD, viewModel.formState.value.dialogType)
+        assertEquals("Too many attempts. Please try again in a few moments.", viewModel.formState.value.errorMessage)
+    }
+
+    @Test
+    fun testLoginWithUnverifiedEmailOpensTheVerificationDialog() = testScope.runTest {
+        viewModel.openDialog(AuthDialogType.LOGIN)
+        viewModel.onEmailChanged("cuber@example.com")
+        viewModel.onPasswordChanged("ValidPassword123!")
+        fakeAuthManager.loginResult = AuthResult.Error(AuthException.EmailNotVerified())
+
+        viewModel.submitLogin()
+        advanceUntilIdle()
+
+        val state = viewModel.formState.value
+        assertEquals(AuthDialogType.EMAIL_VERIFICATION, state.dialogType)
+        assertEquals("Email is not verified. Please verify your account.", state.errorMessage)
+        assertEquals("cuber@example.com", state.email)
+        assertEquals("the password is kept for the sign-in after verifying", "ValidPassword123!", state.password)
+        assertFalse(state.isLoading)
+    }
+
+    @Test
+    fun testUnverifiedLoginDoesNotReopenADismissedDialog() = testScope.runTest {
+        viewModel.openDialog(AuthDialogType.LOGIN)
+        viewModel.onEmailChanged("cuber@example.com")
+        viewModel.onPasswordChanged("ValidPassword123!")
+        fakeAuthManager.loginResult = AuthResult.Error(AuthException.EmailNotVerified())
+
+        viewModel.submitLogin()
+        viewModel.dismissDialog()
+        advanceUntilIdle()
+
+        assertEquals(AuthDialogType.NONE, viewModel.formState.value.dialogType)
+    }
+
+    @Test
+    fun testResendVerificationSendsToTheShownEmailAndConfirms() = testScope.runTest {
+        viewModel.onEmailChanged("  newuser@example.com ")
+        viewModel.openDialog(AuthDialogType.EMAIL_VERIFICATION)
+
+        viewModel.submitResendVerification()
+        advanceUntilIdle()
+
+        assertEquals(1, fakeAuthManager.resendCallCount)
+        assertEquals("newuser@example.com", fakeAuthManager.lastResendEmail)
+        assertEquals(AuthDialogType.EMAIL_VERIFICATION, viewModel.formState.value.dialogType)
+        assertEquals("Verification email sent. Check your inbox.", viewModel.formState.value.successMessage)
+        assertNull(viewModel.formState.value.errorMessage)
+        assertFalse(viewModel.formState.value.isLoading)
+    }
+
+    @Test
+    fun testResendVerificationFailureShowsReadableErrorAndNoSuccess() = testScope.runTest {
+        viewModel.onEmailChanged("newuser@example.com")
+        viewModel.openDialog(AuthDialogType.EMAIL_VERIFICATION)
+        fakeAuthManager.resendResult = AuthResult.Error(AuthException.RateLimited("429 slow down"))
+
+        viewModel.submitResendVerification()
+        advanceUntilIdle()
+
+        assertEquals("Too many attempts. Please try again in a few moments.", viewModel.formState.value.errorMessage)
+        assertNull(viewModel.formState.value.successMessage)
+        assertFalse(viewModel.formState.value.isLoading)
+    }
+
+    @Test
+    fun testResendVerificationWhileRunningIsNotSubmittedTwice() = testScope.runTest {
+        val gate = CompletableDeferred<AuthResult<Unit>>()
+        fakeAuthManager.resendGate = gate
+        viewModel.onEmailChanged("newuser@example.com")
+        viewModel.openDialog(AuthDialogType.EMAIL_VERIFICATION)
+
+        viewModel.submitResendVerification()
+        advanceUntilIdle()
+        assertTrue(viewModel.formState.value.isLoading)
+
+        viewModel.submitResendVerification()
+        advanceUntilIdle()
+        assertEquals(1, fakeAuthManager.resendCallCount)
+
+        gate.complete(AuthResult.Success(Unit))
+        advanceUntilIdle()
+        assertFalse(viewModel.formState.value.isLoading)
+    }
+
+    @Test
     fun testResetPasswordSuccessClosesDialog() = testScope.runTest {
         viewModel.openDialog(AuthDialogType.RESET_PASSWORD)
         viewModel.onTokenChanged("valid-reset-token")
@@ -380,7 +475,16 @@ class AuthViewModelTest {
             return verifyEmailResult
         }
 
-        override suspend fun resendVerificationEmail(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
+        var resendCallCount = 0
+        var lastResendEmail: String? = null
+        var resendResult: AuthResult<Unit> = AuthResult.Success(Unit)
+        var resendGate: CompletableDeferred<AuthResult<Unit>>? = null
+
+        override suspend fun resendVerificationEmail(email: String): AuthResult<Unit> {
+            resendCallCount++
+            lastResendEmail = email
+            return resendGate?.await() ?: resendResult
+        }
 
         override suspend fun requestPasswordReset(email: String): AuthResult<Unit> {
             requestPasswordResetCallCount++

@@ -82,9 +82,17 @@ class AuthViewModel(
                     }
                 }
                 is AuthResult.Error -> {
+                    // An unverified account can't sign in: move to the dialog that can resend the
+                    // verification email. The password stays for the sign-in that follows.
+                    val needsVerification = result.exception is AuthException.EmailNotVerified
                     _formState.update {
                         it.copy(
                             isLoading = false,
+                            dialogType = if (needsVerification && it.dialogType == AuthDialogType.LOGIN) {
+                                AuthDialogType.EMAIL_VERIFICATION
+                            } else {
+                                it.dialogType
+                            },
                             errorMessage = reportError(result.exception)
                         )
                     }
@@ -105,7 +113,7 @@ class AuthViewModel(
                         it.copy(
                             isLoading = false,
                             dialogType = AuthDialogType.EMAIL_VERIFICATION,
-                            successMessage = "Account created! Please check your email for the verification code.",
+                            successMessage = "Account created.",
                             password = "",
                             confirmPassword = ""
                         )
@@ -123,6 +131,39 @@ class AuthViewModel(
         }
     }
 
+    /** Sends the verification link again to the address the verification dialog is showing. */
+    fun submitResendVerification() {
+        val state = _formState.value
+        if (state.isLoading) return
+
+        viewModelScope.launch {
+            _formState.update { it.copy(isLoading = true, errorMessage = null, successMessage = null) }
+            when (val result = authManager.resendVerificationEmail(state.email.trim())) {
+                is AuthResult.Success -> {
+                    _formState.update {
+                        it.copy(
+                            isLoading = false,
+                            successMessage = "Verification email sent. Check your inbox."
+                        )
+                    }
+                }
+                is AuthResult.Error -> {
+                    _formState.update {
+                        it.copy(
+                            isLoading = false,
+                            errorMessage = reportError(result.exception)
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Verifies with the token from the emailed link and signs in. No dialog collects a token: the
+     * link opens the web client, which verifies there. This is the entry point for handling that
+     * link inside the app.
+     */
     fun submitVerifyEmail() {
         val state = _formState.value
         if (state.token.isBlank()) {
@@ -168,8 +209,7 @@ class AuthViewModel(
                     _formState.update {
                         it.copy(
                             isLoading = false,
-                            dialogType = AuthDialogType.RESET_PASSWORD,
-                            successMessage = "Password reset instructions sent. Enter your token below."
+                            dialogType = AuthDialogType.RESET_PASSWORD
                         )
                     }
                 }
@@ -185,6 +225,10 @@ class AuthViewModel(
         }
     }
 
+    /**
+     * Sets a new password with the token from the emailed link and signs in. Like
+     * [submitVerifyEmail], it has no dialog today: the link opens the web client's reset page.
+     */
     fun submitResetPassword() {
         val state = _formState.value
         if (!validateResetPasswordForm(state)) return
