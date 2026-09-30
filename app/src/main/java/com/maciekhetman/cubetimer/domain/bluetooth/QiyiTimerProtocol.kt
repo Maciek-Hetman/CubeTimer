@@ -24,6 +24,8 @@ object QiyiTimerProtocol {
     const val CMD_STATE = 0x1003
 
     private val KEY = ByteArray(16) { 0x77 }
+    private val MAC_PART = Regex("[0-9a-fA-F]{2}")
+    private val QIYI_NAME = Regex("^QY-(Timer|Adapter).*-([0-9A-F]{4})$", RegexOption.IGNORE_CASE)
 
     fun crc16modbus(data: IntArray, from: Int = 0, to: Int = data.size): Int {
         var crc = 0xFFFF
@@ -124,7 +126,7 @@ object QiyiTimerProtocol {
 
     fun parseMac(mac: String): IntArray? {
         val parts = mac.trim().split(':', '-')
-        if (parts.size != 6 || parts.any { !it.matches(Regex("[0-9a-fA-F]{2}")) }) return null
+        if (parts.size != 6 || parts.any { !it.matches(MAC_PART) }) return null
         return IntArray(6) { parts[it].toInt(16) }
     }
 
@@ -136,8 +138,7 @@ object QiyiTimerProtocol {
 
     /** MAC implied by the advertised name, e.g. "QY-Adapter-1A2B" -> CC:A8:00:00:1A:2B. */
     fun macFromName(name: String?): String? {
-        val match = Regex("^QY-(Timer|Adapter).*-([0-9A-F]{4})$", RegexOption.IGNORE_CASE)
-            .find(name?.trim().orEmpty()) ?: return null
+        val match = QIYI_NAME.find(name?.trim().orEmpty()) ?: return null
         val prefix = if (match.groupValues[1].equals("adapter", ignoreCase = true)) "CC:A8" else "CC:A1"
         val suffix = match.groupValues[2].uppercase(Locale.US)
         return "$prefix:00:00:${suffix.substring(0, 2)}:${suffix.substring(2, 4)}"
@@ -165,6 +166,7 @@ class QiyiPacketDecoder {
 
     private fun reset() {
         expectedPacket = 0
+        messageLength = 0
         buffer.clear()
     }
 

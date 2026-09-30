@@ -712,4 +712,51 @@ class CsvImporterTest {
         importerWithTrigger.importCsv(stringToStream(csv), ownerId = "guest")
         assertTrue(triggerInvoked)
     }
+
+    @Test
+    fun importCsv_sessionOwnedByAnotherOwner_getsItsOwnSession() = runTest {
+        sessionDao.insertAll(listOf(
+            SessionEntity(id = "sess-other", ownerId = "other", name = "Theirs", event = "3x3", startedAt = "2026-09-11T10:00:00.000Z")
+        ))
+
+        val csv = """
+            # Source: CubeTimer
+            solve_id,session_id,session_name,puzzle,timestamp,time,penalty,scramble
+            solve-new,sess-other,Imported,3x3,1700000001000,10000,none,R U
+        """.trimIndent()
+
+        val success = importer.importCsv(stringToStream(csv), ownerId = "me") as CsvImportStatus.Success
+
+        assertEquals(1, success.importedCount)
+        assertEquals(1, success.sessionsCreatedCount)
+        val foreign = sessionDao.getSessionById("sess-other")!!
+        assertEquals("other", foreign.ownerId)
+        assertEquals("Theirs", foreign.name)
+        assertNull(foreign.deletedAt)
+
+        val imported = solveDao.getSolvesByScope(ownerId = "me").single()
+        assertEquals("solve-new", imported.id)
+        assertTrue(imported.sessionId != "sess-other")
+        val created = sessionDao.getSessionById(imported.sessionId!!)!!
+        assertEquals("me", created.ownerId)
+        assertEquals("Imported", created.name)
+    }
+
+    @Test
+    fun importCsv_newSessionName_comesFromTheEarliestSolve() = runTest {
+        val csv = """
+            # Source: CubeTimer
+            solve_id,session_id,session_name,puzzle,timestamp,time,penalty,scramble
+            solve-late,sess-x,Late Name,3x3,1700000005000,12000,none,R
+            solve-early,sess-x,Early Name,3x3,1700000001000,11000,none,U
+        """.trimIndent()
+
+        val success = importer.importCsv(stringToStream(csv), ownerId = "guest") as CsvImportStatus.Success
+        assertEquals(1, success.sessionsCreatedCount)
+
+        val session = sessionDao.getSessionById("sess-x")!!
+        assertEquals("Early Name", session.name)
+        assertEquals(CubeTypeConverters.epochMillisToIso(1700000001000L), session.startedAt)
+        assertEquals(CubeTypeConverters.epochMillisToIso(1700000005000L), session.endedAt)
+    }
 }

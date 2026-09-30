@@ -200,4 +200,36 @@ class SessionRepositoryTest {
         assertTrue(names.contains("30 aug 2026 morning"))
         assertTrue(names.contains("30 aug 2026 morning 2"))
     }
+
+    @Test
+    fun sessionMutations_refuseAnotherOwnersRow() = runTest {
+        val session = repository.createSession(
+            Session(
+                id = "sess-other",
+                ownerId = "user-other",
+                name = "Other",
+                event = Mode.CUBE_3x3,
+                kind = SessionKind.AUTOMATIC,
+                startedAt = Instant.now().toString()
+            )
+        )
+        val triggersAfterCreate = syncTriggerCount
+
+        assertNull(repository.closeSession(session.id, "user-abc"))
+        assertFalse(repository.deleteSession(session.id, "user-abc"))
+        assertNull(repository.deleteSessionWithSolves(session.id, "user-abc"))
+        assertEquals(triggersAfterCreate, syncTriggerCount)
+
+        val fetched = repository.getSessionById(session.id)!!
+        assertEquals("user-other", fetched.ownerId)
+        assertFalse(fetched.isDeleted)
+        assertTrue(fetched.isOpen)
+        assertEquals(0, database.syncOutboxDao().getPendingMutations("user-abc").size)
+        assertEquals(1, database.syncOutboxDao().getPendingMutations("user-other").size)
+
+        val snapshot = repository.deleteSessionWithSolves(session.id, "user-other")
+        assertNotNull(snapshot)
+        repository.restoreSessionWithSolves(snapshot!!, "user-abc")
+        assertTrue(repository.getSessionById(session.id)!!.isDeleted)
+    }
 }

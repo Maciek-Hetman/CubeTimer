@@ -66,7 +66,13 @@ class SyncEngineImpl(
      * account (the bootstrap pages until the server says it is done); it only stops a server that
      * keeps handing out fresh page positions forever. Hitting it fails the bootstrap.
      */
-    private val maxSnapshotPages: Int = DEFAULT_MAX_SNAPSHOT_PAGES
+    private val maxSnapshotPages: Int = DEFAULT_MAX_SNAPSHOT_PAGES,
+    /**
+     * Safety ceiling on the sync/outbox passes one [sync] call may run. A server that keeps
+     * answering `has_more` would otherwise loop forever. Hitting it does not commit a "fully
+     * synced" status: the cursor already advanced, and the result asks the worker to continue.
+     */
+    private val maxSyncPasses: Int = DEFAULT_MAX_SYNC_PASSES
 ) : SyncEngine {
 
     private val syncMutex = Mutex()
@@ -140,12 +146,22 @@ class SyncEngineImpl(
             val run = SyncRun()
             var hasMore = true
             var loopCount = 0
-            val maxLoops = 50
 
             try {
-                while (hasMore && loopCount < maxLoops) {
+                while (hasMore && loopCount < maxSyncPasses) {
                     loopCount++
                     hasMore = sendOutboxBatch(resolvedOwnerId, run)
+                }
+
+                if (hasMore) {
+                    // Pages already applied keep their cursor. Don't stamp last_sync_time or a
+                    // sticky error: this is a pause, and the follow-up sync should be free to
+                    // report success. The in-memory error is only so the UI doesn't say "synced"
+                    // while the worker schedules the continuation.
+                    setSyncing(resolvedOwnerId, false)
+                    val message = "Sync paused after $maxSyncPasses batches and will continue"
+                    stateManager.setError(message)
+                    return@withContext SyncResult.Error(message)
                 }
 
                 val nowEpoch = System.currentTimeMillis()
@@ -322,13 +338,19 @@ class SyncEngineImpl(
             (pending.size == OUTBOX_BATCH_SIZE && remainingPending > 0)
     }
 
+    private fun deviceFor(metadata: SyncMetadataEntity?): DeviceDto = DeviceDto(
+        id = tokenStorage.getDeviceId(),
+        name = metadata?.deviceName ?: "Android Device",
+        platform = metadata?.devicePlatform ?: "android"
+    )
+
+    /** Live outbox entities, loaded once per page instead of once per incoming change. */
+    private suspend fun liveEntityKeys(ownerId: String): Set<Pair<String, String>> =
+        syncOutboxDao.getLiveEntityKeys(ownerId).mapTo(HashSet()) { it.entityType to it.entityId }
+
     private suspend fun buildSyncRequest(ownerId: String, batch: OutgoingBatch): SyncRequest {
         val metadata = syncMetadataDao.getMetadata(ownerId)
-        val device = DeviceDto(
-            id = tokenStorage.getDeviceId(),
-            name = metadata?.deviceName ?: "Android Device",
-            platform = "android"
-        )
+        val device = deviceFor(metadata)
         return SyncRequest(
             cursor = metadata?.cursor ?: 0L,
             device = device,
@@ -624,11 +646,11 @@ class SyncEngineImpl(
 
         // Step B: Process remote changes (Sessions first, Solves second)
         val (sessionChanges, solveChanges) = response.changes.partition { it.entity == "session" }
+        val protectedEntities = liveEntityKeys(ownerId)
 
         // B1. Apply session changes
         for (change in sessionChanges) {
-            val pendingCount = syncOutboxDao.countPendingForEntity(ownerId, "session", change.entityId)
-            if (pendingCount > 0) {
+            if ("session" to change.entityId in protectedEntities) {
                 // Protect local uncommitted edits
                 continue
             }
@@ -687,8 +709,7 @@ class SyncEngineImpl(
         // B2. Apply solve changes
         val sessionReferences = SessionReferences()
         for (change in solveChanges) {
-            val pendingCount = syncOutboxDao.countPendingForEntity(ownerId, "solve", change.entityId)
-            if (pendingCount > 0) {
+            if ("solve" to change.entityId in protectedEntities) {
                 // Protect local uncommitted edits
                 continue
             }
@@ -791,11 +812,7 @@ class SyncEngineImpl(
         val requested = HashSet<Pair<String, String>>()
         requested += currentEntity to afterId
 
-        val device = DeviceDto(
-            id = tokenStorage.getDeviceId(),
-            name = "Android Device",
-            platform = "android"
-        )
+        val device = deviceFor(syncMetadataDao.getMetadata(ownerId))
 
         while (hasMore) {
             pageCount++
@@ -813,11 +830,12 @@ class SyncEngineImpl(
             }
 
             database.withTransaction {
+                val protectedEntities = liveEntityKeys(ownerId)
                 response.sessions?.let { sessions ->
                     // Same protection as the incremental sync path (see applyBatch): don't let a
                     // snapshot row clobber a local edit that hasn't reached the server yet.
                     val entities = sessions.mapNotNull { dto ->
-                        if (syncOutboxDao.countPendingForEntity(ownerId, "session", dto.id) > 0) {
+                        if ("session" to dto.id in protectedEntities) {
                             return@mapNotNull null
                         }
                         SessionEntity(
@@ -842,7 +860,7 @@ class SyncEngineImpl(
                 response.solves?.let { solves ->
                     val sessionReferences = SessionReferences()
                     val entities = solves.mapNotNull { dto ->
-                        if (syncOutboxDao.countPendingForEntity(ownerId, "solve", dto.id) > 0) {
+                        if ("solve" to dto.id in protectedEntities) {
                             return@mapNotNull null
                         }
                         if (!sessionReferences.canReference(dto.sessionId)) {
@@ -946,6 +964,9 @@ class SyncEngineImpl(
          * Default for [maxSnapshotPages]: 25 million rows at 500 per page, far beyond any account.
          */
         const val DEFAULT_MAX_SNAPSHOT_PAGES = 50_000
+
+        /** Default for [maxSyncPasses]. 50 pages is 25k remote changes plus a full outbox drain. */
+        const val DEFAULT_MAX_SYNC_PASSES = 50
 
         /**
          * The startup refresh is one request under OkHttp's 15 s connect and 15 s read timeouts: a

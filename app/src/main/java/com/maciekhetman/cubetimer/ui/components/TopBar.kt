@@ -47,6 +47,7 @@ fun TimerTopHeader(
     currentMode: Mode,
     onModeSelected: (Mode) -> Unit,
     modifier: Modifier = Modifier,
+    modeSelectionEnabled: Boolean = true,
     extraActions: @Composable RowScope.() -> Unit = {}
 ) {
     Row(
@@ -69,7 +70,8 @@ fun TimerTopHeader(
             extraActions()
             ModeMenu(
                 currentMode = currentMode,
-                onModeSelected = onModeSelected
+                onModeSelected = onModeSelected,
+                enabled = modeSelectionEnabled
             )
         }
     }
@@ -132,7 +134,8 @@ fun CollapsingTopBar(
 @Composable
 private fun ModeMenu(
     currentMode: Mode,
-    onModeSelected: (Mode) -> Unit
+    onModeSelected: (Mode) -> Unit,
+    enabled: Boolean = true
 ) {
     var expanded by remember { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
@@ -148,6 +151,7 @@ private fun ModeMenu(
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 expanded = true
             },
+            enabled = enabled,
             shape = RoundedCornerShape(20.dp),
             colors = ButtonDefaults.filledTonalButtonColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,

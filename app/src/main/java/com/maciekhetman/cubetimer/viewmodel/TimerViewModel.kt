@@ -278,6 +278,10 @@ class TimerViewModel(
     private var holdJob: Job? = null
     private var scrambleJob: Job? = null
     private var startTime: Long = 0
+
+    /** Puzzle and scramble captured when the solve started, so a later refresh or mode change cannot be saved with it. */
+    private var activeSolveMode: Mode? = null
+    private var activeSolveScramble: String? = null
     private var hasAppliedDefaultMode = false
     private var inputBlockedUntil: Long = 0L
 
@@ -426,6 +430,8 @@ class TimerViewModel(
 
     private fun startTimer(startUptimeMillis: Long) {
         startTime = startUptimeMillis
+        activeSolveMode = _currentMode.value
+        activeSolveScramble = _currentScramble.value
         _timerState.value = TimerState.Running(0)
 
         // Pre-generate the next scramble in the background so that saving this solve shows the
@@ -460,13 +466,15 @@ class TimerViewModel(
         val currentState = _timerState.value
         if (currentState is TimerState.Finished) {
             val nowMs = System.currentTimeMillis()
-            // Capture the scramble/mode synchronously: generateNewScramble() below runs
-            // concurrently on another thread, and for fast puzzles (2x2/pyraminx/megaminx, scrambles
-            // that generate in single-digit milliseconds) it can finish before this coroutine resumes
-            // from the suspending getOrCreateActiveSession call, which would otherwise save the NEXT
-            // scramble instead of the one that was actually solved.
-            val currentModeValue = _currentMode.value
-            val capturedScramble = _currentScramble.value
+            // The scramble and mode were captured when the solve started. generateNewScramble()
+            // below runs concurrently, and for fast puzzles it can finish before this coroutine
+            // resumes from getOrCreateActiveSession — reading _currentScramble here would save
+            // the next scramble. A refresh or mode change while the result is on screen is ignored
+            // until this solve is saved or discarded, so those fields stay the ones that were solved.
+            val currentModeValue = activeSolveMode ?: _currentMode.value
+            val capturedScramble = activeSolveScramble ?: _currentScramble.value
+            activeSolveMode = null
+            activeSolveScramble = null
             val ownerId = authManager.currentOwnerId
 
             resetTimer()
@@ -521,10 +529,14 @@ class TimerViewModel(
 
     fun discardSolve() {
         _recordCelebration.value = null
+        activeSolveMode = null
+        activeSolveScramble = null
         resetTimer()
     }
 
     fun generateNewScramble() {
+        // Idle only: refreshing while a result is on screen would replace the scramble about to be saved.
+        if (_timerState.value !is TimerState.Idle) return
         regenerateScramble(_currentMode.value)
     }
 
@@ -760,6 +772,9 @@ class TimerViewModel(
     }
 
     fun setMode(mode: Mode) {
+        // The mode a solve is filed under is the one it started in. Switching while the timer
+        // is running or a result is waiting to be saved would file it under the new puzzle.
+        if (_timerState.value !is TimerState.Idle) return
         if (_currentMode.value != mode) {
             updateAppTime()
             _currentMode.value = mode

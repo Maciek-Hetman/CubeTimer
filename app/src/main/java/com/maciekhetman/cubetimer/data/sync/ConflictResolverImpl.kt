@@ -57,7 +57,7 @@ class ConflictResolverImpl(
         localPayloadJson: String?,
         serverPayloadJson: String?,
         errorMessage: String
-    ): ConflictEntity = withContext(ioDispatcher) {
+    ): ConflictEntity = inCurrentTransactionOrIo {
         val nowIso = CubeTypeConverters.nowIso()
         val conflict = ConflictEntity(
             conflictId = UUID.randomUUID().toString(),
@@ -78,9 +78,9 @@ class ConflictResolverImpl(
         conflict
     }
 
-    override suspend fun resolveConflict(conflictId: String, policy: ConflictPolicy): Boolean = withContext(ioDispatcher) {
-        val conflict = conflictDao.getConflictById(conflictId) ?: return@withContext false
-        if (conflict.resolved) return@withContext true
+    override suspend fun resolveConflict(conflictId: String, policy: ConflictPolicy): Boolean = inCurrentTransactionOrIo {
+        val conflict = conflictDao.getConflictById(conflictId) ?: return@inCurrentTransactionOrIo false
+        if (conflict.resolved) return@inCurrentTransactionOrIo true
 
         val effectivePolicy = if (policy == ConflictPolicy.LAST_WRITE_WINS) {
             determineLwwPolicy(conflict)
@@ -459,6 +459,15 @@ class ConflictResolverImpl(
         }
         return localSolve?.sessionId?.takeIf { sessionDao.getSessionById(it) != null }
     }
+
+    /**
+     * Runs [block] on [ioDispatcher], unless this thread is already inside a Room transaction.
+     * Switching dispatchers there writes through a different connection: the row can commit
+     * even when the caller's transaction rolls back, and the other connection can deadlock
+     * waiting for the lock the transaction still holds.
+     */
+    private suspend fun <T> inCurrentTransactionOrIo(block: suspend () -> T): T =
+        if (database.inTransaction()) block() else withContext(ioDispatcher) { block() }
 
     /**
      * If the entity already has a queued mutation (a newer local edit), rebases the newest one onto

@@ -192,35 +192,54 @@ class CsvImporter(
 
                     // 5. Check & Auto-Recreate Missing Sessions (chunked by 500). A session of this owner
                     // that was soft-deleted is restored, so imported solves don't land in a session
-                    // History hides.
-                    val importedRecords = solvesToInsert + solvesToRestore.map { it.first }
-                    val referencedSessionIds = importedRecords.map { it.sessionId }.distinct()
+                    // History hides. sessions.id is global, so a row owned by someone else cannot be
+                    // reused: those solves are filed under a new session instead of attaching to it.
+                    val referencedSessionIds = (solvesToInsert + solvesToRestore.map { it.first })
+                        .map { it.sessionId }
+                        .distinct()
                     val existingSessionsById = mutableMapOf<String, SessionEntity>()
                     referencedSessionIds.chunked(500).forEach { chunk ->
                         sessionDao.getSessionsByIds(chunk).forEach { existingSessionsById[it.id] = it }
                     }
+                    val sessionIdRewrites = existingSessionsById
+                        .filterValues { it.ownerId != ownerId }
+                        .mapValues { UUID.randomUUID().toString() }
 
-                    val missingSessionIds = referencedSessionIds.filter { it !in existingSessionsById }
+                    fun CsvSolveRecord.withOwnedSession(): CsvSolveRecord {
+                        val rewritten = sessionIdRewrites[sessionId] ?: return this
+                        return copy(sessionId = rewritten)
+                    }
+
+                    val recordsToInsert = solvesToInsert.map { it.withOwnedSession() }
+                    val recordsToRestore = solvesToRestore.map { (record, existing) ->
+                        record.withOwnedSession() to existing
+                    }
+                    val importedRecords = recordsToInsert + recordsToRestore.map { it.first }
+                    val ownedSessionIds = importedRecords.map { it.sessionId }.distinct()
+                    val missingSessionIds = ownedSessionIds.filter { id ->
+                        val existing = existingSessionsById[id]
+                        existing == null || existing.ownerId != ownerId
+                    }
                     val nowIso = CubeTypeConverters.nowIso()
 
                     // Grouped once up front; filtering the whole import per missing session was
-                    // O(sessions x solves).
+                    // O(sessions x solves). The name comes from the earliest solve, not file order,
+                    // so a merged export with disagreeing session_name cells stays stable.
                     val solvesBySessionId = importedRecords.groupBy { it.sessionId }
                     val sessionsToCreate = missingSessionIds.map { sId ->
                         val sessionSolves = solvesBySessionId.getValue(sId)
-                        val firstSolve = sessionSolves.first()
-                        val minTimestamp = sessionSolves.minOf { it.timestamp }
+                        val earliestSolve = sessionSolves.minBy { it.timestamp }
                         val maxTimestamp = sessionSolves.maxOf { it.timestamp }
 
                         SessionEntity(
                             id = sId,
                             ownerId = ownerId,
-                            name = firstSolve.sessionName.ifBlank { "Imported Session" },
-                            event = CubeTypeConverters.fromMode(firstSolve.puzzle),
+                            name = earliestSolve.sessionName.ifBlank { "Imported Session" },
+                            event = CubeTypeConverters.fromMode(earliestSolve.puzzle),
                             // Imported sessions are closed (ended_at = last solve), so the automatic
                             // session policy never picks one up as the open session to append to.
                             kind = SessionKind.AUTOMATIC.value,
-                            startedAt = CubeTypeConverters.epochMillisToIso(minTimestamp),
+                            startedAt = CubeTypeConverters.epochMillisToIso(earliestSolve.timestamp),
                             endedAt = CubeTypeConverters.epochMillisToIso(maxTimestamp),
                             archived = false,
                             version = 0L,
@@ -232,7 +251,7 @@ class CsvImporter(
                         .filter { it.ownerId == ownerId && it.deletedAt != null }
                         .map { it.copy(deletedAt = null, updatedAt = nowIso) }
 
-                    val solveEntitiesToInsert = solvesToInsert.map { record ->
+                    val solveEntitiesToInsert = recordsToInsert.map { record ->
                         SolveEntity(
                             id = record.solveId,
                             ownerId = ownerId,
@@ -249,7 +268,7 @@ class CsvImporter(
                         )
                     }
                     // The server version is kept, so sync doesn't send a stale base version for a row it knows.
-                    val solveEntitiesToRestore = solvesToRestore.map { (record, existing) ->
+                    val solveEntitiesToRestore = recordsToRestore.map { (record, existing) ->
                         existing.copy(
                             sessionId = record.sessionId,
                             event = CubeTypeConverters.fromMode(record.puzzle),

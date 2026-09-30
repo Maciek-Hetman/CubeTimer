@@ -150,6 +150,30 @@ class TimerViewModelBluetoothTest {
     }
 
     @Test
+    fun finishedSolve_keepsTheModeAndScrambleItStartedWith() = runTest(testDispatcher) {
+        createViewModel()
+        runCurrent()
+        viewModel.setMode(Mode.CUBE_2x2)
+        runCurrent()
+        assertEquals(Mode.CUBE_2x2, viewModel.currentMode.value)
+
+        viewModel.onSmartTimerEvent(SmartTimerEvent.Running)
+        val scrambleAtStart = viewModel.currentScramble.value
+        viewModel.onSmartTimerEvent(SmartTimerEvent.Stopped(4_000L))
+
+        viewModel.setMode(Mode.CUBE_4x4)
+        viewModel.generateNewScramble()
+        runCurrent()
+
+        assertEquals(Mode.CUBE_2x2, viewModel.currentMode.value)
+        viewModel.saveSolveWithPenalty(Penalty.NONE)
+        runCurrent()
+        val saved = viewModel.allSolves.value.single()
+        assertEquals(Mode.CUBE_2x2, saved.mode)
+        assertEquals(scrambleAtStart, saved.scramble)
+    }
+
+    @Test
     fun handsLiftedEarlyOrTimerReset_returnToIdle() = runTest(testDispatcher) {
         createViewModel()
         runCurrent()

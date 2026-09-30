@@ -349,25 +349,25 @@ class SolvesRepository(
         mode: Mode?,
         ownerId: String = "guest"
     ): List<SolveTime> = withContext(ioDispatcher) {
-        val existing = if (mode != null) {
-            solveDao.getSolvesByEvent(ownerId = ownerId, event = mode.toEventString())
-        } else {
-            solveDao.getAllActiveSolvesForOwner(ownerId = ownerId)
-        }
-        if (existing.isEmpty()) return@withContext emptyList()
+        // Read and soft-delete in one transaction so a solve inserted between the two cannot
+        // survive a "clear everything" and stay out of the undo snapshot.
+        val deleted = runInTransaction {
+            val existing = if (mode != null) {
+                solveDao.getSolvesByEvent(ownerId = ownerId, event = mode.toEventString())
+            } else {
+                solveDao.getAllActiveSolvesForOwner(ownerId = ownerId)
+            }
+            if (existing.isEmpty()) return@runInTransaction emptyList()
 
-        val nowIso = CubeTypeConverters.nowIso()
-        val targetIds = existing.map { it.id }
-
-        runInTransaction {
-            solveDao.softDeleteAllChunked(targetIds, deletedAt = nowIso, updatedAt = nowIso)
+            val nowIso = CubeTypeConverters.nowIso()
+            solveDao.softDeleteAllChunked(existing.map { it.id }, deletedAt = nowIso, updatedAt = nowIso)
             if (ownerId != "guest") {
                 syncOutboxDao.enqueueAll(existing.map { it.toDeleteMutation(ownerId = ownerId, clientTime = nowIso) })
             }
+            existing.map { it.toSolveTime() }
         }
-
-        syncTrigger?.invoke()
-        existing.map { it.toSolveTime() }
+        if (deleted.isNotEmpty()) syncTrigger?.invoke()
+        deleted
     }
 
     /**
@@ -387,10 +387,7 @@ class SolvesRepository(
         solves: List<SolveTime>,
         ownerId: String = "guest"
     ) = withContext(ioDispatcher) {
-        if (solves.isEmpty()) {
-            syncTrigger?.invoke()
-            return@withContext
-        }
+        if (solves.isEmpty()) return@withContext
 
         val nowIso = CubeTypeConverters.nowIso()
 

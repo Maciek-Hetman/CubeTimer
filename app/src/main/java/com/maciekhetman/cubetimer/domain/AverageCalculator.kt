@@ -7,7 +7,7 @@ import kotlin.math.sqrt
 
 object AverageCalculator {
     fun averageOfN(solves: List<SolveTime>, count: Int): Long? {
-        if (solves.size < count) return null
+        if (count <= 0 || solves.size < count) return null
         return averageWindow(solves.takeLast(count))
     }
 
@@ -25,11 +25,7 @@ object AverageCalculator {
         if (solves.size < count) return null
         if (count <= 0) return null
 
-        val trimCount = when {
-            count < 5 -> 0
-            count < 20 -> 1
-            else -> (count * 0.05).toInt()
-        }
+        val trimCount = trimCountFor(count)
 
         // Coordinate-compress the distinct display times of non-DNF solves so they can be used
         // as 1-based Fenwick tree indices.
@@ -179,14 +175,17 @@ object AverageCalculator {
         return sqrt(variance)
     }
 
+    /** WCA average trim: none below 5, one below 20, otherwise 5% of the window (each end). */
+    private fun trimCountFor(windowSize: Int): Int = when {
+        windowSize < 5 -> 0
+        windowSize < 20 -> 1
+        else -> (windowSize * 0.05).toInt()
+    }
+
     fun averageWindow(window: List<SolveTime>): Long? {
         if (window.isEmpty()) return null
 
-        val trimCount = when {
-            window.size < 5 -> 0
-            window.size < 20 -> 1
-            else -> (window.size * 0.05).toInt()
-        }
+        val trimCount = trimCountFor(window.size)
 
         val validTimes = window
             .filter { it.penalty != Penalty.DNF }

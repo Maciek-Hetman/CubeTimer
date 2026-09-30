@@ -96,8 +96,10 @@ class SessionRepositoryImpl(
         id: String,
         ownerId: String
     ): Session? = withContext(ioDispatcher) {
+        var changed = false
         val updated = database.withTransaction {
             val existing = sessionDao.getSessionById(id) ?: return@withTransaction null
+            if (existing.ownerId != ownerId) return@withTransaction null
             if (existing.endedAt != null) return@withTransaction existing.toDomain()
 
             val nowIso = CubeTypeConverters.nowIso()
@@ -110,9 +112,10 @@ class SessionRepositoryImpl(
             if (entity.ownerId != "guest") {
                 syncOutboxDao.enqueue(entity.toUpsertMutation(clientTime = nowIso, json = json))
             }
+            changed = true
             entity.toDomain()
         }
-        syncTrigger?.invoke()
+        if (changed) syncTrigger?.invoke()
         updated
     }
 
@@ -126,8 +129,10 @@ class SessionRepositoryImpl(
         id: String,
         ownerId: String
     ): Boolean = withContext(ioDispatcher) {
-        val deleted = database.withTransaction {
-            val existing = sessionDao.getSessionById(id) ?: return@withTransaction false
+        var deleted = false
+        database.withTransaction {
+            val existing = sessionDao.getSessionById(id) ?: return@withTransaction
+            if (existing.ownerId != ownerId) return@withTransaction
             val nowIso = CubeTypeConverters.nowIso()
             val entity = existing.copy(
                 deletedAt = nowIso,
@@ -135,21 +140,21 @@ class SessionRepositoryImpl(
             )
             sessionDao.update(entity)
 
-            val activeSolves = solveDao.getSolvesBySession(entity.ownerId, id)
+            val activeSolves = solveDao.getSolvesBySession(ownerId, id)
             if (activeSolves.isNotEmpty()) {
                 solveDao.softDeleteAllChunked(activeSolves.map { it.id }, deletedAt = nowIso, updatedAt = nowIso)
             }
 
-            if (entity.ownerId != "guest") {
+            if (ownerId != "guest") {
                 val mutations = buildList {
                     add(entity.toDeleteMutation(clientTime = nowIso))
                     activeSolves.forEach { add(it.toDeleteMutation(clientTime = nowIso)) }
                 }
                 syncOutboxDao.enqueueAll(mutations)
             }
-            true
+            deleted = true
         }
-        syncTrigger?.invoke()
+        if (deleted) syncTrigger?.invoke()
         deleted
     }
 
@@ -159,13 +164,12 @@ class SessionRepositoryImpl(
     ): DeletedSessionSnapshot? = withContext(ioDispatcher) {
         val snapshot = database.withTransaction {
             val existing = sessionDao.getSessionById(sessionId) ?: return@withTransaction null
-            if (existing.deletedAt != null) return@withTransaction null
+            if (existing.deletedAt != null || existing.ownerId != ownerId) return@withTransaction null
 
-            val effectiveOwnerId = if (ownerId.isNotBlank() && ownerId != "guest") ownerId else existing.ownerId
             val nowIso = CubeTypeConverters.nowIso()
 
             // 1. Fetch all active non-deleted solves belonging to this session
-            val activeSolvesEntities = solveDao.getSolvesBySession(effectiveOwnerId, sessionId)
+            val activeSolvesEntities = solveDao.getSolvesBySession(ownerId, sessionId)
             val domainSolves = activeSolvesEntities.map { it.toSolveTime() }
             val domainSession = existing.toDomain()
 
@@ -183,10 +187,10 @@ class SessionRepositoryImpl(
             }
 
             // 4. Enqueue delete mutations in outbox if authenticated
-            if (effectiveOwnerId != "guest") {
+            if (ownerId != "guest") {
                 val mutations = buildList {
-                    add(updatedSession.toDeleteMutation(ownerId = effectiveOwnerId, clientTime = nowIso))
-                    activeSolvesEntities.forEach { add(it.toDeleteMutation(ownerId = effectiveOwnerId, clientTime = nowIso)) }
+                    add(updatedSession.toDeleteMutation(ownerId = ownerId, clientTime = nowIso))
+                    activeSolvesEntities.forEach { add(it.toDeleteMutation(ownerId = ownerId, clientTime = nowIso)) }
                 }
                 syncOutboxDao.enqueueAll(mutations)
             }
@@ -207,12 +211,15 @@ class SessionRepositoryImpl(
         snapshot: DeletedSessionSnapshot,
         ownerId: String
     ): Unit = withContext(ioDispatcher) {
-        val effectiveOwnerId = if (ownerId.isNotBlank() && ownerId != "guest") ownerId else snapshot.session.ownerId
+        if (snapshot.session.ownerId != ownerId) return@withContext
         val nowIso = CubeTypeConverters.nowIso()
+        var restored = false
 
         database.withTransaction {
-            // 1. Restore the session entity (deleted_at = null)
+            // 1. Restore the session entity (deleted_at = null). Refuse to overwrite a row that
+            // belongs to someone else: session ids are global.
             val existingSession = sessionDao.getSessionById(snapshot.session.id)
+            if (existingSession != null && existingSession.ownerId != ownerId) return@withTransaction
             val sessionEntity = if (existingSession != null) {
                 existingSession.copy(
                     deletedAt = null,
@@ -220,7 +227,7 @@ class SessionRepositoryImpl(
                 )
             } else {
                 snapshot.session.toEntity().copy(
-                    ownerId = effectiveOwnerId,
+                    ownerId = ownerId,
                     deletedAt = null,
                     updatedAt = nowIso
                 )
@@ -228,33 +235,33 @@ class SessionRepositoryImpl(
             sessionDao.upsert(sessionEntity)
 
             val outboxMutations = mutableListOf<SyncOutboxEntity>()
-            if (effectiveOwnerId != "guest") {
-                outboxMutations += sessionEntity.toUpsertMutation(ownerId = effectiveOwnerId, clientTime = nowIso, json = json)
+            if (ownerId != "guest") {
+                outboxMutations += sessionEntity.toUpsertMutation(ownerId = ownerId, clientTime = nowIso, json = json)
             }
 
-            // 2. Restore all solves from snapshot (deleted_at = null)
+            // 2. Restore all solves from snapshot (deleted_at = null). A row owned by someone else
+            // is left alone; its id cannot be taken over.
             if (snapshot.solves.isNotEmpty()) {
                 val existingSolvesMap = solveDao.getSolvesByIdsChunked(snapshot.solves.map { it.id }).associateBy { it.id }
-                val restoredSolvesEntities = snapshot.solves.map { solve ->
+                val restoredSolvesEntities = snapshot.solves.mapNotNull { solve ->
                     val existing = existingSolvesMap[solve.id]
-                    if (existing != null) {
-                        existing.copy(
-                            deletedAt = null,
-                            updatedAt = nowIso
-                        )
-                    } else {
-                        solve.toSolveEntity(
-                            ownerId = effectiveOwnerId,
+                    when {
+                        existing == null -> solve.toSolveEntity(
+                            ownerId = ownerId,
                             sessionId = snapshot.session.id,
                             deletedAt = null
                         ).copy(updatedAt = nowIso)
+                        existing.ownerId != ownerId -> null
+                        else -> existing.copy(deletedAt = null, updatedAt = nowIso)
                     }
                 }
-                solveDao.upsertAll(restoredSolvesEntities)
+                if (restoredSolvesEntities.isNotEmpty()) {
+                    solveDao.upsertAll(restoredSolvesEntities)
+                }
 
-                if (effectiveOwnerId != "guest") {
+                if (ownerId != "guest") {
                     restoredSolvesEntities.forEach { entity ->
-                        outboxMutations += entity.toUpsertMutation(ownerId = effectiveOwnerId, clientTime = nowIso, json = json)
+                        outboxMutations += entity.toUpsertMutation(ownerId = ownerId, clientTime = nowIso, json = json)
                     }
                 }
             }
@@ -262,8 +269,9 @@ class SessionRepositoryImpl(
             if (outboxMutations.isNotEmpty()) {
                 syncOutboxDao.enqueueAll(outboxMutations)
             }
+            restored = true
         }
 
-        syncTrigger?.invoke()
+        if (restored) syncTrigger?.invoke()
     }
 }

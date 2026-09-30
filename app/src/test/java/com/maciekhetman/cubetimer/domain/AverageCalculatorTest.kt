@@ -205,6 +205,13 @@ class AverageCalculatorTest {
         org.junit.Assert.assertNotNull(best)
     }
 
+    @Test
+    fun averageOfN_returnsNullForNonPositiveCount() {
+        val solves = listOf(solve(10_000L), solve(11_000L))
+        assertNull(AverageCalculator.averageOfN(solves, 0))
+        assertNull(AverageCalculator.averageOfN(solves, -5))
+    }
+
     private fun solve(timeInMillis: Long, penalty: Penalty = Penalty.NONE): SolveTime {
         return SolveTime(timeInMillis = timeInMillis, penalty = penalty)
     }

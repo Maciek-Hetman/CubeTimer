@@ -125,6 +125,17 @@ class SmartTimerProtocolTest {
     }
 
     @Test
+    fun qiyiDecoder_truncatedHeaderDoesNotFinishThePreviousMessage() {
+        val decoder = QiyiPacketDecoder()
+        val twoPacket = QiyiTimerProtocol.encodeMessage(9, 9, QiyiTimerProtocol.CMD_STATE, IntArray(10) { 4 })
+        assertNull(decoder.push(twoPacket[0]))
+        assertNull(decoder.push(byteArrayOf(0x00, 0x01)))
+        assertNull(decoder.push(twoPacket[1]))
+        val single = QiyiTimerProtocol.encodeMessage(3, 3, QiyiTimerProtocol.CMD_STATE, intArrayOf(4, 4)).single()
+        assertEquals(3L, decoder.push(single)?.sendSn)
+    }
+
+    @Test
     fun qiyiMacs_fromManufacturerDataAndName() {
         val advertised = byteArrayOf(0x34, 0x12, 0x00, 0x00, 0xA8.toByte(), 0xCC.toByte(), 0x7F)
         assertEquals("CC:A8:00:00:12:34", QiyiTimerProtocol.macFromManufacturerData(advertised))
