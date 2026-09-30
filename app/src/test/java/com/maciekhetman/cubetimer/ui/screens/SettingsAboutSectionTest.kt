@@ -24,14 +24,13 @@ class SettingsAboutSectionTest {
     private val openedUrls = mutableListOf<String>()
     private var licensesClicks = 0
 
-    private fun render(privacyPolicyUrl: String? = null) {
+    private fun render() {
         composeTestRule.setContent {
             MaterialTheme {
                 AboutSection(
                     versionName = "1.2.3",
                     onOpenUrl = { openedUrls += it },
-                    onLicensesClick = { licensesClicks++ },
-                    privacyPolicyUrl = privacyPolicyUrl
+                    onLicensesClick = { licensesClicks++ }
                 )
             }
         }
@@ -64,19 +63,30 @@ class SettingsAboutSectionTest {
     }
 
     @Test
-    fun privacyPolicyRowIsHiddenUntilAPolicyIsPublished() {
-        render(privacyPolicyUrl = null)
+    fun websiteRowOpensTheAboutPage() {
+        render()
 
-        composeTestRule.onNodeWithText("Privacy policy").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Website").performClick()
+
+        assertEquals(listOf("https://cubetimer.cc/about"), openedUrls)
     }
 
     @Test
-    fun privacyPolicyRowOpensThePublishedPolicy() {
-        render(privacyPolicyUrl = "https://example.com/privacy")
+    fun privacyPolicyRowOpensThePolicy() {
+        render()
 
         composeTestRule.onNodeWithText("Privacy policy").performClick()
 
-        assertEquals(listOf("https://example.com/privacy"), openedUrls)
+        assertEquals(listOf("https://cubetimer.cc/privacy"), openedUrls)
+    }
+
+    @Test
+    fun deleteAccountRowOpensTheWebAccountPage() {
+        render()
+
+        composeTestRule.onNodeWithText("Delete account on the web").performClick()
+
+        assertEquals(listOf("https://cubetimer.cc/account"), openedUrls)
     }
 
     @Test

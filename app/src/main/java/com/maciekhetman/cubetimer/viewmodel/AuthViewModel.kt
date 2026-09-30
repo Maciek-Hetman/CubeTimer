@@ -10,6 +10,7 @@ import com.maciekhetman.cubetimer.model.AuthException
 import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.ui.auth.AuthDialogType
 import com.maciekhetman.cubetimer.ui.auth.AuthFormState
+import com.maciekhetman.cubetimer.ui.auth.AuthLink
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -35,13 +36,32 @@ class AuthViewModel(
                 emailError = null,
                 passwordError = null,
                 confirmPasswordError = null,
-                tokenError = null
+                tokenError = null,
+                currentPasswordError = null
             )
         }
     }
 
     fun dismissDialog() {
         _formState.update { it.copy(dialogType = AuthDialogType.NONE) }
+    }
+
+    /**
+     * Opens the dialog for a one-time link from a verification or password-reset email. Nothing is
+     * sent until the user confirms there: a link can come from anyone, and completing it signs
+     * this device in to the account it belongs to.
+     */
+    fun openEmailLink(link: AuthLink) {
+        if (_formState.value.isLoading) return
+        openDialog(
+            when (link) {
+                is AuthLink.VerifyEmail -> AuthDialogType.VERIFY_EMAIL_LINK
+                is AuthLink.ResetPassword -> AuthDialogType.RESET_PASSWORD_LINK
+            }
+        )
+        _formState.update {
+            it.copy(token = link.token, password = "", confirmPassword = "", isPasswordVisible = false)
+        }
     }
 
     fun onEmailChanged(value: String) {
@@ -54,6 +74,10 @@ class AuthViewModel(
 
     fun onConfirmPasswordChanged(value: String) {
         _formState.update { it.copy(confirmPassword = value, confirmPasswordError = null, errorMessage = null) }
+    }
+
+    fun onCurrentPasswordChanged(value: String) {
+        _formState.update { it.copy(currentPassword = value, currentPasswordError = null, errorMessage = null) }
     }
 
     fun onTokenChanged(value: String) {
@@ -159,13 +183,10 @@ class AuthViewModel(
         }
     }
 
-    /**
-     * Verifies with the token from the emailed link and signs in. No dialog collects a token: the
-     * link opens the web client, which verifies there. This is the entry point for handling that
-     * link inside the app.
-     */
+    /** Verifies with the token of an emailed link (see [openEmailLink]) and signs in. */
     fun submitVerifyEmail() {
         val state = _formState.value
+        if (state.isLoading) return
         if (state.token.isBlank()) {
             _formState.update { it.copy(tokenError = "Verification token is required") }
             return
@@ -225,12 +246,10 @@ class AuthViewModel(
         }
     }
 
-    /**
-     * Sets a new password with the token from the emailed link and signs in. Like
-     * [submitVerifyEmail], it has no dialog today: the link opens the web client's reset page.
-     */
+    /** Sets a new password with the token of an emailed link (see [openEmailLink]) and signs in. */
     fun submitResetPassword() {
         val state = _formState.value
+        if (state.isLoading) return
         if (!validateResetPasswordForm(state)) return
 
         viewModelScope.launch {
@@ -306,6 +325,73 @@ class AuthViewModel(
         }
     }
 
+    /**
+     * Changes the password of the signed-in user; the new one reuses the `password` /
+     * `confirmPassword` fields. The server ends every session of the user, so the auth manager
+     * signs in again on success: normally the user stays signed in and returns to the profile, but
+     * if that sign-in failed they are a guest by now and are sent to sign in with the new password.
+     */
+    fun submitChangePassword() {
+        val state = _formState.value
+        if (state.isLoading) return
+        if (!validateChangePasswordForm(state)) return
+
+        // Read before the request: a failed follow-up sign-in leaves no current user behind.
+        val email = authManager.currentUser?.email
+
+        viewModelScope.launch {
+            _formState.update { it.copy(isLoading = true, errorMessage = null, currentPasswordError = null) }
+            when (val result = authManager.changePassword(state.currentPassword, state.password)) {
+                is AuthResult.Success -> {
+                    val current = authManager.authState.value
+                    val stillSignedIn = current is AuthState.Authenticated || current is AuthState.Admin
+                    _formState.update {
+                        it.copy(
+                            isLoading = false,
+                            dialogType = if (stillSignedIn) AuthDialogType.USER_PROFILE else AuthDialogType.LOGIN,
+                            successMessage = if (stillSignedIn) {
+                                "Password changed."
+                            } else {
+                                "Password changed. Sign in again with your new password."
+                            },
+                            email = if (stillSignedIn) it.email else email ?: it.email,
+                            currentPassword = "",
+                            password = "",
+                            confirmPassword = ""
+                        )
+                    }
+                }
+                is AuthResult.Error -> {
+                    val ex = result.exception
+                    _formState.update {
+                        when {
+                            // Not the login wording: here it is the current password that is wrong.
+                            ex is AuthException.InvalidCredentials -> {
+                                Log.w(TAG, "Password change refused: current password rejected")
+                                it.copy(isLoading = false, currentPasswordError = "Current password is incorrect.")
+                            }
+                            ex is AuthException.ApiError && ex.errorCode == "password_not_set" -> {
+                                Log.w(TAG, "Password change refused: account has no password")
+                                it.copy(
+                                    isLoading = false,
+                                    errorMessage = "This account has no password yet. " +
+                                        "Use \"Forgot password?\" on the sign-in screen to set one."
+                                )
+                            }
+                            else -> it.copy(isLoading = false, errorMessage = reportError(ex))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** Leaves the change-password form for the profile, dropping what was typed into it. */
+    fun cancelChangePassword() {
+        _formState.update { it.copy(currentPassword = "", password = "", confirmPassword = "") }
+        openDialog(AuthDialogType.USER_PROFILE)
+    }
+
     fun adoptGuestData() {
         val user = authManager.currentUser ?: return
         viewModelScope.launch {
@@ -360,6 +446,26 @@ class AuthViewModel(
         }
         if (state.password.length < 10) {
             _formState.update { it.copy(passwordError = "Password must be at least 10 characters") }
+            valid = false
+        }
+        if (state.password != state.confirmPassword) {
+            _formState.update { it.copy(confirmPasswordError = "Passwords do not match") }
+            valid = false
+        }
+        return valid
+    }
+
+    private fun validateChangePasswordForm(state: AuthFormState): Boolean {
+        var valid = true
+        if (state.currentPassword.isBlank()) {
+            _formState.update { it.copy(currentPasswordError = "Current password is required") }
+            valid = false
+        }
+        if (state.password.length < 10) {
+            _formState.update { it.copy(passwordError = "Password must be at least 10 characters") }
+            valid = false
+        } else if (state.password.length > 128) {
+            _formState.update { it.copy(passwordError = "Password must be at most 128 characters") }
             valid = false
         }
         if (state.password != state.confirmPassword) {

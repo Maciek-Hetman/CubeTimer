@@ -105,6 +105,24 @@ fun AuthDialog(
                 modifier = modifier
             )
         }
+        AuthDialogType.VERIFY_EMAIL_LINK -> {
+            VerifyEmailLinkDialog(
+                formState = formState,
+                authState = authState,
+                viewModel = viewModel,
+                onDismiss = onDismiss,
+                modifier = modifier
+            )
+        }
+        AuthDialogType.RESET_PASSWORD_LINK -> {
+            ResetPasswordLinkDialog(
+                formState = formState,
+                authState = authState,
+                viewModel = viewModel,
+                onDismiss = onDismiss,
+                modifier = modifier
+            )
+        }
         AuthDialogType.USER_PROFILE -> {
             UserProfileDialog(
                 authState = authState,
@@ -119,6 +137,14 @@ fun AuthDialog(
                 formState = formState,
                 viewModel = viewModel,
                 onCancel = { viewModel.openDialog(AuthDialogType.USER_PROFILE) },
+                modifier = modifier
+            )
+        }
+        AuthDialogType.CHANGE_PASSWORD -> {
+            ChangePasswordDialog(
+                formState = formState,
+                viewModel = viewModel,
+                onCancel = viewModel::cancelChangePassword,
                 modifier = modifier
             )
         }
@@ -146,6 +172,11 @@ private fun LoginDialog(
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
             ) {
+                if (formState.successMessage != null) {
+                    SuccessBanner(formState.successMessage)
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+
                 if (formState.errorMessage != null) {
                     ErrorBanner(formState.errorMessage)
                     Spacer(modifier = Modifier.height(12.dp))
@@ -660,6 +691,16 @@ private fun UserProfileDialog(
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
             ) {
+                if (formState.successMessage != null) {
+                    SuccessBanner(formState.successMessage)
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+
+                if (formState.errorMessage != null) {
+                    ErrorBanner(formState.errorMessage)
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+
                 when (authState) {
                     is AuthState.Authenticated -> {
                         ProfileInfoCard(
@@ -695,6 +736,17 @@ private fun UserProfileDialog(
                 }
 
                 if (authState is AuthState.Authenticated || authState is AuthState.Admin) {
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedButton(
+                        shape = RoundedCornerShape(20.dp),
+                        onClick = { viewModel.openDialog(AuthDialogType.CHANGE_PASSWORD) },
+                        enabled = !formState.isLoading,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Change password")
+                    }
+
                     Spacer(modifier = Modifier.height(8.dp))
 
                     OutlinedButton(
@@ -804,6 +856,119 @@ private fun DeleteAccountDialog(
     )
 }
 
+/**
+ * Changing the password ends every session of the user on the server; the app signs in again with
+ * the new password behind the scenes, so the user only sees the result on the profile (or sign-in).
+ */
+@Composable
+private fun ChangePasswordDialog(
+    formState: AuthFormState,
+    viewModel: AuthViewModel,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val passwordTransformation =
+        if (formState.isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation()
+
+    AlertDialog(
+        // An in-flight change must not be dismissed from under its own result (or error).
+        onDismissRequest = { if (!formState.isLoading) onCancel() },
+        shape = RoundedCornerShape(24.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        title = { Text("Change password") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+            ) {
+                if (formState.errorMessage != null) {
+                    ErrorBanner(formState.errorMessage)
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+
+                OutlinedTextField(
+                    value = formState.currentPassword,
+                    onValueChange = viewModel::onCurrentPasswordChanged,
+                    label = { Text("Current password") },
+                    leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
+                    trailingIcon = {
+                        IconButton(onClick = viewModel::togglePasswordVisibility) {
+                            Icon(
+                                imageVector = if (formState.isPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                contentDescription = "Toggle password visibility"
+                            )
+                        }
+                    },
+                    visualTransformation = passwordTransformation,
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    isError = formState.currentPasswordError != null,
+                    supportingText = formState.currentPasswordError?.let { { Text(it) } },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = formState.password,
+                    onValueChange = viewModel::onPasswordChanged,
+                    label = { Text("New password (min 10 characters)") },
+                    leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
+                    visualTransformation = passwordTransformation,
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    isError = formState.passwordError != null,
+                    supportingText = formState.passwordError?.let { { Text(it) } },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = formState.confirmPassword,
+                    onValueChange = viewModel::onConfirmPasswordChanged,
+                    label = { Text("Confirm new password") },
+                    leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
+                    visualTransformation = passwordTransformation,
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    isError = formState.confirmPasswordError != null,
+                    supportingText = formState.confirmPasswordError?.let { { Text(it) } },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                shape = RoundedCornerShape(20.dp),
+                onClick = viewModel::submitChangePassword,
+                enabled = !formState.isLoading
+            ) {
+                if (formState.isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Text("Change password")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                shape = RoundedCornerShape(20.dp),
+                onClick = onCancel,
+                enabled = !formState.isLoading
+            ) {
+                Text("Cancel")
+            }
+        },
+        modifier = modifier
+    )
+}
+
 @Composable
 private fun ProfileInfoCard(
     email: String,
@@ -871,7 +1036,7 @@ private fun ProfileInfoCard(
 }
 
 @Composable
-private fun ErrorBanner(message: String) {
+internal fun ErrorBanner(message: String) {
     Card(
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(

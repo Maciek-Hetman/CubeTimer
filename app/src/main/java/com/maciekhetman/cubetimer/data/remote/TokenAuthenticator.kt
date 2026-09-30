@@ -38,6 +38,14 @@ class TokenAuthenticator(
             return null
         }
 
+        // A 401 "invalid_credentials" on an authenticated call (change password) means the password
+        // that was submitted is wrong, not that the access token expired: refreshing and resending
+        // would only repeat the failed attempt.
+        if (isWrongPassword(response)) {
+            Log.d(TAG, "401 invalid_credentials on $path. Skipping refresh.")
+            return null
+        }
+
         val failedAuthorization = response.request.header(AuthInterceptor.HEADER_AUTHORIZATION)
         val failedToken = failedAuthorization?.removePrefix("Bearer ")?.trim()
 
@@ -97,6 +105,16 @@ class TokenAuthenticator(
                path.endsWith("/v1/auth/federated/google")
     }
 
+    private fun isWrongPassword(response: Response): Boolean {
+        // peekBody leaves the body intact for the caller, which still has to map the error.
+        val body = try {
+            response.peekBody(ERROR_BODY_PEEK_BYTES).string()
+        } catch (_: Exception) {
+            return false
+        }
+        return ErrorParser.parseApiError(body)?.error?.code?.lowercase()?.trim() == "invalid_credentials"
+    }
+
     private fun responseCount(response: Response): Int {
         var count = 1
         var prior = response.priorResponse
@@ -110,5 +128,6 @@ class TokenAuthenticator(
     companion object {
         private const val TAG = "TokenAuthenticator"
         private const val MAX_RETRIES = 3
+        private const val ERROR_BODY_PEEK_BYTES = 4096L
     }
 }

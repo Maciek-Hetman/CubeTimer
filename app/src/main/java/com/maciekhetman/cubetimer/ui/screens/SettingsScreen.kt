@@ -65,6 +65,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import android.widget.Toast
 import com.maciekhetman.cubetimer.BuildConfig
+import com.maciekhetman.cubetimer.model.InspectionStartGesture
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.RunningTimerDisplay
 import com.maciekhetman.cubetimer.model.TimerAverageOptions
@@ -87,8 +88,13 @@ const val SOURCE_CODE_URL = "https://github.com/Maciek-Hetman/CubeTimer"
 const val ISSUES_URL = "$SOURCE_CODE_URL/issues"
 const val LICENSE_URL = "$SOURCE_CODE_URL/blob/main/LICENSE"
 
-/** No policy is published yet; the About section shows its "Privacy policy" row once this is set. */
-val PRIVACY_POLICY_URL: String? = null
+/** The web client (CubeTimer-web); its pages below are what the About section links to. */
+const val WEBSITE_URL = "https://cubetimer.cc"
+const val ABOUT_URL = "$WEBSITE_URL/about"
+const val PRIVACY_POLICY_URL = "$WEBSITE_URL/privacy"
+
+/** Where an account can be deleted without the app (its Account page); Play asks for such a link. */
+const val ACCOUNT_DELETION_URL = "$WEBSITE_URL/account"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -110,6 +116,8 @@ fun SettingsScreen(
     val timerStartDelayMillis by viewModel.timerStartDelayMillis.collectAsStateWithLifecycle()
     val timerAverages by viewModel.timerAverages.collectAsStateWithLifecycle()
     val runningTimerDisplay by viewModel.runningTimerDisplay.collectAsStateWithLifecycle()
+    val inspectionEnabled by viewModel.inspectionEnabled.collectAsStateWithLifecycle()
+    val inspectionStartGesture by viewModel.inspectionStartGesture.collectAsStateWithLifecycle()
     val hideScrambleDuringSolve by viewModel.hideScrambleDuringSolve.collectAsStateWithLifecycle()
     val hideAveragesDuringSolve by viewModel.hideAveragesDuringSolve.collectAsStateWithLifecycle()
     val hideLastResultsDuringSolve by viewModel.hideLastResultsDuringSolve.collectAsStateWithLifecycle()
@@ -126,6 +134,7 @@ fun SettingsScreen(
 
     var defaultModeMenuExpanded by remember { mutableStateOf(value = false) }
     var runningTimerDisplayMenuExpanded by remember { mutableStateOf(value = false) }
+    var inspectionGestureMenuExpanded by remember { mutableStateOf(value = false) }
     var timerAveragesExpanded by remember { mutableStateOf(value = false) }
     var timingDeviceMenuExpanded by remember { mutableStateOf(value = false) }
     var showBluetoothDialog by remember { mutableStateOf(value = false) }
@@ -228,6 +237,33 @@ fun SettingsScreen(
                             viewModel.setTimerStartDelayMillis(delayMillis)
                         }
                     )
+                    SettingsDivider()
+                    SettingToggleRow(
+                        title = "Inspection",
+                        checked = inspectionEnabled,
+                        onCheckedChange = { viewModel.setInspectionEnabled(it) }
+                    )
+                    if (inspectionEnabled) {
+                        SettingsDivider()
+                        SettingMenuRow(
+                            title = "Start solve with",
+                            valueLabel = inspectionStartGesture.displayName,
+                            onClick = { inspectionGestureMenuExpanded = true },
+                            menuExpanded = inspectionGestureMenuExpanded,
+                            onDismissMenu = { inspectionGestureMenuExpanded = false }
+                        ) {
+                            InspectionStartGesture.entries.forEach { gesture ->
+                                DropdownMenuItem(
+                                    text = { Text(gesture.displayName) },
+                                    onClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        inspectionGestureMenuExpanded = false
+                                        viewModel.setInspectionStartGesture(gesture)
+                                    },
+                                )
+                            }
+                        }
+                    }
                     SettingsDivider()
                     SettingMenuRow(
                         title = "During solve",
@@ -468,16 +504,15 @@ fun AccountSection(
 }
 
 /**
- * The "About" settings section: app version, links to the source code, the issue tracker and (once
- * [privacyPolicyUrl] is set) the privacy policy, and the open-source licenses. Links are handed to
- * [onOpenUrl].
+ * The "About" settings section: app version, links to the website, the source code, the issue
+ * tracker, the privacy policy and the web page for deleting an account, and the open-source
+ * licenses. Links are handed to [onOpenUrl].
  */
 @Composable
 fun AboutSection(
     versionName: String,
     onOpenUrl: (String) -> Unit,
     onLicensesClick: () -> Unit,
-    privacyPolicyUrl: String? = PRIVACY_POLICY_URL,
 ) {
     SettingsSection(title = "About") {
         SettingsRow(title = "Version") {
@@ -488,13 +523,15 @@ fun AboutSection(
             )
         }
         SettingsDivider()
+        AboutLinkRow(title = "Website", onClick = { onOpenUrl(ABOUT_URL) })
+        SettingsDivider()
         AboutLinkRow(title = "Source code", onClick = { onOpenUrl(SOURCE_CODE_URL) })
         SettingsDivider()
         AboutLinkRow(title = "Report a problem", onClick = { onOpenUrl(ISSUES_URL) })
-        if (privacyPolicyUrl != null) {
-            SettingsDivider()
-            AboutLinkRow(title = "Privacy policy", onClick = { onOpenUrl(privacyPolicyUrl) })
-        }
+        SettingsDivider()
+        AboutLinkRow(title = "Privacy policy", onClick = { onOpenUrl(PRIVACY_POLICY_URL) })
+        SettingsDivider()
+        AboutLinkRow(title = "Delete account on the web", onClick = { onOpenUrl(ACCOUNT_DELETION_URL) })
         SettingsDivider()
         AboutLinkRow(
             title = "Open-source licenses",

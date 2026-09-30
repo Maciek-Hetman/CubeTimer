@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.maciekhetman.cubetimer.model.InspectionStartGesture
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.RunningTimerDisplay
 import com.maciekhetman.cubetimer.model.TimerAverageOptions
@@ -31,6 +32,8 @@ class SettingsRepository(private val context: Context) {
     private val FOCUS_MODE_KEY = booleanPreferencesKey("focus_mode")
     private val HAPTICS_ENABLED_KEY = booleanPreferencesKey("haptics_enabled")
     private val TIMING_DEVICE_KEY = stringPreferencesKey("timing_device")
+    private val INSPECTION_ENABLED_KEY = booleanPreferencesKey("inspection_enabled")
+    private val INSPECTION_START_GESTURE_KEY = stringPreferencesKey("inspection_start_gesture")
     private val SETTINGS_MIGRATED_FROM_LEGACY_KEY = booleanPreferencesKey("settings_migrated_from_legacy")
 
     /** Preferences that used to live in the legacy solves datastore. */
@@ -136,6 +139,15 @@ class SettingsRepository(private val context: Context) {
         preferences[HAPTICS_ENABLED_KEY] ?: true
     }
 
+    val inspectionEnabledFlow: Flow<Boolean> = context.settingsDataStore.data.map { preferences ->
+        preferences[INSPECTION_ENABLED_KEY] ?: false
+    }
+
+    val inspectionStartGestureFlow: Flow<InspectionStartGesture> = context.settingsDataStore.data.map { preferences ->
+        val raw = preferences[INSPECTION_START_GESTURE_KEY] ?: InspectionStartGesture.HOLD.name
+        runCatching { InspectionStartGesture.valueOf(raw) }.getOrDefault(InspectionStartGesture.HOLD)
+    }
+
     /**
      * What drives the timer: on-screen touch ([TimingDevice.KEYBOARD]) or a connected Bluetooth
      * timer ([TimingDevice.EXTERNAL_TIMER]). Smart cubes aren't a timer input on Android.
@@ -236,6 +248,18 @@ class SettingsRepository(private val context: Context) {
     suspend fun setHapticsEnabled(enabled: Boolean) {
         context.settingsDataStore.edit { preferences ->
             preferences[HAPTICS_ENABLED_KEY] = enabled
+        }
+    }
+
+    suspend fun setInspectionEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[INSPECTION_ENABLED_KEY] = enabled
+        }
+    }
+
+    suspend fun setInspectionStartGesture(gesture: InspectionStartGesture) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[INSPECTION_START_GESTURE_KEY] = gesture.name
         }
     }
 

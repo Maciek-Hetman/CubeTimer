@@ -1,5 +1,6 @@
 package com.maciekhetman.cubetimer
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -80,6 +81,7 @@ import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.ui.auth.AuthDialog
 import com.maciekhetman.cubetimer.ui.auth.AuthDialogType
+import com.maciekhetman.cubetimer.ui.auth.AuthLink
 import com.maciekhetman.cubetimer.ui.screens.SettingsScreen
 import com.maciekhetman.cubetimer.ui.screens.HistoryScreen
 import com.maciekhetman.cubetimer.ui.screens.StatsScreen
@@ -129,6 +131,9 @@ class MainActivity : ComponentActivity() {
         authViewModel = ViewModelProvider(this, factory)[AuthViewModel::class.java]
         syncStateManager = app.syncStateManager
 
+        // A recreated activity gets the launching intent again; the link was handled the first time.
+        if (savedInstanceState == null) handleAuthLink(intent)
+
         setContent {
             val dynamicColorEnabled by timerViewModel.dynamicColorEnabled.collectAsStateWithLifecycle()
             val amoledEnabled by timerViewModel.amoledEnabled.collectAsStateWithLifecycle()
@@ -146,6 +151,24 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /** The activity is singleTop, so a link tapped while the app is open arrives here. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleAuthLink(intent)
+    }
+
+    /**
+     * Hands a verification or password-reset link from a CubeSync email to the auth dialogs, which
+     * ask before acting on it.
+     */
+    private fun handleAuthLink(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_VIEW) return
+        // Reopening from Recents replays the original intent; its one-time token is long spent.
+        if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
+        val link = intent.data?.let(AuthLink::fromUri) ?: return
+        authViewModel.openEmailLink(link)
     }
 
     override fun onResume() {
@@ -192,6 +215,8 @@ fun CubeTimerApp(
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.TIMER) }
     val currentMode by viewModel.currentMode.collectAsStateWithLifecycle()
     val isTimerRunning by viewModel.isTimerRunning.collectAsStateWithLifecycle()
+    // Also true during inspection: navigating away would strand it.
+    val isTimerBusy by viewModel.isTimerBusy.collectAsStateWithLifecycle()
     val focusMode by viewModel.focusMode.collectAsStateWithLifecycle()
     val focusModeActive = focusMode && isTimerRunning
 
@@ -206,7 +231,7 @@ fun CubeTimerApp(
     ApplyStatusBarColor()
 
     // Predictive back navigation support
-    BackHandler(enabled = currentDestination != AppDestinations.TIMER && !isTimerRunning) {
+    BackHandler(enabled = currentDestination != AppDestinations.TIMER && !isTimerBusy) {
         currentDestination = AppDestinations.TIMER
     }
 
@@ -301,7 +326,7 @@ fun CubeTimerApp(
                 FloatingNavigationBar(
                     currentDestination = currentDestination,
                     onNavigate = { currentDestination = it },
-                    isTimerRunning = isTimerRunning,
+                    isTimerBusy = isTimerBusy,
                     modifier = Modifier.align(Alignment.BottomCenter)
                 )
             }
@@ -342,7 +367,7 @@ fun CubeTimerApp(
 fun FloatingNavigationBar(
     currentDestination: AppDestinations,
     onNavigate: (AppDestinations) -> Unit,
-    isTimerRunning: Boolean,
+    isTimerBusy: Boolean,
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
@@ -458,7 +483,7 @@ fun FloatingNavigationBar(
                                 .size(width = indicatorWidth, height = indicatorHeight)
                                 .clip(CircleShape)
                                 .clickable {
-                                    if (!isTimerRunning && currentDestination != destination) {
+                                    if (!isTimerBusy && currentDestination != destination) {
                                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                         onNavigate(destination)
                                     }

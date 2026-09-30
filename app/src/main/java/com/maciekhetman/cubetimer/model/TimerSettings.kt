@@ -7,3 +7,9 @@ enum class RunningTimerDisplay(val displayName: String) {
     SECONDS_ONLY("Hide decimals"),
     HIDDEN("Hide timer")
 }
+
+/** How a solve is started once inspection is running. */
+enum class InspectionStartGesture(val displayName: String) {
+    HOLD("Tap and hold"),
+    TAP("Tap")
+}

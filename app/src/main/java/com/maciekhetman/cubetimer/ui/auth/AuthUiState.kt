@@ -10,8 +10,15 @@ enum class AuthDialogType {
     FORGOT_PASSWORD,
     RESET_PASSWORD,
     EMAIL_VERIFICATION,
+
+    /** Opened from an emailed link ([AuthLink]): confirm verifying the email and signing in. */
+    VERIFY_EMAIL_LINK,
+
+    /** Opened from an emailed link ([AuthLink]): choose the new password. */
+    RESET_PASSWORD_LINK,
     USER_PROFILE,
-    DELETE_ACCOUNT
+    DELETE_ACCOUNT,
+    CHANGE_PASSWORD
 }
 
 /**
@@ -30,5 +37,7 @@ data class AuthFormState(
     val passwordError: String? = null,
     val confirmPasswordError: String? = null,
     val tokenError: String? = null,
-    val isPasswordVisible: Boolean = false
+    val isPasswordVisible: Boolean = false,
+    val currentPassword: String = "",
+    val currentPasswordError: String? = null
 )

@@ -65,11 +65,16 @@ both files. `SyncWorker` is built by a custom `WorkerFactory` in `workManagerCon
 - `data/remote` — Retrofit + OkHttp + kotlinx.serialization; `AuthInterceptor` attaches the access token,
   `TokenAuthenticator` refreshes on 401 and notifies `AuthManager` via `SessionExpirationListener`. Every
   refresh (the authenticator's and `AuthManagerImpl`'s) goes through the one `TokenRefresher`: the server
-  rotates refresh tokens with reuse detection, so two concurrent refreshes log the user out.
+  rotates refresh tokens with reuse detection, so two concurrent refreshes log the user out. A 401 whose body code
+  is `invalid_credentials` (wrong current password on `PUT /v1/me/password`) is neither refreshed nor retried.
 - `data/auth` — `AuthManagerImpl` owns `AuthState` (Guest / Authenticated / Admin), `adoptGuestData` and
   `deleteAccount` (on success the user's rows are re-owned to `"guest"`; their outbox/conflicts/cursor are
   dropped). `EncryptedTokenStorage` never falls back to plaintext: if Keystore is unusable it resets the file,
   then keeps tokens in memory only. The device id lives in `cubetimer_device_prefs` (excluded from backup).
+  `changePassword` (`PUT /v1/me/password`) makes the server revoke **every** refresh token of the user, this
+  device's included, so on success `AuthManagerImpl` immediately signs in again with the new password
+  (`isNewLogin = false`: no guest adoption, no sync trigger); if that sign-in fails it ends as Guest like an
+  expired session but still returns `Success`.
 - `data/session` — `SessionRepositoryImpl` (persistence) + `SessionManagerImpl` (automatic-session policy; no
   persisted state of its own).
 - `data/sync` — `SyncEngineImpl`, `ConflictResolverImpl`, `SyncStateManager` (UI-facing sync status), `work/SyncWorker`.
@@ -114,7 +119,8 @@ as `ConflictEntity` and resolved by `ConflictResolver` (or by the user via keep-
 `SyncStatusDialog`). A mutation the server rejects on its own is marked `status = 'dead'` and never resent;
 a remote solve whose session isn't available locally is skipped rather than failing the page's FK check.
 The client pins `X-Sync-Protocol: 1`: v2 slims a conflict's `current` to an `{id, version, updated_at}` stub,
-which would leave keep-server with nothing to apply. `CubeTimerApplication.BASE_URL` is still a placeholder host.
+which would leave keep-server with nothing to apply. `CubeTimerApplication.BASE_URL` is `https://api.cubetimer.cc`; the web client (CubeTimer-web, which emailed
+links open) lives at `https://cubetimer.cc`.
 
 ### Sessions
 Every solve belongs to a session. Automatic sessions are named `"${day} ${month} ${year} ${dayPart}"`
@@ -136,15 +142,22 @@ signed-in owners' session-less solves are left alone, as the server accepts them
 - The cloud sync status and account/admin indicators live in Settings' "Account" section
   (`SettingsScreen.kt`), not the shared top bar — `TopBar.kt`'s `TimerTopHeader`/`CollapsingTopBar` no
   longer take `syncUiState`/`authState`/click-handler params. Tapping the rows opens the same
-  `SyncStatusDialog` / `AuthDialog` (`UserProfileDialog`, which also offers "Delete account") as before.
+  `SyncStatusDialog` / `AuthDialog` (`UserProfileDialog`, which also offers "Change password" — the
+  `CHANGE_PASSWORD` dialog — and "Delete account") as before. If the post-change sign-in failed, the flow lands
+  on `LOGIN` with a "Sign in again" success banner.
 - Verification and password-reset emails carry links to the web client (`CLIENT_URL/verify-email?token=…`,
-  `/reset-password?token=…`), which completes them there. The app never asks for a token: the
-  `EMAIL_VERIFICATION` dialog points at the link and offers "Resend email" (a sign-in refused with
-  `EmailNotVerified` lands there too), and `RESET_PASSWORD` is a "Check your email" notice. The manifest has no
-  link handling, so `AuthViewModel.submitVerifyEmail` / `submitResetPassword` have no UI caller yet.
+  `/reset-password?token=…`). The app never asks for a pasted token: the `EMAIL_VERIFICATION` dialog points at
+  the link and offers "Resend email" (a sign-in refused with `EmailNotVerified` lands there too), and
+  `RESET_PASSWORD` is a "Check your email" notice. `MainActivity` also has an `autoVerify` https intent filter for
+  those two paths (`AuthLink` parses them): it only captures links once `cubetimer.cc/.well-known/assetlinks.json`
+  lists the release signing certificate (not deployed yet; until then the browser/web client completes them). An
+  opened link goes through `AuthViewModel.openEmailLink` to `VERIFY_EMAIL_LINK` / `RESET_PASSWORD_LINK`
+  (`AuthLinkDialogs.kt`), which ask before acting (completing one signs the device in and adopts guest solves) and
+  refuse while someone is signed in.
 - Settings ends with an "About" section (`AboutSection` in `SettingsScreen.kt`): version
   (`BuildConfig.VERSION_NAME`), source code / issue tracker links, and `OpenSourceLicensesDialog`, whose
-  component list is maintained by hand. Its "Privacy policy" row stays hidden while `PRIVACY_POLICY_URL` is null.
+  component list is maintained by hand. Its Website / Privacy policy / "Delete account on the web" rows open
+  `cubetimer.cc/about`, `/privacy` and `/account` (constants at the top of `SettingsScreen.kt`).
 - The top bar only carries the mode picker (plus screen-specific actions via `extraActions`); there is no
   session picker.
 - Timing input is a setting (`SettingsRepository.timingDeviceFlow`), switchable from Settings → "Timing device"
@@ -153,6 +166,12 @@ signed-in owners' session-less solves are left alone, as the server accepts them
   `TimingDevice.EXTERNAL_TIMER` the timer screen ignores touches and `TimerViewModel.onSmartTimerEvent` drives
   the same `TimerState` machine; `Stopped` carries the timer's own time and `TimerState.Finished.timingDevice`
   is saved with the solve. `BluetoothTimerDialog` handles permissions, enabling Bluetooth, scanning and connecting.
+- Optional WCA inspection for touch timing (Settings → Timer: `inspection_enabled`, `inspection_start_gesture` =
+  "Tap and hold" / "Tap"): a press in Idle enters `TimerState.Inspecting` (15 s countdown, "+2" from 15 s, "DNF"
+  from 17 s; that press's release is ignored). The solve then starts per the gesture, the penalty is fixed by the
+  inspection time at that moment and rides in `Finished.inspectionPenalty`; saving keeps the worse of it and the
+  chosen penalty. "Cancel" (`cancelInspection`) returns to Idle. `isTimerBusy` (running or inspecting) gates
+  mode/device switching and navigation; `isTimerRunning` is unchanged. Bluetooth timers ignore the setting.
 - Preferences live in two DataStores (`AppDataStore.kt`): `solves` (legacy, source of the one-time
   Room migration in `DataStoreMigration`) and `settings` (`SettingsRepository`).
 - Theming: `CubeTimerTheme(dynamicColor, amoled)`; haptics follow the `haptics_enabled` setting
