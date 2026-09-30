@@ -13,6 +13,7 @@ import com.maciekhetman.cubetimer.data.local.dao.SyncMetadataDao
 import com.maciekhetman.cubetimer.data.local.dao.SyncOutboxDao
 import com.maciekhetman.cubetimer.data.local.entity.SessionEntity
 import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
+import com.maciekhetman.cubetimer.data.local.entity.SyncMetadataEntity
 import com.maciekhetman.cubetimer.data.local.entity.SyncOutboxEntity
 import com.maciekhetman.cubetimer.data.local.mapper.toSyncPayload
 import com.maciekhetman.cubetimer.data.local.mapper.toUpsertMutation
@@ -499,6 +500,58 @@ class SyncEngineTest {
         assertEquals(SyncStatus.UNAUTHENTICATED, syncEngine.syncStatus.value)
     }
 
+    @Test
+    fun sync_passCap_doesNotClaimTheAccountIsCaughtUp() = runTest {
+        fakeApiClient.syncResponse = SyncResponse(nextCursor = 15L, hasMore = true)
+        val capped = SyncEngineImpl(
+            apiClient = fakeApiClient,
+            tokenStorage = fakeTokenStorage,
+            database = database,
+            authManager = fakeAuthManager,
+            conflictResolver = conflictResolver,
+            solveDao = solveDao,
+            sessionDao = sessionDao,
+            syncOutboxDao = syncOutboxDao,
+            syncMetadataDao = syncMetadataDao,
+            conflictDao = conflictDao,
+            json = json,
+            maxSyncPasses = 1
+        )
+
+        val result = capped.sync(testUser.id)
+
+        assertTrue("got $result", result is SyncResult.Error)
+        assertEquals(1, fakeApiClient.syncCallCount)
+        val metadata = syncMetadataDao.getMetadata(testUser.id)
+        assertEquals(false, metadata?.isSyncing)
+        assertNull(metadata?.lastError)
+        // The page's cursor commit records a time; what must not happen is a success status.
+        assertEquals(15L, metadata?.cursor)
+        assertEquals(SyncStatus.ERROR, capped.syncStatus.value)
+    }
+
+    @Test
+    fun sync_snapshotUsesTheStoredDeviceName() = runTest {
+        syncMetadataDao.upsert(
+            SyncMetadataEntity(
+                ownerId = testUser.id,
+                deviceId = "device-test-uuid",
+                deviceName = "Pixel Timer",
+                cursor = 10L
+            )
+        )
+        fakeApiClient.shouldThrowCursorExpiredOnFirstSync = true
+        fakeApiClient.snapshotResponse = SnapshotResponse(cursor = 30L, hasMore = false)
+        fakeApiClient.syncResponse = SyncResponse(nextCursor = 40L, hasMore = false)
+
+        val result = syncEngine.sync(testUser.id)
+
+        assertTrue("got $result", result is SyncResult.Success)
+        assertTrue(fakeApiClient.snapshotRequests.isNotEmpty())
+        assertEquals("Pixel Timer", fakeApiClient.snapshotRequests.first().device.name)
+        assertTrue(fakeApiClient.syncRequests.all { it.device.name == "Pixel Timer" })
+    }
+
     // =========================================================================
     // TEST FAKES
     // =========================================================================
@@ -582,6 +635,7 @@ class SyncEngineTest {
         var hangUntilCancelled = false
         val syncStarted = CompletableDeferred<Unit>()
         val syncRequests = mutableListOf<SyncRequest>()
+        val snapshotRequests = mutableListOf<SnapshotRequest>()
         /** When set, builds the response from the request (e.g. to answer its mutation ids). */
         var respond: (suspend (SyncRequest) -> SyncResponse)? = null
 
@@ -600,6 +654,7 @@ class SyncEngineTest {
         }
 
         override suspend fun snapshot(request: SnapshotRequest, authToken: String?): SnapshotResponse {
+            snapshotRequests += request
             return snapshotResponse
         }
 

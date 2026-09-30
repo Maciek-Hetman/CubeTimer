@@ -2,6 +2,7 @@ package com.maciekhetman.cubetimer.data.sync
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.withTransaction
 import androidx.test.core.app.ApplicationProvider
 import com.maciekhetman.cubetimer.data.local.CubeDatabase
 import com.maciekhetman.cubetimer.data.local.dao.ConflictDao
@@ -66,6 +67,29 @@ class ConflictResolverTest {
     @After
     fun tearDown() {
         database.close()
+    }
+
+    @Test
+    fun recordConflict_insideARoomTransaction_rollsBackWithIt() = runTest {
+        try {
+            database.withTransaction {
+                resolver.recordConflict(
+                    ownerId = testUserId,
+                    mutationId = "mut-rollback",
+                    entityType = "solve",
+                    entityId = "solve-rollback",
+                    serverVersion = 3L,
+                    serverUpdatedAt = "2026-08-30T10:00:00Z",
+                    localPayloadJson = null,
+                    serverPayloadJson = null,
+                    errorMessage = "conflict"
+                )
+                throw IllegalStateException("rollback")
+            }
+        } catch (e: IllegalStateException) {
+            assertEquals("rollback", e.message)
+        }
+        assertTrue(conflictDao.getAll(testUserId).isEmpty())
     }
 
     @Test

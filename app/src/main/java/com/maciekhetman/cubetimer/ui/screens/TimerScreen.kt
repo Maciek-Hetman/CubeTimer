@@ -78,13 +78,14 @@ fun TimerScreen(
     modifier: Modifier = Modifier
 ) {
     // NOTE: `timerState` is intentionally kept as a State<TimerState> (not read with `by` here) so that
-    // reading it does not subscribe this whole screen to every tick (every 10ms while running, 16ms while
+    // reading it does not subscribe this whole screen to every tick (every 16ms while running or
     // holding). Only small child composables that actually need the live value (TimerContent) read
     // `timerState.value`; everything else here derives cheap, rarely-changing booleans instead.
     val timerState = viewModel.timerState.collectAsStateWithLifecycle()
     val isTimerRunning by viewModel.isTimerRunning.collectAsStateWithLifecycle()
     val isHolding by remember { derivedStateOf { timerState.value is TimerState.Holding } }
     val isFinished by remember { derivedStateOf { timerState.value is TimerState.Finished } }
+    val canEditScramble by remember { derivedStateOf { timerState.value is TimerState.Idle } }
     // Switching input mid-solve would strand the running timer, so only allow it between solves.
     val canSwitchTimingDevice by remember {
         derivedStateOf { timerState.value is TimerState.Idle || timerState.value is TimerState.Finished }
@@ -188,6 +189,7 @@ fun TimerScreen(
             TimerTopHeader(
                 currentMode = currentMode,
                 onModeSelected = onModeSelected,
+                modeSelectionEnabled = canEditScramble,
                 extraActions = {
                     if (showTimingDeviceToggle) {
                         TimingDeviceToggle(
@@ -235,7 +237,7 @@ fun TimerScreen(
                         onRefresh = { viewModel.generateNewScramble() },
                         showRefreshButton = showScrambleRefreshButton,
                         scale = scrambleScalePercent / 100f,
-                        enabled = !isTimerRunning && !isHolding
+                        enabled = canEditScramble
                     )
                 }
             }
@@ -825,6 +827,7 @@ private fun ScrambleDisplay(
                         onRefresh()
                     },
                     modifier = Modifier.size(buttonSize),
+                    enabled = enabled,
                     shape = CircleShape
                 ) {
                     Icon(
@@ -857,8 +860,10 @@ private fun RecordCelebrationOverlay(
 ) {
     val haptic = LocalHapticFeedback.current
     var displayCelebration by remember { mutableStateOf<RecordCelebration?>(null) }
+    // Keep the last celebration so the exit animation still has content after it is cleared.
+    // Writing state during composition retriggers this frame; SideEffect does it after.
     if (celebration != null) {
-        displayCelebration = celebration
+        SideEffect { displayCelebration = celebration }
     }
 
     AnimatedVisibility(

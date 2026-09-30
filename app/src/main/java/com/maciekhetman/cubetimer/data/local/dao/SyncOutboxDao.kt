@@ -1,5 +1,6 @@
 package com.maciekhetman.cubetimer.data.local.dao
 
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
@@ -87,6 +88,16 @@ interface SyncOutboxDao {
     """)
     suspend fun countPendingForEntity(ownerId: String, entityType: String, entityId: String): Int
 
+    /**
+     * Every live outbox entity for [ownerId], so a sync page can test "is this entity protected?"
+     * in memory instead of one indexed lookup per incoming change.
+     */
+    @Query("""
+        SELECT entity_type, entity_id FROM sync_outbox
+        WHERE owner_id = :ownerId AND status != 'dead'
+    """)
+    suspend fun getLiveEntityKeys(ownerId: String): List<OutboxEntityKey>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun enqueue(mutation: SyncOutboxEntity): Long
 
@@ -141,6 +152,12 @@ interface SyncOutboxDao {
 
 // Chunked variants of the bulk status updates above. Extension functions (not DAO default methods)
 // so they dispatch through the receiver's own overrides, like the helpers in ChunkedQueries.kt.
+
+/** One live outbox row's entity, as returned by [SyncOutboxDao.getLiveEntityKeys]. */
+data class OutboxEntityKey(
+    @ColumnInfo(name = "entity_type") val entityType: String,
+    @ColumnInfo(name = "entity_id") val entityId: String
+)
 
 /** [SyncOutboxDao.markInFlight] split into batches that stay under SQLite's bind-variable limit. */
 suspend fun SyncOutboxDao.markInFlightChunked(ids: List<String>, attemptAt: Long): Int =

@@ -225,6 +225,8 @@ class HistoryViewModel(
     private val currentOwnerId: String get() = authManager.currentOwnerId
 
     // Undo caches
+    private var solveDetailJob: Job? = null
+    private var solveDetailGeneration = 0
     private var lastDeletedSolve: SolveTime? = null
     private var lastBatchDeletedSolves: List<SolveTime>? = null
     private var lastDeletedSessionSnapshot: DeletedSessionSnapshot? = null
@@ -1121,7 +1123,9 @@ class HistoryViewModel(
 
     /** Opens the solve detail card; [solveNumber] is the solve's position within its session. */
     fun selectSolveForDetail(solve: SolveTime, solveNumber: Int) {
-        viewModelScope.launch {
+        val generation = ++solveDetailGeneration
+        solveDetailJob?.cancel()
+        solveDetailJob = viewModelScope.launch {
             val ownerId = currentOwnerId
             val solvedAtIso = CubeTypeConverters.epochMillisToIso(solve.timestamp)
             val priorBestTime = solvesRepository.getPriorBestSolveDuration(
@@ -1130,6 +1134,8 @@ class HistoryViewModel(
                 ownerId = ownerId,
                 excludeSolveId = solve.id
             )
+            // A newer tap, or a dismiss, happened while the lookup was in flight.
+            if (generation != solveDetailGeneration) return@launch
 
             val pbResult = HistoricalPbCalculator.calculate(
                 solve = solve,
@@ -1149,6 +1155,8 @@ class HistoryViewModel(
     }
 
     fun dismissSolveDetail() {
+        solveDetailGeneration++
+        solveDetailJob?.cancel()
         _selectedSolveDetail.value = null
     }
 
