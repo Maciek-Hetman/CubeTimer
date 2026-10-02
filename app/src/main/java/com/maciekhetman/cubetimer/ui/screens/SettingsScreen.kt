@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PanTool
 import androidx.compose.material.icons.filled.Person
@@ -108,6 +109,7 @@ import com.maciekhetman.cubetimer.ui.bluetooth.BluetoothTimerDialog
 import com.maciekhetman.cubetimer.ui.bluetooth.bluetoothStatusLabel
 import com.maciekhetman.cubetimer.ui.components.CollapsingTopBar
 import com.maciekhetman.cubetimer.ui.dialogs.OpenSourceLicensesDialog
+import com.maciekhetman.cubetimer.ui.dialogs.ReleaseNotesDialog
 import com.maciekhetman.cubetimer.viewmodel.TimerViewModel
 import kotlin.math.PI
 import kotlin.math.cos
@@ -150,6 +152,7 @@ fun SettingsScreen(
 
     var showBluetoothDialog by remember { mutableStateOf(value = false) }
     var showLicensesDialog by remember { mutableStateOf(value = false) }
+    var showReleaseNotesDialog by remember { mutableStateOf(value = false) }
 
     val openUrl: (String) -> Unit = { url ->
         try {
@@ -221,6 +224,7 @@ fun SettingsScreen(
                 AboutSection(
                     versionName = BuildConfig.VERSION_NAME,
                     onOpenUrl = openUrl,
+                    onReleaseNotesClick = { showReleaseNotesDialog = true },
                     onLicensesClick = { showLicensesDialog = true },
                     modifier = sectionModifier
                 )
@@ -230,6 +234,10 @@ fun SettingsScreen(
 
     if (showBluetoothDialog) {
         BluetoothTimerDialog(viewModel = viewModel, onDismiss = { showBluetoothDialog = false })
+    }
+
+    if (showReleaseNotesDialog) {
+        ReleaseNotesDialog(onDismiss = { showReleaseNotesDialog = false })
     }
 
     if (showLicensesDialog) {
@@ -573,7 +581,7 @@ private fun GeneralSection(viewModel: TimerViewModel, modifier: Modifier = Modif
 }
 
 /**
- * The "About" section: app version, links to the website, the source code and the issue tracker, and
+ * The "About" section: app version, the release notes (via [onReleaseNotesClick]), links to the website, the source code and the issue tracker, and
  * a second group with the privacy policy, the open-source licenses and the web page for deleting an
  * account. Links are handed to [onOpenUrl].
  */
@@ -581,6 +589,7 @@ private fun GeneralSection(viewModel: TimerViewModel, modifier: Modifier = Modif
 fun AboutSection(
     versionName: String,
     onOpenUrl: (String) -> Unit,
+    onReleaseNotesClick: () -> Unit,
     onLicensesClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -593,6 +602,12 @@ fun AboutSection(
                 title = stringResource(R.string.settings_version),
                 icon = Icons.Filled.Info,
                 supportingText = versionName
+            )
+            SettingLinkRow(
+                title = stringResource(R.string.settings_release_notes),
+                icon = Icons.Filled.NewReleases,
+                opensExternally = false,
+                onClick = onReleaseNotesClick
             )
             SettingLinkRow(title = stringResource(R.string.settings_website), icon = Icons.Filled.Language, onClick = { onOpenUrl(ABOUT_URL) })
             SettingLinkRow(title = stringResource(R.string.settings_source_code), icon = Icons.Filled.Code, onClick = { onOpenUrl(SOURCE_CODE_URL) })

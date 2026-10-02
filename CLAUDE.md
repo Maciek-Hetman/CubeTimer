@@ -169,8 +169,9 @@ signed-in owners' session-less solves are left alone, as the server accepts them
   (`AuthLinkDialogs.kt`), which ask before acting (completing one signs the device in and adopts guest solves) and
   refuse while someone is signed in.
 - Settings ends with an "About" section (`AboutSection` in `SettingsScreen.kt`, two groups): version
-  (`BuildConfig.VERSION_NAME`), source code / issue tracker links, and `OpenSourceLicensesDialog`, whose
-  component list is maintained by hand. Its Website / Privacy policy / "Delete account on the web" rows open
+  (`BuildConfig.VERSION_NAME`), a "Release notes" row (`ReleaseNotesDialog`; add an entry plus en/pl strings
+  in `strings_release_notes.xml` with every version bump), source code / issue tracker links, and
+  `OpenSourceLicensesDialog`, whose component list is maintained by hand. Its Website / Privacy policy / "Delete account on the web" rows open
   `cubetimer.cc/about`, `/privacy` and `/account` (constants at the top of `SettingsScreen.kt`).
 - The top bar only carries the mode picker (plus screen-specific actions via `extraActions`); there is no
   session picker. Settings' bar has none (`CollapsingTopBar` without `currentMode`): nothing there depends on the
