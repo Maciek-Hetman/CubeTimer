@@ -6,11 +6,11 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
-import com.maciekhetman.cubetimer.model.InspectionStartGesture
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.RunningTimerDisplay
 import com.maciekhetman.cubetimer.model.TimerAverageOptions
 import com.maciekhetman.cubetimer.model.TimingDevice
+import com.maciekhetman.cubetimer.model.normalizeTimerStartDelayMillis
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -33,7 +33,6 @@ class SettingsRepository(private val context: Context) {
     private val HAPTICS_ENABLED_KEY = booleanPreferencesKey("haptics_enabled")
     private val TIMING_DEVICE_KEY = stringPreferencesKey("timing_device")
     private val INSPECTION_ENABLED_KEY = booleanPreferencesKey("inspection_enabled")
-    private val INSPECTION_START_GESTURE_KEY = stringPreferencesKey("inspection_start_gesture")
     private val SETTINGS_MIGRATED_FROM_LEGACY_KEY = booleanPreferencesKey("settings_migrated_from_legacy")
 
     /** Preferences that used to live in the legacy solves datastore. */
@@ -95,7 +94,8 @@ class SettingsRepository(private val context: Context) {
     }
 
     val timerStartDelayMillisFlow: Flow<Int> = context.settingsDataStore.data.map { preferences ->
-        preferences[TIMER_START_DELAY_MILLIS_KEY] ?: 500
+        // Older builds allowed up to 1000 ms; those values read as the new maximum.
+        normalizeTimerStartDelayMillis(preferences[TIMER_START_DELAY_MILLIS_KEY] ?: 500)
     }
 
     val timerAveragesFlow: Flow<Set<Int>> = context.settingsDataStore.data.map { preferences ->
@@ -143,11 +143,6 @@ class SettingsRepository(private val context: Context) {
         preferences[INSPECTION_ENABLED_KEY] ?: false
     }
 
-    val inspectionStartGestureFlow: Flow<InspectionStartGesture> = context.settingsDataStore.data.map { preferences ->
-        val raw = preferences[INSPECTION_START_GESTURE_KEY] ?: InspectionStartGesture.HOLD.name
-        runCatching { InspectionStartGesture.valueOf(raw) }.getOrDefault(InspectionStartGesture.HOLD)
-    }
-
     /**
      * What drives the timer: on-screen touch ([TimingDevice.KEYBOARD]) or a connected Bluetooth
      * timer ([TimingDevice.EXTERNAL_TIMER]). Smart cubes aren't a timer input on Android.
@@ -191,7 +186,7 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setTimerStartDelayMillis(delayMillis: Int) {
         context.settingsDataStore.edit { preferences ->
-            preferences[TIMER_START_DELAY_MILLIS_KEY] = delayMillis.coerceIn(200, 1000)
+            preferences[TIMER_START_DELAY_MILLIS_KEY] = normalizeTimerStartDelayMillis(delayMillis)
         }
     }
 
@@ -254,12 +249,6 @@ class SettingsRepository(private val context: Context) {
     suspend fun setInspectionEnabled(enabled: Boolean) {
         context.settingsDataStore.edit { preferences ->
             preferences[INSPECTION_ENABLED_KEY] = enabled
-        }
-    }
-
-    suspend fun setInspectionStartGesture(gesture: InspectionStartGesture) {
-        context.settingsDataStore.edit { preferences ->
-            preferences[INSPECTION_START_GESTURE_KEY] = gesture.name
         }
     }
 

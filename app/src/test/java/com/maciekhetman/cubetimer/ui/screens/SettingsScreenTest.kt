@@ -3,10 +3,13 @@ package com.maciekhetman.cubetimer.ui.screens
 import android.app.Application
 import android.os.Looper
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -22,6 +25,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.datastore.preferences.core.edit
@@ -40,7 +44,6 @@ import com.maciekhetman.cubetimer.data.settingsDataStore
 import com.maciekhetman.cubetimer.data.solvesDataStore
 import com.maciekhetman.cubetimer.domain.bluetooth.SmartTimerEvent
 import com.maciekhetman.cubetimer.model.AuthState
-import com.maciekhetman.cubetimer.model.InspectionStartGesture
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.RunningTimerDisplay
 import com.maciekhetman.cubetimer.model.Session
@@ -241,16 +244,32 @@ class SettingsScreenTest {
     }
 
     @Test
-    fun inspectionStartGestureAppearsWithInspection() {
+    fun startDelayRunsFrom0To500msIn50msSteps() {
         render()
-        composeTestRule.onNodeWithText("Start solve with").assertDoesNotExist()
+        waitFor { viewModel.timerStartDelayMillis.value == 500 }
+
+        node(hasTestTag("start_delay_slider"))
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.ProgressBarRangeInfo,
+                    ProgressBarRangeInfo(current = 500f, range = 0f..500f, steps = 9)
+                )
+            )
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(0f) }
+        waitFor { viewModel.timerStartDelayMillis.value == 0 }
+        node(hasText("0ms")).assertIsDisplayed()
+    }
+
+    @Test
+    fun inspectionAddsNoStartGestureChoice() {
+        render()
 
         switchRow("Inspection").performClick()
         waitFor { viewModel.inspectionEnabled.value }
 
-        choice("Tap and hold").assertIsSelected()
-        choice("Tap").performClick()
-        waitFor { viewModel.inspectionStartGesture.value == InspectionStartGesture.TAP }
+        // Inspection is ended with the same start delay hold; there is no separate gesture setting.
+        composeTestRule.onNodeWithText("Start solve with").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Tap and hold").assertDoesNotExist()
     }
 
     @Test

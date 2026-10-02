@@ -3,7 +3,7 @@ package com.maciekhetman.cubetimer.viewmodel
 import android.app.Application
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.test.core.app.ApplicationProvider
 import com.maciekhetman.cubetimer.data.SettingsRepository
 import com.maciekhetman.cubetimer.data.SolvesRepository
@@ -18,7 +18,6 @@ import com.maciekhetman.cubetimer.data.solvesDataStore
 import com.maciekhetman.cubetimer.domain.bluetooth.SmartTimerEvent
 import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.Inspection
-import com.maciekhetman.cubetimer.model.InspectionStartGesture
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Penalty
 import com.maciekhetman.cubetimer.model.Session
@@ -138,16 +137,17 @@ class TimerViewModelInspectionTest {
         throw AssertionError("timed out waiting for: $description")
     }
 
+    /** Inspection on or off, and the start delay that also starts a solve from inspection. */
     private fun TestScope.configure(
         enabled: Boolean = true,
-        gesture: InspectionStartGesture = InspectionStartGesture.HOLD
+        startDelayMillis: Int = 500
     ) {
         runBlocking {
             settingsRepository.setInspectionEnabled(enabled)
-            settingsRepository.setInspectionStartGesture(gesture)
+            settingsRepository.setTimerStartDelayMillis(startDelayMillis)
         }
         awaitCondition("inspection settings applied") {
-            viewModel.inspectionEnabled.value == enabled && viewModel.inspectionStartGesture.value == gesture
+            viewModel.inspectionEnabled.value == enabled && viewModel.timerStartDelayMillis.value == startDelayMillis
         }
     }
 
@@ -170,7 +170,7 @@ class TimerViewModelInspectionTest {
     private fun inspecting(): TimerState.Inspecting = viewModel.timerState.value as TimerState.Inspecting
 
     /**
-     * Inspects for [inspectionMillis] and starts the solve with a tap (Tap gesture must be configured),
+     * Inspects for [inspectionMillis] and starts the solve with a tap (needs a zero start delay),
      * runs it for [solveMillis] and stops it. Leaves the result on screen as Finished.
      */
     private fun TestScope.solveAfterInspection(
@@ -197,43 +197,39 @@ class TimerViewModelInspectionTest {
     // --- Settings -------------------------------------------------------------------------------
 
     @Test
-    fun settings_defaultToInspectionOffAndHoldGesture() = runTest(testDispatcher) {
+    fun settings_defaultToInspectionOffAndA500msStartDelay() = runTest(testDispatcher) {
         runCurrent()
         assertFalse(viewModel.inspectionEnabled.value)
-        assertEquals(InspectionStartGesture.HOLD, viewModel.inspectionStartGesture.value)
+        assertEquals(500, viewModel.timerStartDelayMillis.value)
         assertFalse(runBlocking { settingsRepository.inspectionEnabledFlow.first() })
-        assertEquals(InspectionStartGesture.HOLD, runBlocking { settingsRepository.inspectionStartGestureFlow.first() })
+        assertEquals(500, runBlocking { settingsRepository.timerStartDelayMillisFlow.first() })
     }
 
     @Test
     fun settings_persistAndReachTheViewModel() = runTest(testDispatcher) {
         viewModel.setInspectionEnabled(true)
-        viewModel.setInspectionStartGesture(InspectionStartGesture.TAP)
-        awaitCondition("settings applied") {
-            viewModel.inspectionEnabled.value && viewModel.inspectionStartGesture.value == InspectionStartGesture.TAP
-        }
+        awaitCondition("settings applied") { viewModel.inspectionEnabled.value }
 
-        // A fresh repository reads the same values back from the store, under the documented keys.
+        // A fresh repository reads the same value back from the store, under the documented key.
         val fresh = SettingsRepository(application)
         assertTrue(runBlocking { fresh.inspectionEnabledFlow.first() })
-        assertEquals(InspectionStartGesture.TAP, runBlocking { fresh.inspectionStartGestureFlow.first() })
         val stored = runBlocking { application.settingsDataStore.data.first() }
         assertEquals(true, stored[booleanPreferencesKey("inspection_enabled")])
-        assertEquals("TAP", stored[stringPreferencesKey("inspection_start_gesture")])
 
         viewModel.setInspectionEnabled(false)
-        viewModel.setInspectionStartGesture(InspectionStartGesture.HOLD)
-        awaitCondition("settings reset") {
-            !viewModel.inspectionEnabled.value && viewModel.inspectionStartGesture.value == InspectionStartGesture.HOLD
-        }
+        awaitCondition("settings reset") { !viewModel.inspectionEnabled.value }
     }
 
     @Test
-    fun unknownStoredGesture_fallsBackToHold() = runTest(testDispatcher) {
-        runBlocking {
-            application.settingsDataStore.edit { it[stringPreferencesKey("inspection_start_gesture")] = "bogus" }
+    fun startDelay_isClampedTo0To500msIn50msSteps() = runTest(testDispatcher) {
+        val written = listOf(0 to 0, 50 to 50, 120 to 100, 125 to 150, 500 to 500, 700 to 500, -100 to 0)
+        for ((value, expected) in written) {
+            runBlocking { settingsRepository.setTimerStartDelayMillis(value) }
+            assertEquals("written $value", expected, runBlocking { settingsRepository.timerStartDelayMillisFlow.first() })
         }
-        assertEquals(InspectionStartGesture.HOLD, runBlocking { settingsRepository.inspectionStartGestureFlow.first() })
+        // Older builds stored up to 1000 ms: that reads as the new maximum.
+        runBlocking { application.settingsDataStore.edit { it[intPreferencesKey("timer_start_delay_millis")] = 1000 } }
+        assertEquals(500, runBlocking { settingsRepository.timerStartDelayMillisFlow.first() })
     }
 
     // --- Inspection off keeps the old flow ------------------------------------------------------
@@ -257,11 +253,26 @@ class TimerViewModelInspectionTest {
         assertEquals(Penalty.NONE, viewModel.allSolves.value.single().penalty)
     }
 
+    @Test
+    fun inspectionOff_zeroStartDelayStartsTheSolveOnRelease() = runTest(testDispatcher) {
+        configure(enabled = false, startDelayMillis = 0)
+
+        press()
+        assertEquals("ready at once, without a tick", TimerState.Ready, viewModel.timerState.value)
+        release()
+        assertTrue(viewModel.timerState.value is TimerState.Running)
+
+        advance(2_000)
+        press()
+        assertEquals(TimerState.Finished(2_000L), viewModel.timerState.value)
+        viewModel.discardSolve()
+    }
+
     // --- Starting and running inspection --------------------------------------------------------
 
     @Test
     fun press_startsInspectionImmediately_andItsReleaseDoesNothing() = runTest(testDispatcher) {
-        configure(gesture = InspectionStartGesture.HOLD)
+        configure()
 
         press()
         assertEquals(TimerState.Inspecting(0L), viewModel.timerState.value)
@@ -277,8 +288,8 @@ class TimerViewModelInspectionTest {
     }
 
     @Test
-    fun releaseOfTheStartingPress_doesNotStartASolveWithTheTapGesture() = runTest(testDispatcher) {
-        configure(gesture = InspectionStartGesture.TAP)
+    fun releaseOfTheStartingPress_doesNotStartASolveWithZeroStartDelay() = runTest(testDispatcher) {
+        configure(startDelayMillis = 0)
 
         tap()
         advance(1_000)
@@ -319,11 +330,11 @@ class TimerViewModelInspectionTest {
         viewModel.cancelInspection()
     }
 
-    // --- Hold gesture ---------------------------------------------------------------------------
+    // --- Starting the solve: hold for the start delay -------------------------------------------
 
     @Test
     fun holdGesture_earlyReleaseReturnsToPlainInspection() = runTest(testDispatcher) {
-        configure(gesture = InspectionStartGesture.HOLD)
+        configure()
         tap()
         advance(2_000)
 
@@ -346,7 +357,7 @@ class TimerViewModelInspectionTest {
 
     @Test
     fun holdGesture_fullHoldThenReleaseStartsTheSolve() = runTest(testDispatcher) {
-        configure(gesture = InspectionStartGesture.HOLD)
+        configure()
         tap()
         advance(2_000)
 
@@ -365,7 +376,7 @@ class TimerViewModelInspectionTest {
 
     @Test
     fun holdGesture_releaseTimestampDecidesReadiness_notTheLastTick() = runTest(testDispatcher) {
-        configure(gesture = InspectionStartGesture.HOLD)
+        configure()
         tap()
         advance(1_000)
 
@@ -378,17 +389,34 @@ class TimerViewModelInspectionTest {
         viewModel.discardSolve()
     }
 
-    // --- Tap gesture ----------------------------------------------------------------------------
+    @Test
+    fun holdGesture_followsTheStartDelaySetting() = runTest(testDispatcher) {
+        configure(startDelayMillis = 200)
+        tap()
+        advance(1_000)
+
+        press()
+        advance(150)
+        assertTrue(inspecting().isHolding)
+        advance(50)
+        assertTrue(inspecting().isReady)
+        release()
+        assertTrue(viewModel.timerState.value is TimerState.Running)
+        press()
+        viewModel.discardSolve()
+    }
+
+    // --- Zero start delay: a tap starts the solve -----------------------------------------------
 
     @Test
-    fun tapGesture_pressThenReleaseStartsTheSolveOnRelease() = runTest(testDispatcher) {
-        configure(gesture = InspectionStartGesture.TAP)
+    fun zeroStartDelay_pressThenReleaseStartsTheSolveOnRelease() = runTest(testDispatcher) {
+        configure(startDelayMillis = 0)
         tap()
         advance(3_000)
 
         press()
         assertTrue("nothing starts on press-down", viewModel.timerState.value is TimerState.Inspecting)
-        assertNull(inspecting().holdProgress)
+        assertTrue("ready at once", inspecting().isReady)
         advance(50)
         release()
         assertTrue(viewModel.timerState.value is TimerState.Running)
@@ -403,7 +431,7 @@ class TimerViewModelInspectionTest {
 
     @Test
     fun penaltyBoundaries_areDecidedWhenTheSolveStarts() = runTest(testDispatcher) {
-        configure(gesture = InspectionStartGesture.TAP)
+        configure(startDelayMillis = 0)
         val expected = listOf(
             0L to Penalty.NONE,
             14_999L to Penalty.NONE,
@@ -422,7 +450,7 @@ class TimerViewModelInspectionTest {
 
     @Test
     fun holdGesture_penaltyUsesTheInspectionTimeAtTheReleaseThatStartsTheSolve() = runTest(testDispatcher) {
-        configure(gesture = InspectionStartGesture.HOLD)
+        configure()
         tap()
         advance(14_800)
         press() // starts holding inside the 15 s...
@@ -437,7 +465,7 @@ class TimerViewModelInspectionTest {
 
     @Test
     fun savedPenalty_isTheMoreSevereOfChosenAndInspection() = runTest(testDispatcher) {
-        configure(gesture = InspectionStartGesture.TAP)
+        configure(startDelayMillis = 0)
         val cases = listOf(
             Triple(0L, Penalty.NONE, Penalty.NONE),
             Triple(0L, Penalty.PLUS_TWO, Penalty.PLUS_TWO),
@@ -485,7 +513,7 @@ class TimerViewModelInspectionTest {
 
     @Test
     fun cancel_returnsToIdleAndSavesNothing() = runTest(testDispatcher) {
-        configure(gesture = InspectionStartGesture.HOLD)
+        configure()
         tap()
         advance(4_000)
         press() // a hold in progress is dropped as well
@@ -509,7 +537,7 @@ class TimerViewModelInspectionTest {
 
     @Test
     fun cancel_outsideInspectionIsANoOp() = runTest(testDispatcher) {
-        configure(gesture = InspectionStartGesture.TAP)
+        configure(startDelayMillis = 0)
         viewModel.cancelInspection()
         assertEquals(TimerState.Idle, viewModel.timerState.value)
 

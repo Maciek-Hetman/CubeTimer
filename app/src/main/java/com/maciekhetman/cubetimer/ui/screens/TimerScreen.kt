@@ -46,7 +46,6 @@ import androidx.compose.ui.unit.sp
 import com.maciekhetman.cubetimer.domain.AverageCalculator
 import com.maciekhetman.cubetimer.domain.TimeFormatter
 import com.maciekhetman.cubetimer.model.Inspection
-import com.maciekhetman.cubetimer.model.InspectionStartGesture
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Penalty
 import com.maciekhetman.cubetimer.model.RecordCelebration
@@ -108,7 +107,6 @@ fun TimerScreen(
     val hideStartHint by viewModel.hideStartHint.collectAsStateWithLifecycle()
     val hapticsEnabled by viewModel.hapticsEnabled.collectAsStateWithLifecycle()
     val inspectionEnabled by viewModel.inspectionEnabled.collectAsStateWithLifecycle()
-    val inspectionStartGesture by viewModel.inspectionStartGesture.collectAsStateWithLifecycle()
     val focusMode by viewModel.focusMode.collectAsStateWithLifecycle()
     val timingDevice by viewModel.timingDevice.collectAsStateWithLifecycle()
     val bluetoothTimerState by viewModel.bluetoothTimerState.collectAsStateWithLifecycle()
@@ -280,11 +278,10 @@ fun TimerScreen(
                         contentDescription = when {
                             bluetoothMode -> "Timer controlled by Bluetooth timer"
                             isSolving -> "Tap to stop timer"
-                            isInspecting -> when (inspectionStartGesture) {
-                                InspectionStartGesture.HOLD -> "Hold and release to start timer"
-                                InspectionStartGesture.TAP -> "Tap to start timer"
-                            }
+                            isInspecting && timerStartDelayMillis == 0 -> "Tap to start timer"
+                            isInspecting -> "Hold and release to start timer"
                             inspectionEnabled -> "Tap to start inspection"
+                            timerStartDelayMillis == 0 -> "Tap to start timer"
                             else -> "Tap and hold to start timer"
                         }
                     }
@@ -316,7 +313,7 @@ fun TimerScreen(
                     focusModeActive = focusModeActive,
                     hideStartHint = hideStartHint,
                     inspectionEnabled = inspectionEnabled,
-                    inspectionStartGesture = inspectionStartGesture,
+                    noStartDelay = timerStartDelayMillis == 0,
                     bluetoothMode = bluetoothMode,
                     bluetoothConnected = bluetoothTimerState.isConnected,
                     onConnectBluetoothTimer = { showBluetoothDialog = true }
@@ -400,7 +397,7 @@ private fun TimerContent(
     modifier: Modifier = Modifier,
     hideStartHint: Boolean = false,
     inspectionEnabled: Boolean = false,
-    inspectionStartGesture: InspectionStartGesture = InspectionStartGesture.HOLD,
+    noStartDelay: Boolean = false,
     bluetoothMode: Boolean = false,
     bluetoothConnected: Boolean = false,
     onConnectBluetoothTimer: () -> Unit = {}
@@ -466,6 +463,7 @@ private fun TimerContent(
                         text = when {
                             bluetoothMode -> "Place both hands on the timer"
                             inspectionEnabled -> "Tap to start inspection"
+                            noStartDelay -> "Tap to start"
                             else -> "Tap and hold to start"
                         },
                         style = MaterialTheme.typography.bodyLarge,
@@ -496,10 +494,7 @@ private fun TimerContent(
                     )
                 } else if (!hideStartHint) {
                     Text(
-                        text = when (inspectionStartGesture) {
-                            InspectionStartGesture.HOLD -> "Hold and release to start"
-                            InspectionStartGesture.TAP -> "Tap to start"
-                        },
+                        text = if (noStartDelay) "Tap to start" else "Hold and release to start",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

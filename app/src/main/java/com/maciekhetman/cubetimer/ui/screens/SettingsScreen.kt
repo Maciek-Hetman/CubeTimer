@@ -39,7 +39,6 @@ import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.Functions
 import androidx.compose.material.icons.filled.Gavel
-import androidx.compose.material.icons.filled.Gesture
 import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
@@ -92,10 +91,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.maciekhetman.cubetimer.BuildConfig
 import com.maciekhetman.cubetimer.data.bluetooth.BluetoothTimerStatus
 import com.maciekhetman.cubetimer.model.AuthState
-import com.maciekhetman.cubetimer.model.InspectionStartGesture
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.RunningTimerDisplay
 import com.maciekhetman.cubetimer.model.SyncStatusType
+import com.maciekhetman.cubetimer.model.TIMER_START_DELAY_MAX_MILLIS
+import com.maciekhetman.cubetimer.model.TIMER_START_DELAY_STEP_MILLIS
 import com.maciekhetman.cubetimer.model.SyncUiState
 import com.maciekhetman.cubetimer.model.TimerAverageOptions
 import com.maciekhetman.cubetimer.model.TimingDevice
@@ -304,7 +304,10 @@ fun AccountSection(
     }
 }
 
-/** How solves are timed: touch or a Bluetooth timer, and touch timing's start delay and inspection. */
+/**
+ * How solves are timed: touch or a Bluetooth timer, and touch timing's start delay and inspection. The
+ * start delay is also the hold that starts a solve from inspection (0 ms: a tap).
+ */
 @Composable
 private fun TimingSection(
     viewModel: TimerViewModel,
@@ -315,7 +318,6 @@ private fun TimingSection(
     val bluetoothTimerState by viewModel.bluetoothTimerState.collectAsStateWithLifecycle()
     val timerStartDelayMillis by viewModel.timerStartDelayMillis.collectAsStateWithLifecycle()
     val inspectionEnabled by viewModel.inspectionEnabled.collectAsStateWithLifecycle()
-    val inspectionStartGesture by viewModel.inspectionStartGesture.collectAsStateWithLifecycle()
 
     // With a Bluetooth timer the screen is no timer input, so start delay and inspection don't apply.
     val bluetoothSelected = timingDevice == TimingDevice.EXTERNAL_TIMER
@@ -326,11 +328,7 @@ private fun TimingSection(
         SettingChoiceRow(
             title = "Timing device",
             icon = if (bluetoothSelected) Icons.Filled.Bluetooth else Icons.Filled.TouchApp,
-            supportingText = if (bluetoothAvailable) {
-                "Bluetooth works with GAN and QiYi timers"
-            } else {
-                "Bluetooth timers aren't supported on this device"
-            },
+            supportingText = if (bluetoothAvailable) null else "Bluetooth timers aren't supported on this device",
             options = TimingDeviceOptions,
             selected = if (bluetoothSelected) TimingDevice.EXTERNAL_TIMER else TimingDevice.KEYBOARD,
             optionLabel = { if (it == TimingDevice.EXTERNAL_TIMER) "Bluetooth" else "Touch" },
@@ -349,33 +347,21 @@ private fun TimingSection(
         SettingSliderRow(
             title = "Start delay",
             icon = Icons.Filled.PanTool,
-            supportingText = if (bluetoothSelected) TOUCH_ONLY_NOTE else "Hold time before the timer is ready",
+            supportingText = if (bluetoothSelected) TOUCH_ONLY_NOTE else null,
             value = timerStartDelayMillis,
-            valueRange = 200f..1000f,
-            steps = 7,
+            valueRange = 0f..TIMER_START_DELAY_MAX_MILLIS.toFloat(),
+            steps = TIMER_START_DELAY_MAX_MILLIS / TIMER_START_DELAY_STEP_MILLIS - 1,
             enabled = !bluetoothSelected,
             onValueChangeFinished = viewModel::setTimerStartDelayMillis
         )
         SettingToggleRow(
             title = "Inspection",
             icon = Icons.Filled.HourglassTop,
-            supportingText = if (bluetoothSelected) TOUCH_ONLY_NOTE else "15 s countdown before each solve",
+            supportingText = if (bluetoothSelected) TOUCH_ONLY_NOTE else null,
             checked = inspectionEnabled,
             enabled = !bluetoothSelected,
             onCheckedChange = viewModel::setInspectionEnabled
         )
-        AnimatedSettingsItem(visible = inspectionEnabled) {
-            SettingChoiceRow(
-                title = "Start solve with",
-                icon = Icons.Filled.Gesture,
-                supportingText = "Once inspection is running",
-                options = InspectionStartGesture.entries,
-                selected = inspectionStartGesture,
-                optionLabel = { it.displayName },
-                enabled = !bluetoothSelected,
-                onSelect = viewModel::setInspectionStartGesture
-            )
-        }
     }
 }
 
@@ -502,14 +488,12 @@ private fun TimerScreenSection(viewModel: TimerViewModel, modifier: Modifier = M
         SettingToggleRow(
             title = "New scramble button",
             icon = Icons.Filled.Refresh,
-            supportingText = "Shown next to the scramble",
             checked = showScrambleRefreshButton,
             onCheckedChange = viewModel::setShowScrambleRefreshButton
         )
         SettingMultiChoiceRow(
             title = "Averages",
             icon = Icons.Filled.Functions,
-            supportingText = "Shown below the timer",
             options = TimerAverageOptions,
             isSelected = { it in timerAverages },
             optionLabel = { "Ao$it" },
@@ -519,14 +503,12 @@ private fun TimerScreenSection(viewModel: TimerViewModel, modifier: Modifier = M
         SettingToggleRow(
             title = "Last results",
             icon = Icons.Filled.FormatListNumbered,
-            supportingText = "Your latest times below the averages",
             checked = !hideLastResultsOnTimer,
             onCheckedChange = { show -> viewModel.setHideLastResultsOnTimer(!show) }
         )
         SettingToggleRow(
             title = "Start hint",
             icon = Icons.Filled.TipsAndUpdates,
-            supportingText = "How to start, shown under the time",
             checked = !hideStartHint,
             onCheckedChange = { show -> viewModel.setHideStartHint(!show) }
         )
@@ -546,7 +528,6 @@ private fun AppearanceSection(viewModel: TimerViewModel, modifier: Modifier = Mo
             SettingToggleRow(
                 title = "Dynamic color",
                 icon = Icons.Filled.Palette,
-                supportingText = "Use colors from your wallpaper",
                 checked = dynamicColorEnabled,
                 onCheckedChange = viewModel::setDynamicColorEnabled
             )
@@ -575,7 +556,6 @@ private fun GeneralSection(viewModel: TimerViewModel, modifier: Modifier = Modif
         SettingChipChoiceRow(
             title = "Default puzzle",
             icon = Icons.Filled.ViewInAr,
-            supportingText = "Selected when the app opens",
             options = Mode.entries,
             selected = defaultMode,
             optionLabel = { it.displayName },
@@ -584,7 +564,6 @@ private fun GeneralSection(viewModel: TimerViewModel, modifier: Modifier = Modif
         SettingToggleRow(
             title = "Haptic feedback",
             icon = Icons.Filled.Vibration,
-            supportingText = "Vibrate on taps, timer starts and records",
             checked = hapticsEnabled,
             onCheckedChange = viewModel::setHapticsEnabled
         )
