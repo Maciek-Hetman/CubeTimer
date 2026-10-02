@@ -77,14 +77,15 @@ fun TimerTopHeader(
     }
 }
 
+/** A collapsing title bar; with [currentMode] and [onModeSelected] it ends with the mode menu. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CollapsingTopBar(
     title: String,
-    currentMode: Mode,
-    onModeSelected: (Mode) -> Unit,
     scrollBehavior: TopAppBarScrollBehavior,
     modifier: Modifier = Modifier,
+    currentMode: Mode? = null,
+    onModeSelected: ((Mode) -> Unit)? = null,
     titleBadgeText: String? = null,
     extraActions: @Composable RowScope.() -> Unit = {}
 ) {
@@ -117,10 +118,12 @@ fun CollapsingTopBar(
         },
         actions = {
             extraActions()
-            ModeMenu(
-                currentMode = currentMode,
-                onModeSelected = onModeSelected
-            )
+            if (currentMode != null && onModeSelected != null) {
+                ModeMenu(
+                    currentMode = currentMode,
+                    onModeSelected = onModeSelected
+                )
+            }
         },
         scrollBehavior = scrollBehavior,
         colors = TopAppBarDefaults.topAppBarColors(

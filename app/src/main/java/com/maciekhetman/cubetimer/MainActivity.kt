@@ -138,9 +138,11 @@ class MainActivity : ComponentActivity() {
             val dynamicColorEnabled by timerViewModel.dynamicColorEnabled.collectAsStateWithLifecycle()
             val amoledEnabled by timerViewModel.amoledEnabled.collectAsStateWithLifecycle()
             val hapticsEnabled by timerViewModel.hapticsEnabled.collectAsStateWithLifecycle()
+            // CubeTimerTheme prefers dynamic color where the device has it, so AMOLED needs no check
+            // here; Android 11 and older have no dynamic color and always honour it.
             CubeTimerTheme(
                 dynamicColor = dynamicColorEnabled,
-                amoled = amoledEnabled && !dynamicColorEnabled
+                amoled = amoledEnabled
             ) {
                 OptionalHapticsProvider(enabled = hapticsEnabled) {
                     CubeTimerApp(
@@ -305,8 +307,6 @@ fun CubeTimerApp(
                 AppDestinations.SETTINGS -> {
                     SettingsScreen(
                         viewModel = viewModel,
-                        currentMode = currentMode,
-                        onModeSelected = onModeSelected,
                         syncUiState = syncUiState,
                         onSyncClick = { showSyncDialog = true },
                         authState = authState,

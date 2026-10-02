@@ -43,6 +43,9 @@ so a full run takes several minutes.
   `kotlinx-coroutines-test` (`runTest`, `StandardTestDispatcher`, `Dispatchers.setMain`).
 - Room tests use `CubeDatabase.createInMemory(context)` (allows main-thread queries, optional injected
   executors for concurrency tests) and `database.close()` in `@After`.
+- Compose tests driving a real `TimerViewModel`: its setters write from `viewModelScope`, whose work is posted to
+  the main looper, and the Compose rule's `waitUntil` doesn't drain that under Robolectric — idle it while waiting
+  (`shadowOf(Looper.getMainLooper()).idle()`, as `SettingsScreenTest.waitFor` does).
 - Test names encode provenance: `*Test` (spec), `*StressTest` / `*ChallengeTest` (adversarial suites written
   against a milestone). Treat the challenge/stress tests as behavioural contracts — they pin down edge cases
   that are not obvious from the production code.
@@ -139,9 +142,20 @@ signed-in owners' session-less solves are left alone, as the server accepts them
   `rememberSaveable` `AppDestinations` enum and swaps screens inside an `AnimatedContent`, with a custom bottom
   pill nav and a `BackHandler`. The bottom bar shows TIMER / STATS / HISTORY / SETTINGS; back from any of them
   returns to TIMER. There is no admin dashboard — `AuthState.Admin` only drives the account badge.
-- The cloud sync status and account/admin indicators live in Settings' "Account" section
-  (`SettingsScreen.kt`), not the shared top bar — `TopBar.kt`'s `TimerTopHeader`/`CollapsingTopBar` no
-  longer take `syncUiState`/`authState`/click-handler params. Tapping the rows opens the same
+- Settings is a Material 3 Expressive segmented list built from `SettingsComponents.kt` (same package):
+  `SettingsSection` = header + a group of tiles 2dp apart whose outer corners the group clips, so rows shown
+  conditionally (`AnimatedSettingsItem`) need no position bookkeeping; tiles round their corners up while pressed.
+  Single choices are `ConnectedButtonGroup`s (few short options) or radio chips (`SettingChipChoiceRow`).
+  material3 1.4 keeps the Expressive components internal, so these are hand-built from stable pieces.
+  Sections: account card, Timing, While solving, Timer screen, Appearance, General, About. Stored "hide" flags
+  (`hide_last_results_on_timer`, `hide_start_hint`, `hide_*_during_solve`) are shown the positive way round
+  ("Last results" on = visible). Settings that don't apply are disabled with a note, not hidden: start delay and
+  inspection with a Bluetooth timer, the during-solve ones under focus mode, AMOLED under dynamic color
+  ("Dynamic color" itself is only offered on Android 12+). `SettingsScreenTest` pins these behaviours.
+- The cloud sync status and account/admin indicators live in Settings' account card (`AccountSection` in
+  `SettingsScreen.kt`; the Cloud Sync row only once signed in), not the shared top bar — `TopBar.kt`'s
+  `TimerTopHeader`/`CollapsingTopBar` no longer take `syncUiState`/`authState`/click-handler params. Tapping the
+  rows opens the same
   `SyncStatusDialog` / `AuthDialog` (`UserProfileDialog`, which also offers "Change password" — the
   `CHANGE_PASSWORD` dialog — and "Delete account") as before. If the post-change sign-in failed, the flow lands
   on `LOGIN` with a "Sign in again" success banner.
@@ -154,19 +168,20 @@ signed-in owners' session-less solves are left alone, as the server accepts them
   opened link goes through `AuthViewModel.openEmailLink` to `VERIFY_EMAIL_LINK` / `RESET_PASSWORD_LINK`
   (`AuthLinkDialogs.kt`), which ask before acting (completing one signs the device in and adopts guest solves) and
   refuse while someone is signed in.
-- Settings ends with an "About" section (`AboutSection` in `SettingsScreen.kt`): version
+- Settings ends with an "About" section (`AboutSection` in `SettingsScreen.kt`, two groups): version
   (`BuildConfig.VERSION_NAME`), source code / issue tracker links, and `OpenSourceLicensesDialog`, whose
   component list is maintained by hand. Its Website / Privacy policy / "Delete account on the web" rows open
   `cubetimer.cc/about`, `/privacy` and `/account` (constants at the top of `SettingsScreen.kt`).
 - The top bar only carries the mode picker (plus screen-specific actions via `extraActions`); there is no
-  session picker.
+  session picker. Settings' bar has none (`CollapsingTopBar` without `currentMode`): nothing there depends on the
+  mode, and "Default puzzle" (`setDefaultMode`, which also switches the current mode) would read as a second one.
 - Timing input is a setting (`SettingsRepository.timingDeviceFlow`), switchable from Settings → "Timing device"
   or the `TimingDeviceToggle` next to the mode picker on the timer screen (hidden without BLE support,
   disabled mid-solve; tapping the selected Bluetooth segment reopens `BluetoothTimerDialog`). With
   `TimingDevice.EXTERNAL_TIMER` the timer screen ignores touches and `TimerViewModel.onSmartTimerEvent` drives
   the same `TimerState` machine; `Stopped` carries the timer's own time and `TimerState.Finished.timingDevice`
   is saved with the solve. `BluetoothTimerDialog` handles permissions, enabling Bluetooth, scanning and connecting.
-- Optional WCA inspection for touch timing (Settings → Timer: `inspection_enabled`, `inspection_start_gesture` =
+- Optional WCA inspection for touch timing (Settings → Timing: `inspection_enabled`, `inspection_start_gesture` =
   "Tap and hold" / "Tap"): a press in Idle enters `TimerState.Inspecting` (15 s countdown, "+2" from 15 s, "DNF"
   from 17 s; that press's release is ignored). The solve then starts per the gesture, the penalty is fixed by the
   inspection time at that moment and rides in `Finished.inspectionPenalty`; saving keeps the worse of it and the
@@ -174,7 +189,8 @@ signed-in owners' session-less solves are left alone, as the server accepts them
   mode/device switching and navigation; `isTimerRunning` is unchanged. Bluetooth timers ignore the setting.
 - Preferences live in two DataStores (`AppDataStore.kt`): `solves` (legacy, source of the one-time
   Room migration in `DataStoreMigration`) and `settings` (`SettingsRepository`).
-- Theming: `CubeTimerTheme(dynamicColor, amoled)`; haptics follow the `haptics_enabled` setting
+- Theming: `CubeTimerTheme(dynamicColor, amoled)`, which prefers dynamic color where the device has it (API 31+),
+  so `MainActivity` passes the AMOLED setting through unchanged; haptics follow the `haptics_enabled` setting
   (`OptionalHapticsProvider` in `MainActivity` swaps `LocalHapticFeedback` for a no-op when it's off).
 - CSV export/import (`domain/csv`) carries `timing_device` as an optional last column, and quote-prefixes text
   cells that start with `=`, `+`, `-` or `@` (spreadsheet formula injection); the importer strips that prefix.
