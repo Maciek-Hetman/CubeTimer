@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_close">Zamknij</string>
+
+    <string name="scramble_preview_title">Podgląd scramble\'a</string>
+    <string name="scramble_preview_cube_title">Kostka %s</string>
+    <string name="scramble_clip_label">Scramble</string>
+    <string name="scramble_copied">Skopiowano scramble!</string>
+    <string name="scramble_copy">Kopiuj scramble</string>
+    <string name="scramble_new">Nowy scramble</string>
+    <string name="scramble_preview_a11y">Podgląd 2D scramble\'a: %s</string>
+    <string name="scramble_none">Brak scramble\'a</string>
+    <string name="scramble_preview_unavailable">Podgląd niedostępny</string>
+
+    <string name="licenses_intro">Cube Timer to wolne oprogramowanie udostępniane na licencji GNU General Public License v3.0. Nie jest objęte żadną gwarancją.</string>
+    <string name="licenses_third_party">Komponenty zewnętrzne</string>
+    <string name="licenses_view_gpl">Pokaż GPL-3.0</string>
+</resources>

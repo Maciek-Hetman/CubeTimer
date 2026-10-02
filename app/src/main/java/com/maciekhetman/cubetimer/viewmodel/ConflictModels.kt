@@ -1,5 +1,7 @@
 package com.maciekhetman.cubetimer.viewmodel
 
+import android.content.res.Resources
+import com.maciekhetman.cubetimer.R
 import com.maciekhetman.cubetimer.data.local.converter.CubeTypeConverters
 import com.maciekhetman.cubetimer.data.local.entity.ConflictEntity
 import com.maciekhetman.cubetimer.data.remote.NetworkModule
@@ -28,6 +30,27 @@ data class ConflictUiModel(
     val server: ConflictSideUi
 )
 
+/** The words [ConflictUiMapper] puts into conflict lines; English unless built from resources. */
+data class ConflictLabels(
+    val session: String = "Session",
+    val solve: String = "Solve",
+    val deleted: String = ConflictUiMapper.DELETED_LINE,
+    val unreadable: String = ConflictUiMapper.UNREADABLE_LINE,
+    val archived: String = "Archived",
+    val active: String = "Active"
+) {
+    companion object {
+        fun from(resources: Resources) = ConflictLabels(
+            session = resources.getString(R.string.sync_conflict_session),
+            solve = resources.getString(R.string.sync_conflict_solve),
+            deleted = resources.getString(R.string.sync_conflict_deleted),
+            unreadable = resources.getString(R.string.sync_conflict_unreadable),
+            archived = resources.getString(R.string.sync_conflict_archived),
+            active = resources.getString(R.string.sync_conflict_active)
+        )
+    }
+}
+
 /**
  * Turns [ConflictEntity] rows into readable [ConflictUiModel]s. Payloads that can't be decoded
  * fall back to a generic line instead of failing.
@@ -41,29 +64,30 @@ object ConflictUiMapper {
     fun map(
         conflict: ConflictEntity,
         json: Json = NetworkModule.json,
-        timeZone: TimeZone = TimeZone.getDefault()
+        timeZone: TimeZone = TimeZone.getDefault(),
+        labels: ConflictLabels = ConflictLabels()
     ): ConflictUiModel {
         val isSession = conflict.entityType == "session"
         val local: ConflictSideUi
         val server: ConflictSideUi
         if (isSession) {
-            local = sessionSide(conflict.localPayloadJson) { raw ->
+            local = sessionSide(conflict.localPayloadJson, labels) { raw ->
                 json.decodeFromString<SessionSyncPayload>(raw).let {
                     SessionFields(it.name, it.event, it.archived, deletedAt = null)
                 }
             }
-            server = sessionSide(conflict.serverPayloadJson) { raw ->
+            server = sessionSide(conflict.serverPayloadJson, labels) { raw ->
                 json.decodeFromString<SessionSnapshotDto>(raw).let {
                     SessionFields(it.name, it.event, it.archived, it.deletedAt)
                 }
             }
         } else {
-            local = solveSide(conflict.localPayloadJson, timeZone) { raw ->
+            local = solveSide(conflict.localPayloadJson, timeZone, labels) { raw ->
                 json.decodeFromString<SolveSyncPayload>(raw).let {
                     SolveFields(it.event, it.durationMs, it.penalty, it.solvedAt, deletedAt = null)
                 }
             }
-            server = solveSide(conflict.serverPayloadJson, timeZone) { raw ->
+            server = solveSide(conflict.serverPayloadJson, timeZone, labels) { raw ->
                 json.decodeFromString<SolveSnapshotDto>(raw).let {
                     SolveFields(it.event, it.durationMs, it.penalty, it.solvedAt, it.deletedAt)
                 }
@@ -71,7 +95,7 @@ object ConflictUiMapper {
         }
         return ConflictUiModel(
             id = conflict.conflictId,
-            title = if (isSession) "Session" else "Solve",
+            title = if (isSession) labels.session else labels.solve,
             local = local,
             server = server
         )
@@ -108,12 +132,13 @@ object ConflictUiMapper {
     private inline fun solveSide(
         raw: String?,
         timeZone: TimeZone,
+        labels: ConflictLabels,
         decode: (String) -> SolveFields
     ): ConflictSideUi {
-        if (raw.isNullOrBlank() || raw == "null") return ConflictSideUi(deleted = true, lines = listOf(DELETED_LINE))
+        if (raw.isNullOrBlank() || raw == "null") return ConflictSideUi(deleted = true, lines = listOf(labels.deleted))
         val fields = runCatching { decode(raw) }.getOrNull()
-            ?: return ConflictSideUi(deleted = false, lines = listOf(UNREADABLE_LINE))
-        if (fields.deletedAt != null) return ConflictSideUi(deleted = true, lines = listOf(DELETED_LINE))
+            ?: return ConflictSideUi(deleted = false, lines = listOf(labels.unreadable))
+        if (fields.deletedAt != null) return ConflictSideUi(deleted = true, lines = listOf(labels.deleted))
         val lines = buildList {
             add("${formatEvent(fields.event)} · ${formatSolveTime(fields.durationMs, fields.penalty)}")
             formatDate(fields.solvedAt, timeZone)?.let { add(it) }
@@ -123,15 +148,16 @@ object ConflictUiMapper {
 
     private inline fun sessionSide(
         raw: String?,
+        labels: ConflictLabels,
         decode: (String) -> SessionFields
     ): ConflictSideUi {
-        if (raw.isNullOrBlank() || raw == "null") return ConflictSideUi(deleted = true, lines = listOf(DELETED_LINE))
+        if (raw.isNullOrBlank() || raw == "null") return ConflictSideUi(deleted = true, lines = listOf(labels.deleted))
         val fields = runCatching { decode(raw) }.getOrNull()
-            ?: return ConflictSideUi(deleted = false, lines = listOf(UNREADABLE_LINE))
-        if (fields.deletedAt != null) return ConflictSideUi(deleted = true, lines = listOf(DELETED_LINE))
+            ?: return ConflictSideUi(deleted = false, lines = listOf(labels.unreadable))
+        if (fields.deletedAt != null) return ConflictSideUi(deleted = true, lines = listOf(labels.deleted))
         val lines = listOf(
             fields.name,
-            "${formatEvent(fields.event)} · ${if (fields.archived) "Archived" else "Active"}"
+            "${formatEvent(fields.event)} · ${if (fields.archived) labels.archived else labels.active}"
         )
         return ConflictSideUi(deleted = false, lines = lines)
     }

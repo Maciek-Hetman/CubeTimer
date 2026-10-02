@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nav_timer">Timer</string>
+    <string name="nav_stats">Statystyki</string>
+    <string name="nav_history">Historia</string>
+    <string name="nav_settings">Ustawienia</string>
+
+    <string name="error_no_app_for_link">Brak aplikacji, która może otworzyć ten link</string>
+
+    <string name="account_sign_in">Zaloguj się</string>
+    <string name="account_signed_in">Zalogowano</string>
+    <string name="account_signed_in_admin">Zalogowano · Administrator</string>
+    <string name="account_guest_pitch">Zachowaj kopię ułożeń i synchronizuj je między urządzeniami</string>
+
+    <string name="sync_cloud_sync">Synchronizacja w chmurze</string>
+    <string name="sync_status_synced">Zsynchronizowano</string>
+    <string name="sync_status_syncing">Synchronizowanie…</string>
+    <string name="sync_status_offline">Offline</string>
+    <plurals name="sync_status_offline_pending">
+        <item quantity="one">Offline (%d oczekująca zmiana)</item>
+        <item quantity="few">Offline (%d oczekujące zmiany)</item>
+        <item quantity="many">Offline (%d oczekujących zmian)</item>
+        <item quantity="other">Offline (%d oczekującej zmiany)</item>
+    </plurals>
+    <string name="sync_status_error">Błąd synchronizacji</string>
+    <plurals name="sync_conflicts_need_attention">
+        <item quantity="one">%d konflikt wymaga uwagi</item>
+        <item quantity="few">%d konflikty wymagają uwagi</item>
+        <item quantity="many">%d konfliktów wymaga uwagi</item>
+        <item quantity="other">%d konfliktu wymaga uwagi</item>
+    </plurals>
+
+    <string name="settings_section_timing">Pomiar czasu</string>
+    <string name="settings_timing_device">Sposób pomiaru</string>
+    <string name="settings_bluetooth_unsupported">To urządzenie nie obsługuje timerów Bluetooth</string>
+    <string name="timing_device_touch">Dotyk</string>
+    <string name="timing_device_bluetooth">Bluetooth</string>
+    <string name="settings_start_delay">Opóźnienie startu</string>
+    <string name="settings_inspection">Inspekcja</string>
+    <string name="settings_touch_only_note">Nieużywane z timerem Bluetooth</string>
+    <string name="bluetooth_timer">Timer Bluetooth</string>
+
+    <string name="settings_section_while_solving">Podczas układania</string>
+    <string name="settings_focus_mode">Tryb skupienia</string>
+    <string name="settings_focus_mode_summary">Pusty ekran podczas pomiaru</string>
+    <string name="settings_focus_mode_note">Tryb skupienia ukrywa wszystko</string>
+    <string name="settings_running_time">Bieżący czas</string>
+    <string name="settings_running_time_hidden">Ukryty</string>
+    <string name="running_timer_display_full">Pokazuj części sekundy</string>
+    <string name="running_timer_display_seconds">Ukryj części sekundy</string>
+    <string name="running_timer_display_hidden">Ukryj czas</string>
+    <string name="settings_show_while_solving">Pokazuj podczas układania</string>
+    <string name="settings_overlay_scramble">Scramble</string>
+    <string name="settings_overlay_averages">Średnie</string>
+    <string name="settings_overlay_last_results">Ostatnie wyniki</string>
+
+    <string name="settings_section_timer_screen">Ekran timera</string>
+    <string name="settings_scramble_size">Rozmiar scramble\'a</string>
+    <string name="settings_value_percent">%d%%</string>
+    <string name="settings_value_millis">%d ms</string>
+    <string name="settings_new_scramble_button">Przycisk nowego scramble\'a</string>
+    <string name="settings_averages">Średnie</string>
+    <string name="average_of_n">Ao%d</string>
+    <string name="settings_last_results">Ostatnie wyniki</string>
+    <string name="settings_start_hint">Podpowiedź startu</string>
+
+    <string name="settings_section_appearance">Wygląd</string>
+    <string name="settings_dynamic_color">Kolory dynamiczne</string>
+    <string name="settings_amoled">Czerń AMOLED</string>
+    <string name="settings_amoled_unavailable">Niedostępne przy kolorach dynamicznych</string>
+    <string name="settings_amoled_summary">Czarne tło w ciemnym motywie</string>
+
+    <string name="settings_section_general">Ogólne</string>
+    <string name="settings_default_puzzle">Domyślna kostka</string>
+    <string name="settings_haptics">Wibracje</string>
+
+    <string name="settings_section_about">O aplikacji</string>
+    <string name="settings_version">Wersja</string>
+    <string name="settings_website">Strona internetowa</string>
+    <string name="settings_source_code">Kod źródłowy</string>
+    <string name="settings_report_problem">Zgłoś problem</string>
+    <string name="settings_privacy_policy">Polityka prywatności</string>
+    <string name="settings_licenses">Licencje open source</string>
+    <string name="settings_delete_account_web">Usuń konto przez stronę</string>
+</resources>

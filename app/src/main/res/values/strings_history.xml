@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_undo">Undo</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_more_options">More options</string>
+
+    <string name="history_session_deleted">Deleted \"%s\"</string>
+    <string name="history_filter_sort">Filter &amp; Sort</string>
+    <string name="history_export_all">Export all solves</string>
+    <string name="history_import">Import solves</string>
+    <string name="history_delete_all">Delete all solves</string>
+    <string name="history_delete_session_title">Delete session?</string>
+    <string name="history_delete_session_message">\"%s\" and all of its solves will be deleted.</string>
+    <plurals name="history_delete_selected_title">
+        <item quantity="one">Delete %d solve?</item>
+        <item quantity="other">Delete %d solves?</item>
+    </plurals>
+    <string name="history_delete_selected_message">The selected solves will be deleted.</string>
+    <string name="history_delete_all_title">Delete all solves?</string>
+    <string name="history_delete_all_message">Every solve in the current puzzle scope will be deleted.</string>
+    <string name="history_delete_all_confirm">Delete all</string>
+    <string name="history_confirm_with_undo">%s You can undo this right after.</string>
+    <string name="history_empty_filtered">No matching sessions</string>
+    <string name="history_empty_filtered_hint">Try adjusting or resetting your filters.</string>
+    <string name="history_empty_hint">Your sessions and solves will show up here.</string>
+    <string name="history_reset_filters">Reset filters</string>
+</resources>

@@ -15,8 +15,8 @@ android {
         applicationId = "com.maciekhetman.cubetimer"
         minSdk = 24
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "2.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -36,6 +36,14 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
         // java.time is used throughout (API 26+); desugaring keeps minSdk 24 working.
         isCoreLibraryDesugaringEnabled = true
+    }
+    androidResources {
+        // English (default) and Polish. Dropping other locales keeps libraries' translations from
+        // making the app half-translated in other languages; the generated locale config lists both
+        // so Android 13+ offers them under the app's language in system settings (there is no
+        // in-app picker).
+        localeFilters += listOf("en", "pl")
+        generateLocaleConfig = true
     }
     buildFeatures {
         compose = true

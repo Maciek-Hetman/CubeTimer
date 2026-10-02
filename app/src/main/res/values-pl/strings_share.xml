@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_share">Udostępnij</string>
+
+    <string name="timing_device_label_touch">Ekran / dotyk</string>
+    <string name="timing_device_label_smart_cube">Smart kostka</string>
+
+    <string name="pb_delta">PB (-%1$ss wobec %2$ss)</string>
+    <string name="pb_first_solve">PB (pierwsze ułożenie)</string>
+    <string name="share_solve_number">Ułożenie #%d</string>
+    <string name="share_timer">Pomiar: %s</string>
+    <string name="share_failed">Nie udało się udostępnić ułożenia</string>
+    <string name="share_title">Ułożenie w CubeTimer</string>
+    <string name="share_chooser_title">Udostępnij ułożenie</string>
+    <string name="share_text_title">CubeTimer – ułożenie %s</string>
+    <string name="share_text_time">Czas: %s</string>
+    <string name="share_text_scramble">Scramble: %s</string>
+    <string name="share_text_date">Data: %s</string>
+</resources>

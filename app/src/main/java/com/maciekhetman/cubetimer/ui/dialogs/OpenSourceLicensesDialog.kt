@@ -13,8 +13,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.maciekhetman.cubetimer.R
 
 /** A third-party component bundled with the app and the license it ships under. */
 private data class LicensedComponent(val name: String, val license: String)
@@ -44,7 +46,7 @@ fun OpenSourceLicensesDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(24.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        title = { Text("Open-source licenses") },
+        title = { Text(stringResource(R.string.settings_licenses)) },
         text = {
             Column(
                 modifier = Modifier
@@ -52,13 +54,12 @@ fun OpenSourceLicensesDialog(
                     .verticalScroll(rememberScrollState())
             ) {
                 Text(
-                    text = "Cube Timer is free software, released under the GNU General Public License " +
-                        "v3.0. It comes with no warranty.",
+                    text = stringResource(R.string.licenses_intro),
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = "Third-party components",
+                    text = stringResource(R.string.licenses_third_party),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -82,7 +83,7 @@ fun OpenSourceLicensesDialog(
                 shape = RoundedCornerShape(20.dp),
                 onClick = onViewLicense
             ) {
-                Text("View GPL-3.0")
+                Text(stringResource(R.string.licenses_view_gpl))
             }
         },
         dismissButton = {
@@ -90,7 +91,7 @@ fun OpenSourceLicensesDialog(
                 shape = RoundedCornerShape(20.dp),
                 onClick = onDismiss
             ) {
-                Text("Close")
+                Text(stringResource(R.string.action_close))
             }
         },
         modifier = modifier

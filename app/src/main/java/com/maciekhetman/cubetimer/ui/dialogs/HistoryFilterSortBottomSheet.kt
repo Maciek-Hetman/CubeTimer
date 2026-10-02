@@ -1,5 +1,6 @@
 package com.maciekhetman.cubetimer.ui.dialogs
 
+import android.text.format.DateFormat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -41,8 +42,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.maciekhetman.cubetimer.R
 import com.maciekhetman.cubetimer.viewmodel.DatePreset
 import com.maciekhetman.cubetimer.viewmodel.DateRangeFilter
 import com.maciekhetman.cubetimer.viewmodel.HistoryUiState
@@ -88,7 +91,7 @@ fun HistoryFilterSortBottomSheet(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Filter & Sort",
+                    text = stringResource(R.string.history_filter_sort),
                     style = MaterialTheme.typography.headlineSmall,
                     modifier = Modifier.weight(1f)
                 )
@@ -96,7 +99,7 @@ fun HistoryFilterSortBottomSheet(
                     onClick = onResetAll,
                     enabled = uiState.totalActiveFilterCount > 0
                 ) {
-                    Text("Reset all")
+                    Text(stringResource(R.string.filters_reset_all))
                 }
             }
 
@@ -104,8 +107,8 @@ fun HistoryFilterSortBottomSheet(
 
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                 listOf(
-                    "Sessions" to uiState.activeSessionFilterCount,
-                    "Solves" to uiState.activeSolveFilterCount
+                    stringResource(R.string.filters_tab_sessions) to uiState.activeSessionFilterCount,
+                    stringResource(R.string.filters_tab_solves) to uiState.activeSolveFilterCount
                 ).forEachIndexed { index, (label, activeCount) ->
                     SegmentedButton(
                         selected = uiState.activeFilterSheetTab == index,
@@ -131,65 +134,46 @@ fun HistoryFilterSortBottomSheet(
                     .padding(top = 8.dp, bottom = 16.dp)
             ) {
                 if (uiState.activeFilterSheetTab == 0) {
-                    FilterGroup("Sort by") {
+                    FilterGroup(stringResource(R.string.filters_sort_by)) {
                         ChoiceChips(
                             options = SessionSortOrder.entries,
                             selected = uiState.sessionSort,
-                            label = { it.displayName },
+                            label = { stringResource(it.labelRes) },
                             onSelect = onSessionSortChange
                         )
                     }
-                    FilterGroup("Puzzle") {
+                    FilterGroup(stringResource(R.string.filters_puzzle)) {
                         ChoiceChips(
                             options = PuzzleScope.entries,
                             selected = uiState.puzzleScope,
-                            label = {
-                                when (it) {
-                                    PuzzleScope.ACTIVE_PUZZLE -> "Current Puzzle"
-                                    PuzzleScope.ALL_PUZZLES -> "All Puzzles"
-                                }
-                            },
+                            label = { stringResource(it.labelRes) },
                             onSelect = onPuzzleScopeChange
                         )
                     }
                 } else {
-                    FilterGroup("Sort by") {
+                    FilterGroup(stringResource(R.string.filters_sort_by)) {
                         ChoiceChips(
                             options = SolveSortOrder.entries,
                             selected = uiState.solveSort,
-                            label = {
-                                when (it) {
-                                    SolveSortOrder.MOST_RECENT -> "Most Recent"
-                                    SolveSortOrder.OLDEST -> "Oldest"
-                                    SolveSortOrder.LOWEST_TIME -> "Fastest"
-                                    SolveSortOrder.HIGHEST_TIME -> "Slowest"
-                                }
-                            },
+                            label = { stringResource(it.labelRes) },
                             onSelect = onSolveSortChange
                         )
                     }
-                    FilterGroup("Penalty") {
+                    FilterGroup(stringResource(R.string.filters_penalty)) {
                         ChoiceChips(
                             options = PenaltyFilter.entries,
                             selected = uiState.penaltyFilter,
-                            label = {
-                                when (it) {
-                                    PenaltyFilter.ALL -> "All"
-                                    PenaltyFilter.CLEAN_ONLY -> "Clean"
-                                    PenaltyFilter.PLUS_TWO_ONLY -> "+2"
-                                    PenaltyFilter.DNF_ONLY -> "DNF"
-                                }
-                            },
+                            label = { stringResource(it.labelRes) },
                             onSelect = onPenaltyFilterChange
                         )
                     }
-                    FilterGroup("Time") {
+                    FilterGroup(stringResource(R.string.filters_time)) {
                         DurationRangeFields(
                             filter = uiState.timeRangeFilter,
                             onChange = onTimeRangeFilterChange
                         )
                     }
-                    FilterGroup("Date") {
+                    FilterGroup(stringResource(R.string.filters_date)) {
                         DateRangeChips(
                             filter = uiState.dateRangeFilter,
                             onChange = onDateRangeFilterChange
@@ -204,7 +188,7 @@ fun HistoryFilterSortBottomSheet(
                         .fillMaxWidth()
                         .height(52.dp)
                 ) {
-                    Text("Done")
+                    Text(stringResource(R.string.action_done))
                 }
             }
         }
@@ -227,7 +211,7 @@ private fun FilterGroup(title: String, content: @Composable () -> Unit) {
 private fun <T> ChoiceChips(
     options: List<T>,
     selected: T,
-    label: (T) -> String,
+    label: @Composable (T) -> String,
     onSelect: (T) -> Unit
 ) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -284,8 +268,8 @@ private fun DurationRangeFields(
                 minText = it
                 onChange(filter.copy(minDurationMs = it.parseSecondsToMillis()))
             },
-            label = { Text("Min") },
-            suffix = { Text("s") },
+            label = { Text(stringResource(R.string.filters_min)) },
+            suffix = { Text(stringResource(R.string.filters_seconds_suffix)) },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             modifier = Modifier.weight(1f)
@@ -296,8 +280,8 @@ private fun DurationRangeFields(
                 maxText = it
                 onChange(filter.copy(maxDurationMs = it.parseSecondsToMillis()))
             },
-            label = { Text("Max") },
-            suffix = { Text("s") },
+            label = { Text(stringResource(R.string.filters_max)) },
+            suffix = { Text(stringResource(R.string.filters_seconds_suffix)) },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             modifier = Modifier.weight(1f)
@@ -316,9 +300,9 @@ private fun DateRangeChips(
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         DatePreset.entries.forEach { preset ->
             val label = if (preset == DatePreset.CUSTOM) {
-                filter.customRangeLabel() ?: preset.displayName
+                filter.customRangeLabel() ?: stringResource(preset.labelRes)
             } else {
-                preset.displayName
+                stringResource(preset.labelRes)
             }
             ChoiceChip(
                 label = label,
@@ -372,11 +356,11 @@ private fun CustomDateRangeDialog(
                     onDismiss()
                 }
             ) {
-                Text("Apply")
+                Text(stringResource(R.string.action_apply))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
         }
     ) {
         DateRangePicker(state = state, modifier = Modifier.weight(1f))
@@ -397,7 +381,8 @@ private fun convertDay(epochMs: Long, from: TimeZone, to: TimeZone, dayOffset: I
 
 private fun DateRangeFilter.customRangeLabel(): String? {
     if (preset != DatePreset.CUSTOM) return null
-    val format = SimpleDateFormat("MMM d", Locale.getDefault())
+    val locale = Locale.getDefault()
+    val format = SimpleDateFormat(DateFormat.getBestDateTimePattern(locale, "MMMd"), locale)
     val start = customStartEpoch?.let { format.format(it) }
     val end = customEndEpoch?.let { format.format(it) }
     return when {

@@ -1,5 +1,7 @@
 package com.maciekhetman.cubetimer.viewmodel
 
+import androidx.annotation.StringRes
+import com.maciekhetman.cubetimer.R
 import com.maciekhetman.cubetimer.data.session.DeletedSessionSnapshot
 import com.maciekhetman.cubetimer.domain.HistoricalPbResult
 import com.maciekhetman.cubetimer.domain.TimeFormatter
@@ -11,31 +13,31 @@ import com.maciekhetman.cubetimer.model.SolveTime
 /**
  * Ordering options for session groups on HistoryScreen.
  */
-enum class SessionSortOrder(val displayName: String) {
-    MOST_RECENT("Most Recent"),
-    OLDEST("Oldest"),
-    NAME_ASC("Name (A-Z)"),
-    NAME_DESC("Name (Z-A)"),
-    MOST_SOLVES("Most Solves")
+enum class SessionSortOrder(@StringRes val labelRes: Int) {
+    MOST_RECENT(R.string.sort_most_recent),
+    OLDEST(R.string.sort_oldest),
+    NAME_ASC(R.string.sort_name_asc),
+    NAME_DESC(R.string.sort_name_desc),
+    MOST_SOLVES(R.string.sort_most_solves)
 }
 
 /**
  * Scope filter determining whether sessions are filtered to the current timer puzzle mode
  * or shown across all puzzles.
  */
-enum class PuzzleScope(val displayName: String) {
-    ACTIVE_PUZZLE("Active Puzzle"),
-    ALL_PUZZLES("All Puzzles")
+enum class PuzzleScope(@StringRes val labelRes: Int) {
+    ACTIVE_PUZZLE(R.string.puzzle_scope_current),
+    ALL_PUZZLES(R.string.puzzle_scope_all)
 }
 
 /**
  * Ordering options for individual solves displayed inside expanded session groups.
  */
-enum class SolveSortOrder(val displayName: String) {
-    MOST_RECENT("Most Recent"),
-    OLDEST("Oldest"),
-    LOWEST_TIME("Lowest Time (Fastest)"),
-    HIGHEST_TIME("Highest Time (Slowest)");
+enum class SolveSortOrder(@StringRes val labelRes: Int) {
+    MOST_RECENT(R.string.sort_most_recent),
+    OLDEST(R.string.sort_oldest),
+    LOWEST_TIME(R.string.sort_fastest),
+    HIGHEST_TIME(R.string.sort_slowest);
 
     companion object {
         val FASTEST = LOWEST_TIME
@@ -46,11 +48,11 @@ enum class SolveSortOrder(val displayName: String) {
 /**
  * Filter options for solve penalties.
  */
-enum class PenaltyFilter(val displayName: String) {
-    ALL("All"),
-    CLEAN_ONLY("Clean Only"),
-    PLUS_TWO_ONLY("+2 Only"),
-    DNF_ONLY("DNF Only");
+enum class PenaltyFilter(@StringRes val labelRes: Int) {
+    ALL(R.string.penalty_filter_all),
+    CLEAN_ONLY(R.string.penalty_filter_clean),
+    PLUS_TWO_ONLY(R.string.penalty_plus_two),
+    DNF_ONLY(R.string.penalty_dnf);
 
     companion object {
         val CLEAN = CLEAN_ONLY
@@ -62,12 +64,12 @@ enum class PenaltyFilter(val displayName: String) {
 /**
  * Preset time boundaries for date range filtering.
  */
-enum class DatePreset(val displayName: String) {
-    ALL_TIME("All Time"),
-    TODAY("Today"),
-    LAST_7_DAYS("Last 7 Days"),
-    LAST_30_DAYS("Last 30 Days"),
-    CUSTOM("Custom")
+enum class DatePreset(@StringRes val labelRes: Int) {
+    ALL_TIME(R.string.date_preset_all_time),
+    TODAY(R.string.date_preset_today),
+    LAST_7_DAYS(R.string.date_preset_last_7_days),
+    LAST_30_DAYS(R.string.date_preset_last_30_days),
+    CUSTOM(R.string.date_preset_custom)
 }
 
 /**
@@ -187,12 +189,12 @@ interface HistoryUiEffect {
 
     data class ShowUndoBatchDelete(
         val deletedSolves: List<SolveTime>,
-        val message: String = "Deleted ${deletedSolves.size} solves"
+        val message: String
     ) : HistoryUiEffect
 
     data class ShowUndoClearAll(
         val deletedSolves: List<SolveTime>,
-        val message: String = "Cleared ${deletedSolves.size} solves"
+        val message: String
     ) : HistoryUiEffect
 
     data class ShowMessage(val message: String) : HistoryUiEffect

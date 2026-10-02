@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_done">Done</string>
+    <string name="action_apply">Apply</string>
+
+    <string name="filters_reset_all">Reset all</string>
+    <string name="filters_tab_sessions">Sessions</string>
+    <string name="filters_tab_solves">Solves</string>
+    <string name="filters_sort_by">Sort by</string>
+    <string name="filters_puzzle">Puzzle</string>
+    <string name="filters_penalty">Penalty</string>
+    <string name="filters_time">Time</string>
+    <string name="filters_date">Date</string>
+    <string name="filters_min">Min</string>
+    <string name="filters_max">Max</string>
+    <string name="filters_seconds_suffix">s</string>
+
+    <string name="sort_most_recent">Most Recent</string>
+    <string name="sort_oldest">Oldest</string>
+    <string name="sort_name_asc">Name (A-Z)</string>
+    <string name="sort_name_desc">Name (Z-A)</string>
+    <string name="sort_most_solves">Most Solves</string>
+    <string name="sort_fastest">Fastest</string>
+    <string name="sort_slowest">Slowest</string>
+    <string name="puzzle_scope_current">Current Puzzle</string>
+    <string name="puzzle_scope_all">All Puzzles</string>
+    <string name="penalty_filter_all">All</string>
+    <string name="penalty_filter_clean">Clean</string>
+    <string name="penalty_plus_two" translatable="false">+2</string>
+    <string name="penalty_dnf" translatable="false">DNF</string>
+    <string name="date_preset_all_time">All Time</string>
+    <string name="date_preset_today">Today</string>
+    <string name="date_preset_last_7_days">Last 7 Days</string>
+    <string name="date_preset_last_30_days">Last 30 Days</string>
+    <string name="date_preset_custom">Custom</string>
+</resources>

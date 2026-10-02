@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_done">Gotowe</string>
+    <string name="action_apply">Zastosuj</string>
+
+    <string name="filters_reset_all">Wyczyść wszystko</string>
+    <string name="filters_tab_sessions">Sesje</string>
+    <string name="filters_tab_solves">Ułożenia</string>
+    <string name="filters_sort_by">Sortuj według</string>
+    <string name="filters_puzzle">Kostka</string>
+    <string name="filters_penalty">Kara</string>
+    <string name="filters_time">Czas</string>
+    <string name="filters_date">Data</string>
+    <string name="filters_min">Min</string>
+    <string name="filters_max">Maks</string>
+    <string name="filters_seconds_suffix">s</string>
+
+    <string name="sort_most_recent">Najnowsze</string>
+    <string name="sort_oldest">Najstarsze</string>
+    <string name="sort_name_asc">Nazwa (A–Z)</string>
+    <string name="sort_name_desc">Nazwa (Z–A)</string>
+    <string name="sort_most_solves">Najwięcej ułożeń</string>
+    <string name="sort_fastest">Najszybsze</string>
+    <string name="sort_slowest">Najwolniejsze</string>
+    <string name="puzzle_scope_current">Bieżąca kostka</string>
+    <string name="puzzle_scope_all">Wszystkie kostki</string>
+    <string name="penalty_filter_all">Wszystkie</string>
+    <string name="penalty_filter_clean">Bez kar</string>
+    <string name="date_preset_all_time">Cały okres</string>
+    <string name="date_preset_today">Dzisiaj</string>
+    <string name="date_preset_last_7_days">Ostatnie 7 dni</string>
+    <string name="date_preset_last_30_days">Ostatnie 30 dni</string>
+    <string name="date_preset_custom">Własny zakres</string>
+</resources>

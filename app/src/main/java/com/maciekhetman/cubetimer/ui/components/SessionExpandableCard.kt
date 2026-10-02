@@ -37,10 +37,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.maciekhetman.cubetimer.R
 import com.maciekhetman.cubetimer.model.SolveTime
 import com.maciekhetman.cubetimer.ui.screens.HistorySolveCard
 import com.maciekhetman.cubetimer.viewmodel.SessionGroupUiModel
@@ -169,11 +172,9 @@ fun SessionCardEmptyOrLoadingMessage(sessionGroup: SessionGroupUiModel, modifier
     } else {
         SegmentMessage(modifier) {
             Text(
-                text = if (sessionGroup.solveCount == 0) {
-                    "No solves in this session"
-                } else {
-                    "No solves match your filters"
-                },
+                text = stringResource(
+                    if (sessionGroup.solveCount == 0) R.string.session_no_solves else R.string.session_no_matching_solves
+                ),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -212,7 +213,7 @@ fun SessionCardHeader(
     )
 
     val session = sessionGroup.session
-    val solveCountText = "${sessionGroup.solveCount} ${if (sessionGroup.solveCount == 1) "solve" else "solves"}"
+    val solveCountText = pluralStringResource(R.plurals.solve_count, sessionGroup.solveCount, sessionGroup.solveCount)
 
     Surface(
         onClick = onClick,
@@ -231,7 +232,7 @@ fun SessionCardHeader(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = session.name,
+                    text = displaySessionName(session.name),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
@@ -248,16 +249,16 @@ fun SessionCardHeader(
                 if (best != null || average != null) {
                     Spacer(modifier = Modifier.height(12.dp))
                     Row {
-                        best?.let { SessionStat(label = "Best", value = it) }
+                        best?.let { SessionStat(label = stringResource(R.string.session_best), value = it) }
                         if (best != null && average != null) Spacer(modifier = Modifier.width(24.dp))
-                        average?.let { SessionStat(label = "Average", value = it) }
+                        average?.let { SessionStat(label = stringResource(R.string.session_average), value = it) }
                     }
                 }
             }
 
             Icon(
                 imageVector = Icons.Default.KeyboardArrowDown,
-                contentDescription = if (expanded) "Collapse session" else "Expand session",
+                contentDescription = stringResource(if (expanded) R.string.session_collapse else R.string.session_expand),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.rotate(chevronRotation)
             )
@@ -327,7 +328,7 @@ fun SessionCardActions(
                     modifier = Modifier.size(ButtonDefaults.IconSize)
                 )
                 Spacer(modifier = Modifier.width(ButtonDefaults.IconSpacing))
-                Text("Export")
+                Text(stringResource(R.string.action_export))
             }
             TextButton(
                 onClick = onDelete,
@@ -339,7 +340,7 @@ fun SessionCardActions(
                     modifier = Modifier.size(ButtonDefaults.IconSize)
                 )
                 Spacer(modifier = Modifier.width(ButtonDefaults.IconSpacing))
-                Text("Delete")
+                Text(stringResource(R.string.action_delete))
             }
         }
     }

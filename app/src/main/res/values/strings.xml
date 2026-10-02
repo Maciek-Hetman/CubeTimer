@@ -1,3 +1,3 @@
 <resources>
-    <string name="app_name">Cube Timer</string>
+    <string name="app_name" translatable="false">Cube Timer</string>
 </resources>

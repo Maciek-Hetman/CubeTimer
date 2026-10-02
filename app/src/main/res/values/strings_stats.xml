@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="solve_count">
+        <item quantity="one">%d solve</item>
+        <item quantity="other">%d solves</item>
+    </plurals>
+
+    <string name="stats_title">Statistics</string>
+    <string name="stats_no_solves">No solves yet</string>
+    <string name="stats_no_solves_in_filter">No solves in selected filter</string>
+    <string name="stats_charts">Charts</string>
+    <string name="stats_personal_best">PERSONAL BEST</string>
+    <string name="stats_standard_averages">Standard Averages</string>
+    <string name="stats_collapse_section">Collapse %s</string>
+    <string name="stats_expand_section">Expand %s</string>
+    <string name="stats_large_averages">Large Averages</string>
+    <plurals name="stats_requires_solves">
+        <item quantity="one">Requires %1$d solve (%2$d/%1$d)</item>
+        <item quantity="other">Requires %1$d solves (%2$d/%1$d)</item>
+    </plurals>
+    <plurals name="stats_window_solves">
+        <item quantity="one">Window: %d solve</item>
+        <item quantity="other">Window: %d solves</item>
+    </plurals>
+    <string name="stats_not_available">N/A</string>
+    <string name="stats_pb_time">PB: %s</string>
+    <string name="stats_session_metrics">Session &amp; Detailed Metrics</string>
+    <string name="stats_session_avg">Session Avg</string>
+    <string name="stats_mean_solve">Mean Solve</string>
+    <string name="stats_session_std_dev">Session Std. Dev</string>
+    <string name="stats_time_cubing">Time Cubing</string>
+    <string name="stats_total_solves">Total Solves</string>
+    <string name="stats_all_time_mean">All-Time Mean</string>
+    <string name="stats_std_dev">Std. Deviation</string>
+    <string name="stats_time_solving">Time Solving</string>
+    <string name="stats_time_in_app">Time in App</string>
+    <string name="stats_penalty_distribution">Penalty Distribution</string>
+    <string name="stats_penalties_none" formatted="false">100% clean (0 penalties)</string>
+    <string name="stats_penalties_summary">DNF: %1$d (%2$d%%) • +2: %3$d (%4$d%%)</string>
+    <string name="stats_pb_progress">Personal Best Progress</string>
+    <string name="stats_no_pbs">No personal bests yet</string>
+    <string name="stats_single">Single</string>
+    <string name="stats_solve_times">Solve Times</string>
+    <string name="stats_solve_times_empty">Complete more solves to see solve times</string>
+    <string name="stats_progress_chart">Progress Chart</string>
+    <string name="stats_progress_chart_empty">Complete 5 solves to see progress chart</string>
+    <string name="stats_range_last_n">Last %d</string>
+    <string name="stats_range_all">All</string>
+</resources>

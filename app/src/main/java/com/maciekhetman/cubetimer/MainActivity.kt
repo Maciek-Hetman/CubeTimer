@@ -7,6 +7,7 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
@@ -36,6 +37,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.res.stringResource
 import kotlin.math.roundToInt
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
@@ -491,7 +493,7 @@ fun FloatingNavigationBar(
                         ) {
                             Icon(
                                 imageVector = destination.icon,
-                                contentDescription = destination.label,
+                                contentDescription = stringResource(destination.labelRes),
                                 tint = iconColor,
                                 modifier = Modifier
                                     .size(24.dp)
@@ -523,11 +525,11 @@ private fun ApplyStatusBarColor() {
 }
 
 enum class AppDestinations(
-    val label: String,
+    @StringRes val labelRes: Int,
     val icon: ImageVector,
 ) {
-    TIMER("Timer", Icons.Default.Home),
-    STATS("Stats", Icons.Default.BarChart),
-    HISTORY("History", Icons.Default.History),
-    SETTINGS("Settings", Icons.Default.Settings),
+    TIMER(R.string.nav_timer, Icons.Default.Home),
+    STATS(R.string.nav_stats, Icons.Default.BarChart),
+    HISTORY(R.string.nav_history, Icons.Default.History),
+    SETTINGS(R.string.nav_settings, Icons.Default.Settings),
 }

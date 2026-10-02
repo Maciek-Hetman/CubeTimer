@@ -192,6 +192,17 @@ signed-in owners' session-less solves are left alone, as the server accepts them
   mode/device switching and navigation; `isTimerRunning` is unchanged. Bluetooth timers ignore the setting.
 - Preferences live in two DataStores (`AppDataStore.kt`): `solves` (legacy, source of the one-time
   Room migration in `DataStoreMigration`) and `settings` (`SettingsRepository`).
+- Localization: English (`values/`, default) and Polish (`values-pl/`), strings split per area into
+  `strings_*.xml`. There is no in-app language picker: `androidResources { generateLocaleConfig; localeFilters }`
+  (plus `res/resources.properties`) makes Android 13+ offer the languages in the system's per-app language
+  settings and drops libraries' other translations. All user-facing text goes through resources, and lint's
+  `MissingTranslation` fails on a string without a Polish version (Polish plurals need one/few/many/other).
+  AndroidViewModels resolve messages with `getApplication<Application>().getString(...)`, so their state stays
+  plain strings (tests run in English); enums shown in the UI carry `@StringRes labelRes`. Automatic session names
+  stay English in the DB and on the wire — `displaySessionName` (`ui/components/SessionNames.kt`) only translates
+  their display. Dates use `DateFormat.getBestDateTimePattern(Locale.getDefault(), …)`, never cached, because
+  the language can change while the app runs. CSV contents, Mode names and cubing notation (Ao5, DNF, +2) are not
+  translated.
 - Theming: `CubeTimerTheme(dynamicColor, amoled)`, which prefers dynamic color where the device has it (API 31+),
   so `MainActivity` passes the AMOLED setting through unchanged; haptics follow the `haptics_enabled` setting
   (`OptionalHapticsProvider` in `MainActivity` swaps `LocalHapticFeedback` for a no-op when it's off).

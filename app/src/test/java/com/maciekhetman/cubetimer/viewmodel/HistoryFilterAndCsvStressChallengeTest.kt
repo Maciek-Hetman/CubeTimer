@@ -692,7 +692,7 @@ class HistoryFilterAndCsvStressChallengeTest {
 
             val effect = awaitItem()
             assertTrue(effect is HistoryUiEffect.ShowMessage)
-            assertTrue((effect as HistoryUiEffect.ShowMessage).message.contains("Exported 1 selected solves to CSV"))
+            assertTrue((effect as HistoryUiEffect.ShowMessage).message.contains("Exported 1 selected solve to CSV"))
         }
 
         val selCsv = tempFileSelected.readText(StandardCharsets.UTF_8)

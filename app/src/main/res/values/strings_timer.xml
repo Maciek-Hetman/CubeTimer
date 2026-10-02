@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_discard">Discard</string>
+
+    <string name="timer_a11y_bluetooth">Timer controlled by Bluetooth timer</string>
+    <string name="timer_a11y_tap_to_stop">Tap to stop timer</string>
+    <string name="timer_a11y_tap_to_start">Tap to start timer</string>
+    <string name="timer_a11y_hold_release_to_start">Hold and release to start timer</string>
+    <string name="timer_a11y_tap_to_inspect">Tap to start inspection</string>
+    <string name="timer_a11y_hold_to_start">Tap and hold to start timer</string>
+
+    <string name="timer_connect_bluetooth">Connect Bluetooth timer</string>
+    <string name="timer_hint_bluetooth">Place both hands on the timer</string>
+    <string name="timer_hint_tap_to_inspect">Tap to start inspection</string>
+    <string name="timer_hint_tap_to_start">Tap to start</string>
+    <string name="timer_hint_hold_to_start">Tap and hold to start</string>
+    <string name="timer_hint_hold_release_to_start">Hold and release to start</string>
+    <string name="timer_hold">Hold…</string>
+    <string name="timer_release_to_start">Release to start!</string>
+    <string name="timer_lift_hands_to_start">Lift your hands to start!</string>
+    <string name="timer_stop_on_timer">Stop on the timer</string>
+    <string name="timer_tap_to_stop">Tap to stop</string>
+    <string name="timer_inspection_penalty">Inspection penalty: %s</string>
+    <string name="timer_save_time">Save Time</string>
+    <string name="timer_discard_title">Discard solve?</string>
+    <string name="timer_discard_message">This solve will be removed without saving.</string>
+    <string name="timer_new_scramble">Generate new scramble</string>
+
+    <string name="timer_new_record">New record</string>
+    <string name="record_best_single">Best Single</string>
+    <string name="record_best_ao5">Best Average of 5</string>
+    <string name="record_best_ao12">Best Average of 12</string>
+    <string name="timer_tap_to_continue">Tap to continue</string>
+</resources>

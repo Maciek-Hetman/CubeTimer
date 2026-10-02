@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_cancel">Anuluj</string>
+    <string name="action_discard">Odrzuć</string>
+
+    <string name="timer_a11y_bluetooth">Czas mierzy timer Bluetooth</string>
+    <string name="timer_a11y_tap_to_stop">Dotknij, aby zatrzymać pomiar</string>
+    <string name="timer_a11y_tap_to_start">Dotknij, aby rozpocząć pomiar</string>
+    <string name="timer_a11y_hold_release_to_start">Przytrzymaj i puść, aby rozpocząć pomiar</string>
+    <string name="timer_a11y_tap_to_inspect">Dotknij, aby rozpocząć inspekcję</string>
+    <string name="timer_a11y_hold_to_start">Dotknij i przytrzymaj, aby rozpocząć pomiar</string>
+
+    <string name="timer_connect_bluetooth">Połącz timer Bluetooth</string>
+    <string name="timer_hint_bluetooth">Połóż obie dłonie na timerze</string>
+    <string name="timer_hint_tap_to_inspect">Dotknij, aby rozpocząć inspekcję</string>
+    <string name="timer_hint_tap_to_start">Dotknij, aby zacząć</string>
+    <string name="timer_hint_hold_to_start">Dotknij i przytrzymaj, aby zacząć</string>
+    <string name="timer_hint_hold_release_to_start">Przytrzymaj i puść, aby zacząć</string>
+    <string name="timer_hold">Trzymaj…</string>
+    <string name="timer_release_to_start">Puść, aby zacząć!</string>
+    <string name="timer_lift_hands_to_start">Unieś dłonie, aby zacząć!</string>
+    <string name="timer_stop_on_timer">Zatrzymaj na timerze</string>
+    <string name="timer_tap_to_stop">Dotknij, aby zatrzymać</string>
+    <string name="timer_inspection_penalty">Kara za inspekcję: %s</string>
+    <string name="timer_save_time">Zapisz czas</string>
+    <string name="timer_discard_title">Odrzucić ułożenie?</string>
+    <string name="timer_discard_message">To ułożenie zostanie usunięte bez zapisywania.</string>
+    <string name="timer_new_scramble">Wygeneruj nowy scramble</string>
+
+    <string name="timer_new_record">Nowy rekord</string>
+    <string name="record_best_single">Najlepszy single</string>
+    <string name="record_best_ao5">Najlepsza średnia z 5</string>
+    <string name="record_best_ao12">Najlepsza średnia z 12</string>
+    <string name="timer_tap_to_continue">Dotknij, aby kontynuować</string>
+</resources>

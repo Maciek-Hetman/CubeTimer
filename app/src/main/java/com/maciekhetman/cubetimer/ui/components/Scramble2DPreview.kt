@@ -32,9 +32,11 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.maciekhetman.cubetimer.R
 import com.maciekhetman.cubetimer.domain.AndroidSha1PrngProvider
 import com.maciekhetman.cubetimer.model.Mode
 import kotlinx.coroutines.Dispatchers
@@ -427,6 +429,7 @@ fun Scramble2DPreview(
             }
             is ScramblePreviewResult.Success -> {
                 val model = result.model
+                val previewDescription = stringResource(R.string.scramble_preview_a11y, mode.displayName)
 
                 Box(
                     modifier = Modifier
@@ -438,7 +441,7 @@ fun Scramble2DPreview(
                         modifier = Modifier
                             .fillMaxSize()
                             .semantics {
-                                contentDescription = "2D scramble preview for ${mode.displayName}"
+                                contentDescription = previewDescription
                             }
                     ) {
                         if (model.width <= 0f || model.height <= 0f) return@Canvas
@@ -520,7 +523,7 @@ fun Scramble2DPreview(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "No scramble",
+                        text = stringResource(R.string.scramble_none),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -544,7 +547,7 @@ fun Scramble2DPreview(
                             modifier = Modifier.size(28.dp)
                         )
                         Text(
-                            text = "Preview unavailable",
+                            text = stringResource(R.string.scramble_preview_unavailable),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )

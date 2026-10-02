@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_undo">Cofnij</string>
+    <string name="action_delete">Usuń</string>
+    <string name="action_more_options">Więcej opcji</string>
+
+    <string name="history_session_deleted">Usunięto „%s”</string>
+    <string name="history_filter_sort">Filtrowanie i sortowanie</string>
+    <string name="history_export_all">Eksportuj wszystkie ułożenia</string>
+    <string name="history_import">Importuj ułożenia</string>
+    <string name="history_delete_all">Usuń wszystkie ułożenia</string>
+    <string name="history_delete_session_title">Usunąć sesję?</string>
+    <string name="history_delete_session_message">Sesja „%s” i wszystkie jej ułożenia zostaną usunięte.</string>
+    <plurals name="history_delete_selected_title">
+        <item quantity="one">Usunąć %d ułożenie?</item>
+        <item quantity="few">Usunąć %d ułożenia?</item>
+        <item quantity="many">Usunąć %d ułożeń?</item>
+        <item quantity="other">Usunąć %d ułożenia?</item>
+    </plurals>
+    <string name="history_delete_selected_message">Zaznaczone ułożenia zostaną usunięte.</string>
+    <string name="history_delete_all_title">Usunąć wszystkie ułożenia?</string>
+    <string name="history_delete_all_message">Wszystkie ułożenia z bieżącego zakresu kostek zostaną usunięte.</string>
+    <string name="history_delete_all_confirm">Usuń wszystkie</string>
+    <string name="history_confirm_with_undo">%s Możesz to od razu cofnąć.</string>
+    <string name="history_empty_filtered">Brak pasujących sesji</string>
+    <string name="history_empty_filtered_hint">Zmień lub wyczyść filtry.</string>
+    <string name="history_empty_hint">Tutaj pojawią się Twoje sesje i ułożenia.</string>
+    <string name="history_reset_filters">Wyczyść filtry</string>
+</resources>

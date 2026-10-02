@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="history_deleted_solves">
+        <item quantity="one">Deleted %d solve</item>
+        <item quantity="other">Deleted %d solves</item>
+    </plurals>
+    <plurals name="history_cleared_solves">
+        <item quantity="one">Cleared %d solve</item>
+        <item quantity="other">Cleared %d solves</item>
+    </plurals>
+    <plurals name="history_restored_solves">
+        <item quantity="one">Restored %d solve</item>
+        <item quantity="other">Restored %d solves</item>
+    </plurals>
+    <string name="history_solve_deleted">Solve deleted</string>
+    <string name="history_no_solves_deleted">No solves were deleted</string>
+    <string name="history_session_not_found">Session not found or already deleted</string>
+    <string name="history_session_restored">Restored session \'%s\'</string>
+    <string name="history_no_solves_to_clear">No solves to clear</string>
+
+    <plurals name="history_exported_solves">
+        <item quantity="one">Exported %d solve to CSV</item>
+        <item quantity="other">Exported %d solves to CSV</item>
+    </plurals>
+    <plurals name="history_exported_session">
+        <item quantity="one">Exported %1$d solve from session \'%2$s\' to CSV</item>
+        <item quantity="other">Exported %1$d solves from session \'%2$s\' to CSV</item>
+    </plurals>
+    <plurals name="history_exported_selected">
+        <item quantity="one">Exported %d selected solve to CSV</item>
+        <item quantity="other">Exported %d selected solves to CSV</item>
+    </plurals>
+    <string name="history_nothing_to_export">No solves to export in current scope</string>
+    <string name="history_nothing_to_export_session">No solves to export for session \'%s\'</string>
+    <string name="history_nothing_selected_to_export">No solves selected for export</string>
+    <string name="history_selected_not_found">Selected solves not found</string>
+
+    <plurals name="history_imported_solves">
+        <item quantity="one">Imported %d solve</item>
+        <item quantity="other">Imported %d solves</item>
+    </plurals>
+    <plurals name="history_import_duplicates_skipped">
+        <item quantity="one">%d duplicate skipped</item>
+        <item quantity="other">%d duplicates skipped</item>
+    </plurals>
+    <plurals name="history_import_malformed_skipped">
+        <item quantity="one">%d malformed row skipped</item>
+        <item quantity="other">%d malformed rows skipped</item>
+    </plurals>
+    <string name="history_import_empty">CSV file is empty</string>
+    <string name="history_import_invalid">Invalid CSV file: %s</string>
+    <string name="csv_problem_missing_header_row">CSV file missing column header row.</string>
+    <string name="csv_problem_invalid_comment">Invalid comment header. Expected \'# Source: CubeTimer\'.</string>
+    <string name="csv_problem_missing_source_comment">File missing required \'# Source: CubeTimer\' comment header.</string>
+    <string name="csv_problem_missing_columns">Missing required column(s): %s</string>
+
+    <string name="history_error_delete_solves">Failed to delete solves</string>
+    <string name="history_error_restore_solves">Failed to restore solves</string>
+    <string name="history_error_delete_session">Failed to delete session</string>
+    <string name="history_error_restore_session">Failed to restore session</string>
+    <string name="history_error_clear">Failed to clear history</string>
+    <string name="history_error_export">Failed to export solves</string>
+    <string name="history_error_export_session">Failed to export session</string>
+    <string name="history_error_export_selected">Failed to export selected solves</string>
+    <string name="history_error_import_csv">CSV import failed</string>
+    <string name="history_error_import">Failed to import solves</string>
+    <string name="history_error_update_penalty">Failed to update penalty</string>
+    <string name="history_error_delete_solve">Failed to delete solve</string>
+    <string name="history_error_restore_solve">Failed to restore solve</string>
+</resources>

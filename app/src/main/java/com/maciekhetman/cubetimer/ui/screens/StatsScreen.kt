@@ -1,5 +1,6 @@
 package com.maciekhetman.cubetimer.ui.screens
 
+import android.text.format.DateFormat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -29,12 +30,15 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.maciekhetman.cubetimer.R
 import com.maciekhetman.cubetimer.domain.AverageCalculator
 import com.maciekhetman.cubetimer.domain.TimeFormatter
 import com.maciekhetman.cubetimer.model.Mode
@@ -85,7 +89,7 @@ fun StatsScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             CollapsingTopBar(
-                title = "Statistics",
+                title = stringResource(R.string.stats_title),
                 currentMode = currentMode,
                 onModeSelected = onModeSelected,
                 scrollBehavior = scrollBehavior
@@ -125,7 +129,7 @@ fun StatsScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = if (solves.isEmpty()) "No solves yet" else "No solves in selected filter",
+                            text = stringResource(if (solves.isEmpty()) R.string.stats_no_solves else R.string.stats_no_solves_in_filter),
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -191,7 +195,7 @@ fun StatsScreen(
 @Composable
 private fun ChartsSection(solves: List<SolveTime>) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SectionHeader(title = "Charts")
+        SectionHeader(title = stringResource(R.string.stats_charts))
 
         PersonalBestsChart(solves = solves)
         SolveTimesChart(solves = solves)
@@ -229,7 +233,7 @@ fun StatsHeroCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "PERSONAL BEST",
+                    text = stringResource(R.string.stats_personal_best),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
@@ -301,12 +305,12 @@ fun StatsHeroCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 SessionAveragePill(
-                    label = "Current Ao5",
+                    label = stringResource(R.string.stats_current_ao5),
                     time = sessionAo5,
                     modifier = Modifier.weight(1f)
                 )
                 SessionAveragePill(
-                    label = "Current Ao12",
+                    label = stringResource(R.string.stats_current_ao12),
                     time = sessionAo12,
                     modifier = Modifier.weight(1f)
                 )
@@ -405,7 +409,7 @@ fun CompactSummaryGrid(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        SectionHeader(title = "Standard Averages")
+        SectionHeader(title = stringResource(R.string.stats_standard_averages))
 
         items.chunked(2).forEach { row ->
             Row(
@@ -574,7 +578,7 @@ private fun CollapsibleSectionCard(
                 ) {
                     Icon(
                         imageVector = Icons.Default.KeyboardArrowDown,
-                        contentDescription = if (isExpanded) "Collapse $title" else "Expand $title",
+                        contentDescription = stringResource(if (isExpanded) R.string.stats_collapse_section else R.string.stats_expand_section, title),
                         modifier = Modifier.rotate(rotationAngle),
                         tint = MaterialTheme.colorScheme.primary
                     )
@@ -644,7 +648,7 @@ private fun LargeAveragesSection(
     }
 
     CollapsibleSectionCard(
-        title = "Large Averages",
+        title = stringResource(R.string.stats_large_averages),
         badgeText = badgeText,
         isExpanded = isExpanded,
         onToggle = { isExpanded = !isExpanded },
@@ -684,7 +688,11 @@ private fun LargeAveragesSection(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = if (solves.size < count) "Requires $count solves (${solves.size}/$count)" else "Window: $count solves",
+                            text = if (solves.size < count) {
+                                pluralStringResource(R.plurals.stats_requires_solves, count, count, solves.size)
+                            } else {
+                                pluralStringResource(R.plurals.stats_window_solves, count, count)
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -695,7 +703,7 @@ private fun LargeAveragesSection(
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         Text(
-                            text = if (current != null) formatTime(current) else "N/A",
+                            text = if (current != null) formatTime(current) else stringResource(R.string.stats_not_available),
                             style = MaterialTheme.typography.titleMedium,
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Bold,
@@ -703,7 +711,7 @@ private fun LargeAveragesSection(
                         )
                         if (best != null) {
                             Text(
-                                text = "PB: ${formatTime(best)}",
+                                text = stringResource(R.string.stats_pb_time, formatTime(best)),
                                 style = MaterialTheme.typography.labelSmall,
                                 fontFamily = FontFamily.Monospace,
                                 color = MaterialTheme.colorScheme.primary,
@@ -737,9 +745,8 @@ private fun SessionMetricsSection(
 
     // Cheap enough to keep synchronous: needed for the badge even while collapsed.
     val totalSolvingTime = remember(solves) { solves.sumOf { it.timeInMillis } }
-    val badgeText = remember(solves, totalSolvingTime) {
-        "${solves.size} solves • ${TimeFormatter.formatDuration(totalSolvingTime)}"
-    }
+    val solveCountText = pluralStringResource(R.plurals.solve_count, solves.size, solves.size)
+    val badgeText = "$solveCountText • ${TimeFormatter.formatDuration(totalSolvingTime)}"
 
     // Session bucketing + mean/std-dev are only needed once the section is expanded; compute
     // them off the main thread so opening this section never freezes the UI.
@@ -759,7 +766,7 @@ private fun SessionMetricsSection(
     }
 
     CollapsibleSectionCard(
-        title = "Session & Detailed Metrics",
+        title = stringResource(R.string.stats_session_metrics),
         badgeText = badgeText,
         isExpanded = isExpanded,
         onToggle = { isExpanded = !isExpanded },
@@ -786,13 +793,13 @@ private fun SessionMetricsSection(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 StatCard(
-                    label = "Session Best",
+                    label = stringResource(R.string.stats_session_best),
                     value = formatTime(sessionStats.bestSessionTime),
                     modifier = Modifier.weight(1f),
                     containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                 )
                 StatCard(
-                    label = "Session Worst",
+                    label = stringResource(R.string.stats_session_worst),
                     value = formatTime(sessionStats.worstSessionTime),
                     modifier = Modifier.weight(1f),
                     containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
@@ -803,13 +810,13 @@ private fun SessionMetricsSection(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 StatCard(
-                    label = "Session Avg",
+                    label = stringResource(R.string.stats_session_avg),
                     value = formatTime(sessionStats.sessionAverage),
                     modifier = Modifier.weight(1f),
                     containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                 )
                 StatCard(
-                    label = "Mean Solve",
+                    label = stringResource(R.string.stats_mean_solve),
                     value = formatTime(sessionStats.meanSolveTime),
                     modifier = Modifier.weight(1f),
                     containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
@@ -820,13 +827,13 @@ private fun SessionMetricsSection(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 StatCard(
-                    label = "Session Std. Dev",
+                    label = stringResource(R.string.stats_session_std_dev),
                     value = formatTime(sessionStats.standardDeviation.toLong()),
                     modifier = Modifier.weight(1f),
                     containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                 )
                 StatCard(
-                    label = "Time Cubing",
+                    label = stringResource(R.string.stats_time_cubing),
                     value = TimeFormatter.formatDuration(sessionStats.avgTimeCubingInSession),
                     modifier = Modifier.weight(1f),
                     containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
@@ -839,13 +846,13 @@ private fun SessionMetricsSection(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             StatCard(
-                label = "Total Solves",
+                label = stringResource(R.string.stats_total_solves),
                 value = "${solves.size}",
                 modifier = Modifier.weight(1f),
                 containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
             )
             StatCard(
-                label = "All-Time Mean",
+                label = stringResource(R.string.stats_all_time_mean),
                 value = formatTime(allTimeMean),
                 modifier = Modifier.weight(1f),
                 containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
@@ -856,13 +863,13 @@ private fun SessionMetricsSection(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             StatCard(
-                label = "Std. Deviation",
+                label = stringResource(R.string.stats_std_dev),
                 value = formatTime(allTimeStdDev.toLong()),
                 modifier = Modifier.weight(1f),
                 containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
             )
             StatCard(
-                label = "Time Solving",
+                label = stringResource(R.string.stats_time_solving),
                 value = TimeFormatter.formatDuration(totalSolvingTime),
                 modifier = Modifier.weight(1f),
                 containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
@@ -873,7 +880,7 @@ private fun SessionMetricsSection(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             StatCard(
-                label = "Time in App",
+                label = stringResource(R.string.stats_time_in_app),
                 value = TimeFormatter.formatDuration(appTimeMillis),
                 modifier = Modifier.weight(1f),
                 containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
@@ -914,13 +921,14 @@ private fun PenaltyStatsSection(
         PenaltyDistributionData(dnf, plusTwo, dnfPct, plusTwoPct, clean, cleanPct)
     }
 
-    val badgeText = remember(dnfCount, plusTwoCount, cleanPercent) {
-        if (dnfCount + plusTwoCount == 0) "100% clean (0 penalties)"
-        else "DNF: $dnfCount ($dnfPercent%) • +2: $plusTwoCount ($plusTwoPercent%)"
+    val badgeText = if (dnfCount + plusTwoCount == 0) {
+        stringResource(R.string.stats_penalties_none)
+    } else {
+        stringResource(R.string.stats_penalties_summary, dnfCount, dnfPercent, plusTwoCount, plusTwoPercent)
     }
 
     CollapsibleSectionCard(
-        title = "Penalty Distribution",
+        title = stringResource(R.string.stats_penalty_distribution),
         badgeText = badgeText,
         isExpanded = isExpanded,
         onToggle = { isExpanded = !isExpanded },
@@ -950,7 +958,7 @@ private fun PenaltyStatsSection(
 
 @Composable
 private fun PersonalBestsChart(solves: List<SolveTime>) {
-    var selectedRange by remember { mutableStateOf("All") }
+    var selectedRange by remember { mutableStateOf(ChartRange.ALL) }
     val haptic = LocalHapticFeedback.current
     val validSolves = remember(solves) { solves.filter { it.penalty != Penalty.DNF } }
 
@@ -976,7 +984,7 @@ private fun PersonalBestsChart(solves: List<SolveTime>) {
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            SectionHeader(title = "Personal Best Progress")
+            SectionHeader(title = stringResource(R.string.stats_pb_progress))
 
             val data = pbData
             if (data == null) {
@@ -1025,7 +1033,7 @@ private fun PersonalBestsChart(solves: List<SolveTime>) {
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "No personal bests yet",
+                        text = stringResource(R.string.stats_no_pbs),
                         style = MaterialTheme.typography.bodyMedium,
                         color = onSurfaceVariant
                     )
@@ -1136,7 +1144,7 @@ private fun PersonalBestsChart(solves: List<SolveTime>) {
                                     shape = MaterialTheme.shapes.extraSmall
                                 ) {}
                                 Text(
-                                    text = "Single",
+                                    text = stringResource(R.string.stats_single),
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1184,7 +1192,7 @@ private fun PersonalBestsChart(solves: List<SolveTime>) {
 
 @Composable
 private fun SolveTimesChart(solves: List<SolveTime>) {
-    var selectedRange by remember { mutableStateOf("All") }
+    var selectedRange by remember { mutableStateOf(ChartRange.ALL) }
     val haptic = LocalHapticFeedback.current
     val rangeStartIndex = rangeStartIndex(solves.size, selectedRange)
     val visibleSolves = remember(solves, selectedRange) {
@@ -1205,7 +1213,7 @@ private fun SolveTimesChart(solves: List<SolveTime>) {
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            SectionHeader(title = "Solve Times")
+            SectionHeader(title = stringResource(R.string.stats_solve_times))
 
             if (visibleSolves.size < 2) {
                 Box(
@@ -1215,7 +1223,7 @@ private fun SolveTimesChart(solves: List<SolveTime>) {
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Complete more solves to see solve times",
+                        text = stringResource(R.string.stats_solve_times_empty),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1289,7 +1297,7 @@ private fun SolveTimesChart(solves: List<SolveTime>) {
 
 @Composable
 private fun AveragesChart(solves: List<SolveTime>) {
-    var selectedRange by remember { mutableStateOf("All") }
+    var selectedRange by remember { mutableStateOf(ChartRange.ALL) }
     val haptic = LocalHapticFeedback.current
 
     // calculateRollingAverages computes a trimmed-mean window for every solve; keep it off the
@@ -1310,7 +1318,7 @@ private fun AveragesChart(solves: List<SolveTime>) {
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            SectionHeader(title = "Progress Chart")
+            SectionHeader(title = stringResource(R.string.stats_progress_chart))
 
             val data = rollingAverages
             if (data == null) {
@@ -1328,16 +1336,8 @@ private fun AveragesChart(solves: List<SolveTime>) {
             val ao12List = data.ao12List
 
             // Filter data based on selected range
-            val displayAo5List = when (selectedRange) {
-                "Last 50" -> ao5List.takeLast(50)
-                "Last 100" -> ao5List.takeLast(100)
-                else -> ao5List
-            }
-            val displayAo12List = when (selectedRange) {
-                "Last 50" -> ao12List.takeLast(50)
-                "Last 100" -> ao12List.takeLast(100)
-                else -> ao12List
-            }
+            val displayAo5List = selectedRange.solveCount?.let { ao5List.takeLast(it) } ?: ao5List
+            val displayAo12List = selectedRange.solveCount?.let { ao12List.takeLast(it) } ?: ao12List
 
         val ao5Color = MaterialTheme.colorScheme.primary
         val ao12Color = MaterialTheme.colorScheme.tertiary
@@ -1355,7 +1355,7 @@ private fun AveragesChart(solves: List<SolveTime>) {
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "Complete 5 solves to see progress chart",
+                    text = stringResource(R.string.stats_progress_chart_empty),
                     style = MaterialTheme.typography.bodyMedium,
                     color = onSurfaceVariant
                 )
@@ -1496,39 +1496,36 @@ private fun AveragesChart(solves: List<SolveTime>) {
 
 @Composable
 private fun ChartRangeSelector(
-    selectedRange: String,
-    onRangeSelected: (String) -> Unit
+    selectedRange: ChartRange,
+    onRangeSelected: (ChartRange) -> Unit
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        ChartRangeOptions.forEach { range ->
+        ChartRange.entries.forEach { range ->
             FilterChip(
                 selected = selectedRange == range,
                 onClick = { onRangeSelected(range) },
                 shape = RoundedCornerShape(16.dp),
                 label = {
                     Text(
-                        text = range,
+                        text = range.solveCount?.let { stringResource(R.string.stats_range_last_n, it) }
+                            ?: stringResource(R.string.stats_range_all),
                         style = MaterialTheme.typography.labelSmall
                     )
                 }
             )
-            if (range != ChartRangeOptions.last()) {
+            if (range != ChartRange.entries.last()) {
                 Spacer(modifier = Modifier.width(8.dp))
             }
         }
     }
 }
 
-private fun rangeStartIndex(solveCount: Int, selectedRange: String): Int {
-    val visibleCount = when (selectedRange) {
-        "Last 50" -> 50
-        "Last 100" -> 100
-        else -> solveCount
-    }
+private fun rangeStartIndex(solveCount: Int, selectedRange: ChartRange): Int {
+    val visibleCount = selectedRange.solveCount ?: solveCount
     return (solveCount - visibleCount).coerceAtLeast(0)
 }
 
@@ -1615,7 +1612,7 @@ private fun PenaltyCard(
                 modifier = Modifier.fillMaxWidth()
             )
             Text(
-                text = "$count ${if (count == 1) "solve" else "solves"}",
+                text = pluralStringResource(R.plurals.solve_count, count, count),
                 style = MaterialTheme.typography.bodyMedium,
                 color = contentColor,
                 textAlign = TextAlign.Center,
@@ -1628,18 +1625,23 @@ private fun PenaltyCard(
 
 
 private val StatCardContentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
-private val ChartRangeOptions = listOf("Last 50", "Last 100", "All")
+
+/** How many of the latest solves a chart shows; null is all of them. */
+private enum class ChartRange(val solveCount: Int?) {
+    LAST_50(50),
+    LAST_100(100),
+    ALL(null)
+}
 
 private fun formatTime(millis: Long): String {
     return TimeFormatter.formatTime(millis)
 }
 
-private val timestampFormat by lazy {
-    SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
-}
-
 private fun formatTimestamp(timestamp: Long): String {
-    return timestampFormat.format(Date(timestamp))
+    // Not cached: the app's language can change while it runs (system per-app language setting).
+    val locale = Locale.getDefault()
+    val pattern = DateFormat.getBestDateTimePattern(locale, "MMMddyyyyHHmm")
+    return SimpleDateFormat(pattern, locale).format(Date(timestamp))
 }
 
 // Session calculation: group solves with max 1 hour gap between consecutive solves

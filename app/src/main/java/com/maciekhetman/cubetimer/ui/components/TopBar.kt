@@ -37,9 +37,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.maciekhetman.cubetimer.R
 import com.maciekhetman.cubetimer.model.Mode
 
 @Composable
@@ -59,7 +61,7 @@ fun TimerTopHeader(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "Timer",
+            text = stringResource(R.string.nav_timer),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold
         )
@@ -175,7 +177,7 @@ private fun ModeMenu(
             Spacer(modifier = Modifier.width(2.dp))
             Icon(
                 imageVector = Icons.Default.ArrowDropDown,
-                contentDescription = "Select mode",
+                contentDescription = stringResource(R.string.mode_select),
                 modifier = Modifier.size(16.dp)
             )
         }
@@ -199,7 +201,7 @@ private fun ModeMenu(
                         {
                             Icon(
                                 imageVector = Icons.Default.Check,
-                                contentDescription = "Selected mode"
+                                contentDescription = stringResource(R.string.mode_selected)
                             )
                         }
                     } else {
