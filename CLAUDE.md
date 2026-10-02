@@ -141,7 +141,7 @@ signed-in owners' session-less solves are left alone, as the server accepts them
 - Navigation is **not** `NavHost`-based (there is no navigation-compose dependency): `MainActivity` keeps a
   `rememberSaveable` `AppDestinations` enum and swaps screens inside an `AnimatedContent`, with a custom bottom
   pill nav and a `BackHandler`. The bottom bar shows TIMER / STATS / HISTORY / SETTINGS; back from any of them
-  returns to TIMER. There is no admin dashboard — `AuthState.Admin` only drives the account badge.
+  returns to TIMER. There is no admin dashboard — `AuthState.Admin` behaves like Authenticated and is not shown in the UI.
 - Settings is a Material 3 Expressive segmented list built from `SettingsComponents.kt` (same package):
   `SettingsSection` = header + a group of tiles 2dp apart whose outer corners the group clips, so rows shown
   conditionally (`AnimatedSettingsItem`) need no position bookkeeping; tiles round their corners up while pressed.

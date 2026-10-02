@@ -9,7 +9,6 @@
 
     <string name="account_sign_in">Zaloguj się</string>
     <string name="account_signed_in">Zalogowano</string>
-    <string name="account_signed_in_admin">Zalogowano · Administrator</string>
     <string name="account_guest_pitch">Zachowaj kopię ułożeń i synchronizuj je między urządzeniami</string>
 
     <string name="sync_cloud_sync">Synchronizacja w chmurze</string>

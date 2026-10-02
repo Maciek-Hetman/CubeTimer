@@ -9,7 +9,6 @@
 
     <string name="account_sign_in">Sign in</string>
     <string name="account_signed_in">Signed in</string>
-    <string name="account_signed_in_admin">Signed in · Admin</string>
     <string name="account_guest_pitch">Back up your solves and sync them across devices</string>
 
     <string name="sync_cloud_sync">Cloud Sync</string>
