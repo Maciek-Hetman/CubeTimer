@@ -39,6 +39,7 @@ class ShareableSolveCardDialogTest {
         )
 
         val shareText = SolveShareHelper.formatShareText(
+            resources = RuntimeEnvironment.getApplication().resources,
             solve = solve,
             isPb = true,
             pbDeltaText = "PB (-0.85s vs 12.40s)"
@@ -63,6 +64,7 @@ class ShareableSolveCardDialogTest {
         )
 
         val shareText = SolveShareHelper.formatShareText(
+            resources = RuntimeEnvironment.getApplication().resources,
             solve = solve,
             isPb = false,
             pbDeltaText = null
@@ -85,7 +87,12 @@ class ShareableSolveCardDialogTest {
             timingDevice = TimingDevice.EXTERNAL_TIMER
         )
 
-        val shareText = SolveShareHelper.formatShareText(solve = solve, isPb = false, pbDeltaText = null)
+        val shareText = SolveShareHelper.formatShareText(
+            resources = RuntimeEnvironment.getApplication().resources,
+            solve = solve,
+            isPb = false,
+            pbDeltaText = null
+        )
 
         assertTrue(shareText.contains("Timer: Bluetooth timer"))
         assertFalse(shareText.contains("Screen / Touch"))
@@ -103,6 +110,7 @@ class ShareableSolveCardDialogTest {
         )
 
         val shareText = SolveShareHelper.formatShareText(
+            resources = RuntimeEnvironment.getApplication().resources,
             solve = solve,
             isPb = false,
             pbDeltaText = null

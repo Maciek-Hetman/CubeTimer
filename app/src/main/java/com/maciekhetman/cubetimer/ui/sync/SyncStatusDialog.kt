@@ -1,5 +1,6 @@
 package com.maciekhetman.cubetimer.ui.sync
 
+import android.text.format.DateFormat
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -35,11 +36,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.maciekhetman.cubetimer.R
 import com.maciekhetman.cubetimer.model.SyncStatusType
 import com.maciekhetman.cubetimer.model.SyncUiState
 import com.maciekhetman.cubetimer.viewmodel.ConflictUiModel
+import java.text.SimpleDateFormat
+import java.time.Instant
+import java.util.Date
+import java.util.Locale
 
 /**
  * Cloud sync status, plus - for signed-in users - the list of unresolved sync [conflicts] with
@@ -82,7 +90,7 @@ fun SyncStatusDialog(
                     SyncStatusType.SYNCED -> {
                         Icon(
                             imageVector = Icons.Default.CloudDone,
-                            contentDescription = "Synced",
+                            contentDescription = stringResource(R.string.sync_status_synced),
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(28.dp)
                         )
@@ -90,7 +98,7 @@ fun SyncStatusDialog(
                     SyncStatusType.SYNCING -> {
                         Icon(
                             imageVector = Icons.Default.Sync,
-                            contentDescription = "Syncing",
+                            contentDescription = stringResource(R.string.sync_status_syncing),
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier
                                 .size(28.dp)
@@ -100,7 +108,7 @@ fun SyncStatusDialog(
                     SyncStatusType.OFFLINE -> {
                         Icon(
                             imageVector = Icons.Default.CloudOff,
-                            contentDescription = "Offline",
+                            contentDescription = stringResource(R.string.sync_status_offline),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(28.dp)
                         )
@@ -108,14 +116,14 @@ fun SyncStatusDialog(
                     SyncStatusType.ERROR -> {
                         Icon(
                             imageVector = Icons.Default.ErrorOutline,
-                            contentDescription = "Sync Error",
+                            contentDescription = stringResource(R.string.sync_status_error),
                             tint = MaterialTheme.colorScheme.error,
                             modifier = Modifier.size(28.dp)
                         )
                     }
                 }
                 Spacer(modifier = Modifier.width(10.dp))
-                Text("Cloud Synchronization")
+                Text(stringResource(R.string.sync_dialog_title))
             }
         },
         text = {
@@ -127,7 +135,7 @@ fun SyncStatusDialog(
             ) {
                 if (syncState.isGuest) {
                     Text(
-                        text = "You are currently in guest mode. Your solves and sessions are saved locally on this device.",
+                        text = stringResource(R.string.sync_dialog_guest),
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Spacer(modifier = Modifier.height(12.dp))
@@ -140,20 +148,22 @@ fun SyncStatusDialog(
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Text(
-                                text = "Sign in to back up your solves to the cloud and sync across all your devices.",
+                                text = stringResource(R.string.sync_dialog_guest_pitch),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSecondaryContainer
                             )
                         }
                     }
                 } else {
-                    val statusText = when (syncState.status) {
-                        SyncStatusType.SYNCED ->
-                            if (hasConflicts) "Some changes need your review." else "All data is up to date."
-                        SyncStatusType.SYNCING -> "Synchronizing changes with cloud..."
-                        SyncStatusType.OFFLINE -> "Device is offline. Changes will sync automatically when reconnected."
-                        SyncStatusType.ERROR -> "A synchronization error occurred."
-                    }
+                    val statusText = stringResource(
+                        when (syncState.status) {
+                            SyncStatusType.SYNCED ->
+                                if (hasConflicts) R.string.sync_dialog_needs_review else R.string.sync_dialog_up_to_date
+                            SyncStatusType.SYNCING -> R.string.sync_dialog_syncing
+                            SyncStatusType.OFFLINE -> R.string.sync_dialog_offline
+                            SyncStatusType.ERROR -> R.string.sync_dialog_error
+                        }
+                    )
 
                     Text(
                         text = statusText,
@@ -164,7 +174,7 @@ fun SyncStatusDialog(
 
                     if (syncState.lastSyncTime != null) {
                         Text(
-                            text = "Last synced: ${syncState.lastSyncTime}",
+                            text = stringResource(R.string.sync_dialog_last_synced, formatSyncTime(syncState.lastSyncTime)),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -172,7 +182,7 @@ fun SyncStatusDialog(
 
                     if (syncState.pendingCount > 0) {
                         Text(
-                            text = "Pending upload: ${syncState.pendingCount} change(s)",
+                            text = pluralStringResource(R.plurals.sync_dialog_pending, syncState.pendingCount, syncState.pendingCount),
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.primary
@@ -219,7 +229,7 @@ fun SyncStatusDialog(
                         onLoginClick()
                     }
                 ) {
-                    Text("Sign In")
+                    Text(stringResource(R.string.auth_sign_in))
                 }
             } else {
                 Button(
@@ -227,7 +237,7 @@ fun SyncStatusDialog(
                     onClick = onTriggerSync,
                     enabled = syncState.status != SyncStatusType.SYNCING
                 ) {
-                    Text("Sync Now")
+                    Text(stringResource(R.string.sync_dialog_sync_now))
                 }
             }
         },
@@ -236,9 +246,16 @@ fun SyncStatusDialog(
                 shape = RoundedCornerShape(20.dp),
                 onClick = onDismiss
             ) {
-                Text("Close")
+                Text(stringResource(R.string.action_close))
             }
         },
         modifier = modifier
     )
+}
+
+/** The stored ISO-8601 sync time in the app's language and the device's time zone; unparseable values as stored. */
+private fun formatSyncTime(iso: String): String {
+    val millis = runCatching { Instant.parse(iso).toEpochMilli() }.getOrNull() ?: return iso
+    val locale = Locale.getDefault()
+    return SimpleDateFormat(DateFormat.getBestDateTimePattern(locale, "yMMMdjmm"), locale).format(Date(millis))
 }

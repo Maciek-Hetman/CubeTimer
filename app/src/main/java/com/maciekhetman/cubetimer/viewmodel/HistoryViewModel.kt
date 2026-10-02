@@ -4,9 +4,12 @@ import android.app.Application
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import androidx.annotation.PluralsRes
+import androidx.annotation.StringRes
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.maciekhetman.cubetimer.CubeTimerApplication
+import com.maciekhetman.cubetimer.R
 import com.maciekhetman.cubetimer.data.SolvesRepository
 import com.maciekhetman.cubetimer.data.auth.AuthManager
 import com.maciekhetman.cubetimer.data.local.CubeDatabase
@@ -27,6 +30,7 @@ import com.maciekhetman.cubetimer.domain.csv.CsvExporter
 import com.maciekhetman.cubetimer.domain.csv.CsvImportStatus
 import com.maciekhetman.cubetimer.domain.csv.CsvImporter
 import com.maciekhetman.cubetimer.model.*
+import com.maciekhetman.cubetimer.ui.components.displaySessionName
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -592,12 +596,17 @@ class HistoryViewModel(
                     _sessionSolvesCache.update { cache ->
                         cache.mapValues { (_, sList) -> sList.filter { it.id !in selectedIds } }
                     }
-                    _effectsChannel.send(HistoryUiEffect.ShowUndoBatchDelete(deletedSolves = deleted))
+                    _effectsChannel.send(
+                        HistoryUiEffect.ShowUndoBatchDelete(
+                            deletedSolves = deleted,
+                            message = quantityText(R.plurals.history_deleted_solves, deleted.size)
+                        )
+                    )
                 } else {
-                    _effectsChannel.send(HistoryUiEffect.ShowMessage("No solves were deleted"))
+                    _effectsChannel.send(HistoryUiEffect.ShowMessage(text(R.string.history_no_solves_deleted)))
                 }
             } catch (e: Exception) {
-                reportFailure("Failed to delete solves", e)
+                reportFailure(R.string.history_error_delete_solves, e)
             }
         }
     }
@@ -624,9 +633,9 @@ class HistoryViewModel(
                     }
                     newCache
                 }
-                _effectsChannel.send(HistoryUiEffect.ShowMessage("Restored ${toRestore.size} solves"))
+                _effectsChannel.send(HistoryUiEffect.ShowMessage(quantityText(R.plurals.history_restored_solves, toRestore.size)))
             } catch (e: Exception) {
-                reportFailure("Failed to restore solves", e)
+                reportFailure(R.string.history_error_restore_solves, e)
             }
         }
     }
@@ -660,10 +669,10 @@ class HistoryViewModel(
                         )
                     )
                 } else {
-                    _effectsChannel.send(HistoryUiEffect.ShowMessage("Session not found or already deleted"))
+                    _effectsChannel.send(HistoryUiEffect.ShowMessage(text(R.string.history_session_not_found)))
                 }
             } catch (e: Exception) {
-                reportFailure("Failed to delete session", e)
+                reportFailure(R.string.history_error_delete_session, e)
             }
         }
     }
@@ -676,9 +685,9 @@ class HistoryViewModel(
                 if (lastDeletedSessionSnapshot?.session?.id == snapshot.session.id) {
                     lastDeletedSessionSnapshot = null
                 }
-                _effectsChannel.send(HistoryUiEffect.ShowMessage("Restored session '${snapshot.session.name}'"))
+                _effectsChannel.send(HistoryUiEffect.ShowMessage(text(R.string.history_session_restored, sessionName(snapshot.session.name))))
             } catch (e: Exception) {
-                reportFailure("Failed to restore session", e)
+                reportFailure(R.string.history_error_restore_session, e)
             }
         }
     }
@@ -706,15 +715,20 @@ class HistoryViewModel(
                 val deleted = solvesRepository.clearAllSolvesInScope(targetMode, currentOwner)
                 if (deleted.isNotEmpty()) {
                     lastClearedAllSolves = deleted
-                    _effectsChannel.send(HistoryUiEffect.ShowUndoClearAll(deletedSolves = deleted))
+                    _effectsChannel.send(
+                        HistoryUiEffect.ShowUndoClearAll(
+                            deletedSolves = deleted,
+                            message = quantityText(R.plurals.history_cleared_solves, deleted.size)
+                        )
+                    )
                 } else {
-                    _effectsChannel.send(HistoryUiEffect.ShowMessage("No solves to clear"))
+                    _effectsChannel.send(HistoryUiEffect.ShowMessage(text(R.string.history_no_solves_to_clear)))
                 }
             } catch (e: Exception) {
                 _selectedSolveIds.value = previousSelectedSolveIds
                 _selectedSolveDetail.value = previousSelectedDetail
                 _sessionSolvesCache.value = previousCache
-                reportFailure("Failed to clear history", e)
+                reportFailure(R.string.history_error_clear, e)
             }
         }
     }
@@ -728,9 +742,9 @@ class HistoryViewModel(
             try {
                 val ownerId = currentOwnerId
                 solvesRepository.restoreSolves(toRestore, ownerId)
-                _effectsChannel.send(HistoryUiEffect.ShowMessage("Restored ${toRestore.size} solves"))
+                _effectsChannel.send(HistoryUiEffect.ShowMessage(quantityText(R.plurals.history_restored_solves, toRestore.size)))
             } catch (e: Exception) {
-                reportFailure("Failed to restore solves", e)
+                reportFailure(R.string.history_error_restore_solves, e)
             }
         }
     }
@@ -783,12 +797,12 @@ class HistoryViewModel(
                     }
                 }
                 if (count > 0) {
-                    _effectsChannel.send(HistoryUiEffect.ShowMessage("Exported $count solves to CSV"))
+                    _effectsChannel.send(HistoryUiEffect.ShowMessage(quantityText(R.plurals.history_exported_solves, count)))
                 } else {
-                    _effectsChannel.send(HistoryUiEffect.ShowMessage("No solves to export in current scope"))
+                    _effectsChannel.send(HistoryUiEffect.ShowMessage(text(R.string.history_nothing_to_export)))
                 }
             } catch (e: Exception) {
-                reportFailure("Failed to export solves", e)
+                reportFailure(R.string.history_error_export, e)
             }
         }
     }
@@ -821,12 +835,16 @@ class HistoryViewModel(
                     }
                 }
                 if (count > 0) {
-                    _effectsChannel.send(HistoryUiEffect.ShowMessage("Exported $count solves from session '${session.name}' to CSV"))
+                    _effectsChannel.send(
+                        HistoryUiEffect.ShowMessage(quantityText(R.plurals.history_exported_session, count, sessionName(session.name)))
+                    )
                 } else {
-                    _effectsChannel.send(HistoryUiEffect.ShowMessage("No solves to export for session '${session.name}'"))
+                    _effectsChannel.send(
+                        HistoryUiEffect.ShowMessage(text(R.string.history_nothing_to_export_session, sessionName(session.name)))
+                    )
                 }
             } catch (e: Exception) {
-                reportFailure("Failed to export session", e)
+                reportFailure(R.string.history_error_export_session, e)
             }
         }
     }
@@ -852,7 +870,7 @@ class HistoryViewModel(
             try {
                 val selectedCount = _selectedSolveIds.value.size
                 if (selectedCount == 0) {
-                    _effectsChannel.send(HistoryUiEffect.ShowMessage("No solves selected for export"))
+                    _effectsChannel.send(HistoryUiEffect.ShowMessage(text(R.string.history_nothing_selected_to_export)))
                     return@launch
                 }
 
@@ -866,12 +884,12 @@ class HistoryViewModel(
 
                 _selectedSolveIds.value = emptySet()
                 if (count > 0) {
-                    _effectsChannel.send(HistoryUiEffect.ShowMessage("Exported $count selected solves to CSV"))
+                    _effectsChannel.send(HistoryUiEffect.ShowMessage(quantityText(R.plurals.history_exported_selected, count)))
                 } else {
-                    _effectsChannel.send(HistoryUiEffect.ShowMessage("Selected solves not found"))
+                    _effectsChannel.send(HistoryUiEffect.ShowMessage(text(R.string.history_selected_not_found)))
                 }
             } catch (e: Exception) {
-                reportFailure("Failed to export selected solves", e)
+                reportFailure(R.string.history_error_export_selected, e)
             }
         }
     }
@@ -895,28 +913,32 @@ class HistoryViewModel(
                 when (status) {
                     is CsvImportStatus.Success -> {
                         val message = buildString {
-                            append("Imported ${status.importedCount} solves")
+                            append(quantityText(R.plurals.history_imported_solves, status.importedCount))
                             if (status.duplicateCount > 0) {
-                                append(" (${status.duplicateCount} duplicates skipped)")
+                                append(" (")
+                                append(quantityText(R.plurals.history_import_duplicates_skipped, status.duplicateCount))
+                                append(")")
                             }
                             if (status.malformedCount > 0) {
-                                append(" (${status.malformedCount} malformed rows skipped)")
+                                append(" (")
+                                append(quantityText(R.plurals.history_import_malformed_skipped, status.malformedCount))
+                                append(")")
                             }
                         }
                         _effectsChannel.send(HistoryUiEffect.ShowMessage(message))
                     }
                     is CsvImportStatus.EmptyFile -> {
-                        _effectsChannel.send(HistoryUiEffect.ShowMessage("CSV file is empty"))
+                        _effectsChannel.send(HistoryUiEffect.ShowMessage(text(R.string.history_import_empty)))
                     }
                     is CsvImportStatus.InvalidFile -> {
-                        _effectsChannel.send(HistoryUiEffect.ShowMessage("Invalid CSV file: ${status.reason}"))
+                        _effectsChannel.send(HistoryUiEffect.ShowMessage(text(R.string.history_import_invalid, invalidCsvReason(status))))
                     }
                     is CsvImportStatus.Error -> {
-                        reportFailure("CSV import failed", status.throwable)
+                        reportFailure(R.string.history_error_import_csv, status.throwable)
                     }
                 }
             } catch (e: Exception) {
-                reportFailure("Failed to import solves", e)
+                reportFailure(R.string.history_error_import, e)
             }
         }
     }
@@ -1041,7 +1063,7 @@ class HistoryViewModel(
                         pbResult = revertedPbResult
                     )
                 }
-                reportFailure("Failed to update penalty", e)
+                reportFailure(R.string.history_error_update_penalty, e)
             }
         }
     }
@@ -1068,7 +1090,7 @@ class HistoryViewModel(
                 solvesRepository.deleteSolve(solve, ownerId = ownerId)
                 _effectsChannel.send(
                     HistoryUiEffect.ShowUndoSnackbar(
-                        message = "Solve deleted",
+                        message = text(R.string.history_solve_deleted),
                         solve = solve,
                         originalIndex = originalIndex
                     )
@@ -1083,7 +1105,7 @@ class HistoryViewModel(
                         } else cache
                     }
                 }
-                reportFailure("Failed to delete solve", e)
+                reportFailure(R.string.history_error_delete_solve, e)
             }
         }
     }
@@ -1111,7 +1133,7 @@ class HistoryViewModel(
                         cache + (sId to existing.filter { it.id != solve.id })
                     }
                 }
-                reportFailure("Failed to restore solve", e)
+                reportFailure(R.string.history_error_restore_solve, e)
             }
         }
     }
@@ -1161,9 +1183,29 @@ class HistoryViewModel(
     }
 
     /** Shows a fixed, human-readable [message] and keeps the technical detail in the log. */
-    private suspend fun reportFailure(message: String, error: Throwable) {
+    private suspend fun reportFailure(@StringRes messageRes: Int, error: Throwable) {
+        val message = text(messageRes)
         Log.e(TAG, message, error)
         _effectsChannel.send(HistoryUiEffect.ShowMessage(message))
+    }
+
+    private fun text(@StringRes id: Int, vararg args: Any): String =
+        getApplication<Application>().getString(id, *args)
+
+    /** [count] is both the plural selector and the first format argument. */
+    private fun quantityText(@PluralsRes id: Int, count: Int, vararg args: Any): String =
+        getApplication<Application>().resources.getQuantityString(id, count, count, *args)
+
+    private fun sessionName(name: String): String =
+        displaySessionName(getApplication<Application>().resources, name)
+
+    private fun invalidCsvReason(status: CsvImportStatus.InvalidFile): String = when (status.problem) {
+        CsvImportStatus.InvalidFile.Problem.MISSING_HEADER_ROW -> text(R.string.csv_problem_missing_header_row)
+        CsvImportStatus.InvalidFile.Problem.INVALID_COMMENT -> text(R.string.csv_problem_invalid_comment)
+        CsvImportStatus.InvalidFile.Problem.MISSING_SOURCE_COMMENT -> text(R.string.csv_problem_missing_source_comment)
+        CsvImportStatus.InvalidFile.Problem.MISSING_COLUMNS ->
+            text(R.string.csv_problem_missing_columns, status.missingColumns.joinToString())
+        CsvImportStatus.InvalidFile.Problem.OTHER -> status.reason
     }
 
     private companion object {

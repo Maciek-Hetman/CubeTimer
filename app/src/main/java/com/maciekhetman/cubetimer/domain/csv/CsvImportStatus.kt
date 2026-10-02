@@ -31,7 +31,17 @@ sealed interface CsvImportStatus {
         val sessionsCreatedCount: Int
     ) : CsvImportStatus
 
-    data class InvalidFile(val reason: String) : CsvImportStatus
+    /**
+     * [reason] describes the problem in English (logs, tests); [problem] and [missingColumns] let the UI
+     * word it in the user's language.
+     */
+    data class InvalidFile(
+        val reason: String,
+        val problem: Problem = Problem.OTHER,
+        val missingColumns: List<String> = emptyList()
+    ) : CsvImportStatus {
+        enum class Problem { MISSING_HEADER_ROW, INVALID_COMMENT, MISSING_SOURCE_COMMENT, MISSING_COLUMNS, OTHER }
+    }
     data object EmptyFile : CsvImportStatus
     data class Error(val throwable: Throwable) : CsvImportStatus
 }

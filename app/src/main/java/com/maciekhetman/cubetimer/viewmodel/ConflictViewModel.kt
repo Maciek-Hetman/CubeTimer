@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.maciekhetman.cubetimer.CubeTimerApplication
+import com.maciekhetman.cubetimer.R
 import com.maciekhetman.cubetimer.data.auth.AuthManager
 import com.maciekhetman.cubetimer.data.remote.NetworkModule
 import com.maciekhetman.cubetimer.data.sync.SyncEngine
@@ -55,7 +56,10 @@ class ConflictViewModel(
             val user = auth.currentUser
             if (user != null) {
                 syncEngine.observeUnresolvedConflicts(user.id)
-                    .map { list -> list.map { ConflictUiMapper.map(it, json) } }
+                    .map { list ->
+                        val labels = ConflictLabels.from(getApplication<Application>().resources)
+                        list.map { ConflictUiMapper.map(it, json, labels = labels) }
+                    }
             } else {
                 flowOf(emptyList())
             }
@@ -94,7 +98,7 @@ class ConflictViewModel(
             if (resolved) {
                 onResolved()
             } else {
-                _errorMessage.value = "Couldn't resolve the conflict. Try again."
+                _errorMessage.value = getApplication<Application>().getString(R.string.sync_conflict_resolve_failed)
             }
         }
     }

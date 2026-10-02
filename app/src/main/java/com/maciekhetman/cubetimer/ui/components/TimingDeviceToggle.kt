@@ -31,10 +31,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.maciekhetman.cubetimer.R
 import com.maciekhetman.cubetimer.data.bluetooth.BluetoothTimerStatus
 import com.maciekhetman.cubetimer.model.TimingDevice
 import com.maciekhetman.cubetimer.ui.bluetooth.bluetoothStatusLabel
@@ -84,8 +86,8 @@ fun TimingDeviceToggle(
                 selected = !bluetoothSelected,
                 enabled = enabled,
                 icon = Icons.Filled.TouchApp,
-                label = "Touch",
-                contentDescription = "Touch timing",
+                label = stringResource(R.string.timing_device_touch),
+                contentDescription = stringResource(R.string.timing_device_touch_a11y),
                 onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     onDeviceClick(TimingDevice.KEYBOARD)
@@ -95,11 +97,11 @@ fun TimingDeviceToggle(
                 selected = bluetoothSelected,
                 enabled = enabled,
                 icon = bluetoothIcon,
-                label = "Bluetooth",
+                label = stringResource(R.string.timing_device_bluetooth),
                 contentDescription = if (bluetoothSelected) {
-                    "Bluetooth timer, ${bluetoothStatusLabel(bluetoothStatus)}"
+                    stringResource(R.string.timing_device_bluetooth_a11y_status, bluetoothStatusLabel(bluetoothStatus))
                 } else {
-                    "Bluetooth timer"
+                    stringResource(R.string.bluetooth_timer)
                 },
                 isError = bluetoothUnavailable,
                 onClick = {

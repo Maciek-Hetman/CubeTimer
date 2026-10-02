@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_export">Export</string>
+
+    <string-array name="session_name_months">
+        <item>jan</item>
+        <item>feb</item>
+        <item>mar</item>
+        <item>apr</item>
+        <item>may</item>
+        <item>jun</item>
+        <item>jul</item>
+        <item>aug</item>
+        <item>sep</item>
+        <item>oct</item>
+        <item>nov</item>
+        <item>dec</item>
+    </string-array>
+    <string name="session_name_morning">morning</string>
+    <string name="session_name_afternoon">afternoon</string>
+    <string name="session_name_evening">evening</string>
+    <string name="session_name_night">night</string>
+
+    <string name="session_no_solves">No solves in this session</string>
+    <string name="session_no_matching_solves">No solves match your filters</string>
+    <string name="session_best">Best</string>
+    <string name="session_average">Average</string>
+    <string name="session_collapse">Collapse session</string>
+    <string name="session_expand">Expand session</string>
+
+    <string name="activity_title">Activity</string>
+    <string name="activity_less">Less</string>
+    <string name="activity_more">More</string>
+
+    <string name="timing_device_touch_a11y">Touch timing</string>
+    <string name="timing_device_bluetooth_a11y_status">Bluetooth timer, %s</string>
+
+    <plurals name="selection_count">
+        <item quantity="one">%d selected</item>
+        <item quantity="other">%d selected</item>
+    </plurals>
+    <string name="selection_cancel">Cancel selection</string>
+    <string name="selection_select_all">Select All</string>
+    <string name="selection_deselect_all">Deselect All</string>
+    <string name="selection_export">Export selected solves</string>
+    <string name="selection_delete">Delete selected solves</string>
+
+    <string name="mode_select">Select mode</string>
+    <string name="mode_selected">Selected mode</string>
+
+    <string name="stats_filter_all_time">All Time (%d)</string>
+    <string name="stats_filter_active_session">Active Session (%d)</string>
+    <string name="stats_current_ao5">Current Ao5</string>
+    <string name="stats_current_ao12">Current Ao12</string>
+    <string name="stats_session_best">Session Best</string>
+    <string name="stats_session_worst">Session Worst</string>
+</resources>

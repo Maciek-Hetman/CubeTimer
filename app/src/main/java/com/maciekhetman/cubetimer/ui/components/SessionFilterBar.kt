@@ -18,7 +18,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.maciekhetman.cubetimer.R
 import com.maciekhetman.cubetimer.model.Session
 import com.maciekhetman.cubetimer.model.StatsFilter
 
@@ -54,7 +56,7 @@ fun SessionFilterBar(
             shape = RoundedCornerShape(16.dp),
             label = {
                 Text(
-                    text = "All Time ($allSolvesCount)",
+                    text = stringResource(R.string.stats_filter_all_time, allSolvesCount),
                     style = MaterialTheme.typography.labelMedium
                 )
             },
@@ -75,7 +77,7 @@ fun SessionFilterBar(
             shape = RoundedCornerShape(16.dp),
             label = {
                 Text(
-                    text = "Active Session ($activeSessionSolvesCount)",
+                    text = stringResource(R.string.stats_filter_active_session, activeSessionSolvesCount),
                     style = MaterialTheme.typography.labelMedium
                 )
             },
@@ -97,7 +99,7 @@ fun SessionFilterBar(
                 shape = RoundedCornerShape(16.dp),
                 label = {
                     Text(
-                        text = currentFilter.sessionName,
+                        text = displaySessionName(currentFilter.sessionName),
                         style = MaterialTheme.typography.labelMedium
                     )
                 },

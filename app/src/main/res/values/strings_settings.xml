@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nav_timer">Timer</string>
+    <string name="nav_stats">Stats</string>
+    <string name="nav_history">History</string>
+    <string name="nav_settings">Settings</string>
+
+    <string name="error_no_app_for_link">No app available to open this link</string>
+
+    <string name="account_sign_in">Sign in</string>
+    <string name="account_signed_in">Signed in</string>
+    <string name="account_signed_in_admin">Signed in · Admin</string>
+    <string name="account_guest_pitch">Back up your solves and sync them across devices</string>
+
+    <string name="sync_cloud_sync">Cloud Sync</string>
+    <string name="sync_status_synced">Synced</string>
+    <string name="sync_status_syncing">Syncing…</string>
+    <string name="sync_status_offline">Offline</string>
+    <plurals name="sync_status_offline_pending">
+        <item quantity="one">Offline (%d pending)</item>
+        <item quantity="other">Offline (%d pending)</item>
+    </plurals>
+    <string name="sync_status_error">Sync error</string>
+    <plurals name="sync_conflicts_need_attention">
+        <item quantity="one">%d conflict needs attention</item>
+        <item quantity="other">%d conflicts need attention</item>
+    </plurals>
+
+    <string name="settings_section_timing">Timing</string>
+    <string name="settings_timing_device">Timing device</string>
+    <string name="settings_bluetooth_unsupported">Bluetooth timers aren\'t supported on this device</string>
+    <string name="timing_device_touch">Touch</string>
+    <string name="timing_device_bluetooth">Bluetooth</string>
+    <string name="settings_start_delay">Start delay</string>
+    <string name="settings_inspection">Inspection</string>
+    <string name="settings_touch_only_note">Not used with a Bluetooth timer</string>
+    <string name="bluetooth_timer">Bluetooth timer</string>
+
+    <string name="settings_section_while_solving">While solving</string>
+    <string name="settings_focus_mode">Focus mode</string>
+    <string name="settings_focus_mode_summary">Blank screen while the timer runs</string>
+    <string name="settings_focus_mode_note">Focus mode hides everything</string>
+    <string name="settings_running_time">Running time</string>
+    <string name="settings_running_time_hidden">Hidden</string>
+    <string name="running_timer_display_full">Show decimals</string>
+    <string name="running_timer_display_seconds">Hide decimals</string>
+    <string name="running_timer_display_hidden">Hide timer</string>
+    <string name="settings_show_while_solving">Show while solving</string>
+    <string name="settings_overlay_scramble">Scramble</string>
+    <string name="settings_overlay_averages">Averages</string>
+    <string name="settings_overlay_last_results">Last results</string>
+
+    <string name="settings_section_timer_screen">Timer screen</string>
+    <string name="settings_scramble_size">Scramble size</string>
+    <string name="settings_value_percent">%d%%</string>
+    <string name="settings_value_millis">%dms</string>
+    <string name="settings_new_scramble_button">New scramble button</string>
+    <string name="settings_averages">Averages</string>
+    <string name="average_of_n">Ao%d</string>
+    <string name="settings_last_results">Last results</string>
+    <string name="settings_start_hint">Start hint</string>
+
+    <string name="settings_section_appearance">Appearance</string>
+    <string name="settings_dynamic_color">Dynamic color</string>
+    <string name="settings_amoled">AMOLED dark</string>
+    <string name="settings_amoled_unavailable">Not available with dynamic color</string>
+    <string name="settings_amoled_summary">Pure black background in dark theme</string>
+
+    <string name="settings_section_general">General</string>
+    <string name="settings_default_puzzle">Default puzzle</string>
+    <string name="settings_haptics">Haptic feedback</string>
+
+    <string name="settings_section_about">About</string>
+    <string name="settings_version">Version</string>
+    <string name="settings_website">Website</string>
+    <string name="settings_source_code">Source code</string>
+    <string name="settings_report_problem">Report a problem</string>
+    <string name="settings_privacy_policy">Privacy policy</string>
+    <string name="settings_licenses">Open-source licenses</string>
+    <string name="settings_delete_account_web">Delete account on the web</string>
+</resources>

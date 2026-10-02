@@ -3,8 +3,10 @@ package com.maciekhetman.cubetimer.viewmodel
 import android.app.Application
 import android.os.SystemClock
 import android.util.Log
+import androidx.annotation.StringRes
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.maciekhetman.cubetimer.R
 import com.maciekhetman.cubetimer.data.SettingsRepository
 import com.maciekhetman.cubetimer.data.SolvesRepository
 import com.maciekhetman.cubetimer.data.auth.AuthManager
@@ -202,7 +204,7 @@ class TimerViewModel(
     private fun launchWrite(
         ownerId: String,
         ids: Collection<String>,
-        errorMessage: String,
+        @StringRes errorMessage: Int,
         write: suspend () -> Unit
     ) {
         viewModelScope.launch {
@@ -223,7 +225,8 @@ class TimerViewModel(
      * that never reached the DB produces no emission, so the optimistic change would otherwise stay
      * on screen until some unrelated write.
      */
-    private fun onWriteFailed(ownerId: String, ids: Collection<String>, message: String, error: Exception) {
+    private fun onWriteFailed(ownerId: String, ids: Collection<String>, @StringRes messageRes: Int, error: Exception) {
+        val message = getApplication<Application>().getString(messageRes)
         Log.e(TAG, message, error)
         ids.forEach { pendingWrites.remove(it) }
         if (ownerId == authManager.currentOwnerId) {
@@ -624,7 +627,7 @@ class TimerViewModel(
                     settlePending(pendingIds)
                     throw e
                 } catch (e: Exception) {
-                    onWriteFailed(ownerId, pendingIds, "Couldn't save the solve", e)
+                    onWriteFailed(ownerId, pendingIds, R.string.timer_error_save, e)
                 }
             }
         }
@@ -663,7 +666,7 @@ class TimerViewModel(
         val ownerId = authManager.currentOwnerId
         markPendingDeletes(ownerId, listOf(solve.id))
         publishSolves(_allSolves.value.filter { it.id != solve.id })
-        launchWrite(ownerId, listOf(solve.id), "Couldn't delete the solve") {
+        launchWrite(ownerId, listOf(solve.id), R.string.timer_error_delete) {
             repository.deleteSolve(solve, ownerId = ownerId)
         }
     }
@@ -676,7 +679,7 @@ class TimerViewModel(
         }
         markPendingUpserts(ownerId, listOf(updated))
         publishSolves(newAllSolves)
-        launchWrite(ownerId, listOf(solve.id), "Couldn't update the solve") {
+        launchWrite(ownerId, listOf(solve.id), R.string.timer_error_update) {
             repository.updateSolvePenalty(solve, penalty, ownerId = ownerId)
         }
     }
@@ -690,7 +693,7 @@ class TimerViewModel(
         val clearedIds = _allSolves.value.map { it.id }
         markPendingDeletes(ownerId, clearedIds)
         publishSolves(emptyList())
-        launchWrite(ownerId, clearedIds, "Couldn't delete the solves") {
+        launchWrite(ownerId, clearedIds, R.string.timer_error_delete_many) {
             repository.clearAllSolves(ownerId = ownerId)
         }
     }
@@ -700,7 +703,7 @@ class TimerViewModel(
         val toRestoreIds = previous.map { it.id }.toSet()
         markPendingUpserts(ownerId, previous)
         publishSolves((_allSolves.value.filter { it.id !in toRestoreIds } + previous).sortedBy { it.timestamp })
-        launchWrite(ownerId, toRestoreIds, "Couldn't restore the solves") {
+        launchWrite(ownerId, toRestoreIds, R.string.timer_error_restore) {
             repository.restoreSolves(previous, ownerId = ownerId)
         }
     }

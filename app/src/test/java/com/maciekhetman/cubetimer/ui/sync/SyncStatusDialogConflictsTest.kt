@@ -1,5 +1,6 @@
 package com.maciekhetman.cubetimer.ui.sync
 
+import android.content.Context
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -11,6 +12,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.test.core.app.ApplicationProvider
 import com.maciekhetman.cubetimer.model.SyncStatusType
 import com.maciekhetman.cubetimer.model.SyncUiState
 import com.maciekhetman.cubetimer.viewmodel.ConflictSideUi
@@ -28,6 +30,8 @@ class SyncStatusDialogConflictsTest {
 
     @get:Rule
     val composeTestRule = createComposeRule()
+
+    private val resources get() = ApplicationProvider.getApplicationContext<Context>().resources
 
     private val signedIn = SyncUiState(status = SyncStatusType.SYNCED, isGuest = false, conflictCount = 2)
 
@@ -172,7 +176,7 @@ class SyncStatusDialogConflictsTest {
 
     @Test
     fun conflictLabelPluralization() {
-        assertEquals("1 conflict needs review", syncConflictLabel(1))
-        assertEquals("3 conflicts need review", syncConflictLabel(3))
+        assertEquals("1 conflict needs review", syncConflictLabel(resources, 1))
+        assertEquals("3 conflicts need review", syncConflictLabel(resources, 3))
     }
 }

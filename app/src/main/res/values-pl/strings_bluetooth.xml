@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="bt_status_unsupported">Nieobsługiwane na tym urządzeniu</string>
+    <string name="bt_status_disconnected">Nie połączono</string>
+    <string name="bt_status_searching">Wyszukiwanie…</string>
+    <string name="bt_status_connecting">Łączenie…</string>
+
+    <string name="bt_dialog_unsupported">To urządzenie nie obsługuje Bluetooth Low Energy.</string>
+    <string name="bt_dialog_connected">Połączono z %1$s (%2$s). Połóż obie dłonie na timerze, aby rozpocząć ułożenie.</string>
+    <string name="bt_dialog_connecting">Łączenie z %s…</string>
+    <string name="bt_dialog_permission_denied">Odmówiono uprawnienia Bluetooth. Zezwól na nie w ustawieniach systemu, aby używać timera Bluetooth.</string>
+    <string name="bt_disconnect">Rozłącz</string>
+    <string name="bt_search">Szukaj</string>
+    <string name="bt_dialog_looking">Szukanie timerów GAN i QiYi…</string>
+    <string name="bt_dialog_none_found">Nie znaleziono timerów.</string>
+    <string name="bt_dialog_tap_to_connect">Dotknij swojego timera, aby się połączyć.</string>
+    <string name="bt_dialog_scan_hint">Włącz timer i trzymaj go blisko telefonu.</string>
+    <string name="bt_dialog_scan_hint_location">Włącz timer i trzymaj go blisko telefonu. W tej wersji Androida do wyszukiwania urządzeń Bluetooth musi być też włączona lokalizacja.</string>
+
+    <string name="bt_error_scan_failed">Wyszukiwanie Bluetooth nie powiodło się (kod %d)</string>
+    <string name="bt_error_scan_permission">Do znalezienia timera potrzebne jest uprawnienie Bluetooth</string>
+    <string name="bt_error_turn_on">Włącz Bluetooth, aby znaleźć timer</string>
+    <string name="bt_error_permission_denied">Odmówiono uprawnienia Bluetooth</string>
+    <string name="bt_error_connect_permission">Do połączenia z timerem potrzebne jest uprawnienie Bluetooth</string>
+    <string name="bt_error_timer_not_found">Nie znaleziono timera. Wyszukaj ponownie i upewnij się, że jest włączony.</string>
+    <string name="bt_error_qiyi_address">Nie udało się odczytać adresu tego timera QiYi</string>
+    <string name="bt_error_connect_failed">Nie udało się połączyć z %s</string>
+    <string name="bt_error_unsupported_device">%s nie wygląda na obsługiwany timer</string>
+    <string name="bt_error_services">Nie udało się odczytać usług urządzenia %s</string>
+</resources>

@@ -1,10 +1,12 @@
 package com.maciekhetman.cubetimer.ui.screens
 
+import android.content.Context
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.test.core.app.ApplicationProvider
 import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.SyncStatusType
 import com.maciekhetman.cubetimer.model.SyncUiState
@@ -101,8 +103,9 @@ class SettingsAccountSectionTest {
 
     @Test
     fun hintLabelPluralization() {
-        assertEquals("1 conflict needs attention", syncConflictHint(1))
-        assertEquals("2 conflicts need attention", syncConflictHint(2))
-        assertEquals("12 conflicts need attention", syncConflictHint(12))
+        val resources = ApplicationProvider.getApplicationContext<Context>().resources
+        assertEquals("1 conflict needs attention", syncConflictHint(resources, 1))
+        assertEquals("2 conflicts need attention", syncConflictHint(resources, 2))
+        assertEquals("12 conflicts need attention", syncConflictHint(resources, 12))
     }
 }

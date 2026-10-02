@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="bt_status_unsupported">Not supported on this device</string>
+    <string name="bt_status_disconnected">Not connected</string>
+    <string name="bt_status_searching">Searching…</string>
+    <string name="bt_status_connecting">Connecting…</string>
+
+    <string name="bt_dialog_unsupported">This device doesn\'t support Bluetooth Low Energy.</string>
+    <string name="bt_dialog_connected">Connected to %1$s (%2$s). Put both hands on the timer to start a solve.</string>
+    <string name="bt_dialog_connecting">Connecting to %s…</string>
+    <string name="bt_dialog_permission_denied">Bluetooth permission was denied. Allow it in system settings to use a Bluetooth timer.</string>
+    <string name="bt_disconnect">Disconnect</string>
+    <string name="bt_search">Search</string>
+    <string name="bt_dialog_looking">Looking for GAN and QiYi timers…</string>
+    <string name="bt_dialog_none_found">No timers found.</string>
+    <string name="bt_dialog_tap_to_connect">Tap your timer to connect.</string>
+    <string name="bt_dialog_scan_hint">Switch the timer on and keep it close to the phone.</string>
+    <string name="bt_dialog_scan_hint_location">Switch the timer on and keep it close to the phone. On this Android version, Location must also be turned on for Bluetooth scanning.</string>
+
+    <string name="bt_error_scan_failed">Bluetooth scan failed (code %d)</string>
+    <string name="bt_error_scan_permission">Bluetooth permission is required to find your timer</string>
+    <string name="bt_error_turn_on">Turn on Bluetooth to find your timer</string>
+    <string name="bt_error_permission_denied">Bluetooth permission was denied</string>
+    <string name="bt_error_connect_permission">Bluetooth permission is required to connect to your timer</string>
+    <string name="bt_error_timer_not_found">Timer not found. Scan again and make sure it is switched on.</string>
+    <string name="bt_error_qiyi_address">Couldn\'t read this QiYi timer\'s address</string>
+    <string name="bt_error_connect_failed">Couldn\'t connect to %s</string>
+    <string name="bt_error_unsupported_device">%s doesn\'t look like a supported timer</string>
+    <string name="bt_error_services">Couldn\'t read %s\'s services</string>
+</resources>

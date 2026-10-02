@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_share">Share</string>
+
+    <string name="timing_device_label_touch">Screen / Touch</string>
+    <string name="timing_device_label_smart_cube">Smart cube</string>
+
+    <string name="pb_delta">PB (-%1$ss vs %2$ss)</string>
+    <string name="pb_first_solve">PB (First solve)</string>
+    <string name="share_solve_number">Solve #%d</string>
+    <string name="share_timer">Timer: %s</string>
+    <string name="share_failed">Could not share solve</string>
+    <string name="share_title">CubeTimer Solve</string>
+    <string name="share_chooser_title">Share Solve</string>
+    <string name="share_text_title">CubeTimer - %s Solve</string>
+    <string name="share_text_time">Time: %s</string>
+    <string name="share_text_scramble">Scramble: %s</string>
+    <string name="share_text_date">Date: %s</string>
+</resources>

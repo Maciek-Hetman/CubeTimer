@@ -2,8 +2,10 @@ package com.maciekhetman.cubetimer.viewmodel
 
 import android.app.Application
 import android.util.Log
+import androidx.annotation.StringRes
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.maciekhetman.cubetimer.R
 import com.maciekhetman.cubetimer.data.auth.AuthManager
 import com.maciekhetman.cubetimer.data.auth.AuthResult
 import com.maciekhetman.cubetimer.model.AuthException
@@ -137,7 +139,7 @@ class AuthViewModel(
                         it.copy(
                             isLoading = false,
                             dialogType = AuthDialogType.EMAIL_VERIFICATION,
-                            successMessage = "Account created.",
+                            successMessage = text(R.string.auth_msg_account_created),
                             password = "",
                             confirmPassword = ""
                         )
@@ -167,7 +169,7 @@ class AuthViewModel(
                     _formState.update {
                         it.copy(
                             isLoading = false,
-                            successMessage = "Verification email sent. Check your inbox."
+                            successMessage = text(R.string.auth_msg_verification_sent)
                         )
                     }
                 }
@@ -188,7 +190,7 @@ class AuthViewModel(
         val state = _formState.value
         if (state.isLoading) return
         if (state.token.isBlank()) {
-            _formState.update { it.copy(tokenError = "Verification token is required") }
+            _formState.update { it.copy(tokenError = text(R.string.auth_msg_verification_token_required)) }
             return
         }
 
@@ -219,7 +221,7 @@ class AuthViewModel(
     fun submitForgotPassword() {
         val state = _formState.value
         if (!validateEmail(state.email)) {
-            _formState.update { it.copy(emailError = "Please enter a valid email address") }
+            _formState.update { it.copy(emailError = text(R.string.auth_error_invalid_email)) }
             return
         }
 
@@ -350,9 +352,9 @@ class AuthViewModel(
                             isLoading = false,
                             dialogType = if (stillSignedIn) AuthDialogType.USER_PROFILE else AuthDialogType.LOGIN,
                             successMessage = if (stillSignedIn) {
-                                "Password changed."
+                                text(R.string.auth_msg_password_changed)
                             } else {
-                                "Password changed. Sign in again with your new password."
+                                text(R.string.auth_msg_password_changed_sign_in)
                             },
                             email = if (stillSignedIn) it.email else email ?: it.email,
                             currentPassword = "",
@@ -368,14 +370,13 @@ class AuthViewModel(
                             // Not the login wording: here it is the current password that is wrong.
                             ex is AuthException.InvalidCredentials -> {
                                 Log.w(TAG, "Password change refused: current password rejected")
-                                it.copy(isLoading = false, currentPasswordError = "Current password is incorrect.")
+                                it.copy(isLoading = false, currentPasswordError = text(R.string.auth_msg_current_password_incorrect))
                             }
                             ex is AuthException.ApiError && ex.errorCode == "password_not_set" -> {
                                 Log.w(TAG, "Password change refused: account has no password")
                                 it.copy(
                                     isLoading = false,
-                                    errorMessage = "This account has no password yet. " +
-                                        "Use \"Forgot password?\" on the sign-in screen to set one."
+                                    errorMessage = text(R.string.auth_msg_password_not_set)
                                 )
                             }
                             else -> it.copy(isLoading = false, errorMessage = reportError(ex))
@@ -397,7 +398,7 @@ class AuthViewModel(
         viewModelScope.launch {
             _formState.update { it.copy(isLoading = true) }
             authManager.adoptGuestData(user.id)
-            _formState.update { it.copy(isLoading = false, successMessage = "Local solves imported successfully") }
+            _formState.update { it.copy(isLoading = false, successMessage = text(R.string.auth_msg_local_solves_imported)) }
         }
     }
 
@@ -411,11 +412,11 @@ class AuthViewModel(
     private fun validateLoginForm(state: AuthFormState): Boolean {
         var valid = true
         if (!validateEmail(state.email)) {
-            _formState.update { it.copy(emailError = "Valid email is required") }
+            _formState.update { it.copy(emailError = text(R.string.auth_msg_email_required)) }
             valid = false
         }
         if (state.password.isBlank()) {
-            _formState.update { it.copy(passwordError = "Password is required") }
+            _formState.update { it.copy(passwordError = text(R.string.auth_msg_password_required)) }
             valid = false
         }
         return valid
@@ -424,15 +425,15 @@ class AuthViewModel(
     private fun validateRegisterForm(state: AuthFormState): Boolean {
         var valid = true
         if (!validateEmail(state.email)) {
-            _formState.update { it.copy(emailError = "Valid email is required") }
+            _formState.update { it.copy(emailError = text(R.string.auth_msg_email_required)) }
             valid = false
         }
         if (state.password.length < 10) {
-            _formState.update { it.copy(passwordError = "Password must be at least 10 characters") }
+            _formState.update { it.copy(passwordError = text(R.string.auth_msg_password_too_short)) }
             valid = false
         }
         if (state.password != state.confirmPassword) {
-            _formState.update { it.copy(confirmPasswordError = "Passwords do not match") }
+            _formState.update { it.copy(confirmPasswordError = text(R.string.auth_msg_passwords_mismatch)) }
             valid = false
         }
         return valid
@@ -441,15 +442,15 @@ class AuthViewModel(
     private fun validateResetPasswordForm(state: AuthFormState): Boolean {
         var valid = true
         if (state.token.isBlank()) {
-            _formState.update { it.copy(tokenError = "Token is required") }
+            _formState.update { it.copy(tokenError = text(R.string.auth_msg_token_required)) }
             valid = false
         }
         if (state.password.length < 10) {
-            _formState.update { it.copy(passwordError = "Password must be at least 10 characters") }
+            _formState.update { it.copy(passwordError = text(R.string.auth_msg_password_too_short)) }
             valid = false
         }
         if (state.password != state.confirmPassword) {
-            _formState.update { it.copy(confirmPasswordError = "Passwords do not match") }
+            _formState.update { it.copy(confirmPasswordError = text(R.string.auth_msg_passwords_mismatch)) }
             valid = false
         }
         return valid
@@ -458,18 +459,18 @@ class AuthViewModel(
     private fun validateChangePasswordForm(state: AuthFormState): Boolean {
         var valid = true
         if (state.currentPassword.isBlank()) {
-            _formState.update { it.copy(currentPasswordError = "Current password is required") }
+            _formState.update { it.copy(currentPasswordError = text(R.string.auth_msg_current_password_required)) }
             valid = false
         }
         if (state.password.length < 10) {
-            _formState.update { it.copy(passwordError = "Password must be at least 10 characters") }
+            _formState.update { it.copy(passwordError = text(R.string.auth_msg_password_too_short)) }
             valid = false
         } else if (state.password.length > 128) {
-            _formState.update { it.copy(passwordError = "Password must be at most 128 characters") }
+            _formState.update { it.copy(passwordError = text(R.string.auth_msg_password_too_long)) }
             valid = false
         }
         if (state.password != state.confirmPassword) {
-            _formState.update { it.copy(confirmPasswordError = "Passwords do not match") }
+            _formState.update { it.copy(confirmPasswordError = text(R.string.auth_msg_passwords_mismatch)) }
             valid = false
         }
         return valid
@@ -482,29 +483,33 @@ class AuthViewModel(
     }
 
     /** A fixed, human-readable message per exception type; server-supplied text is never surfaced. */
-    fun mapAuthError(ex: AuthException): String = when (ex) {
-        is AuthException.InvalidCredentials -> "Incorrect email or password."
-        is AuthException.EmailNotVerified -> "Email is not verified. Please verify your account."
-        is AuthException.EmailAlreadyExists -> "An account with this email already exists."
-        is AuthException.InvalidToken -> "Invalid or expired verification/reset token."
-        is AuthException.InvalidRefreshToken -> "Your session has expired. Please log in again."
-        is AuthException.RefreshTokenReused -> "Your session was ended for security reasons. Please log in again."
-        is AuthException.AccountLinkRequired ->
-            "An account with this email already exists. Please log in with your email and password."
-        is AuthException.InvalidSocialToken -> "Google sign-in failed. Please try again."
-        is AuthException.IdentityAlreadyLinked -> "This Google account is already linked to another user."
-        is AuthException.RateLimited -> "Too many attempts. Please try again in a few moments."
-        is AuthException.InvalidPassword -> "Password must be between 10 and 128 characters."
-        is AuthException.InvalidEmail -> "Please enter a valid email address."
-        is AuthException.EmailDeliveryFailed -> "We couldn't send the email right now. Please try again later."
-        is AuthException.Forbidden -> "Access denied. You don't have permission to do that."
-        is AuthException.Unauthorized -> "Session expired. Please log in again."
-        is AuthException.CursorExpired -> "Your data is out of date. Please try again."
-        is AuthException.NetworkError -> "Network connection failed. Please check your connection."
-        is AuthException.SerializationError -> "The server sent an unexpected response. Please try again later."
-        is AuthException.ApiError -> "Something went wrong on the server. Please try again later."
-        is AuthException.Unknown -> "Something went wrong. Please try again."
-    }
+    fun mapAuthError(ex: AuthException): String = text(
+        when (ex) {
+            is AuthException.InvalidCredentials -> R.string.auth_error_invalid_credentials
+            is AuthException.EmailNotVerified -> R.string.auth_error_email_not_verified
+            is AuthException.EmailAlreadyExists -> R.string.auth_error_email_exists
+            is AuthException.InvalidToken -> R.string.auth_error_invalid_token
+            is AuthException.InvalidRefreshToken -> R.string.auth_error_session_expired
+            is AuthException.RefreshTokenReused -> R.string.auth_error_session_revoked
+            is AuthException.AccountLinkRequired -> R.string.auth_error_account_link_required
+            is AuthException.InvalidSocialToken -> R.string.auth_error_google_failed
+            is AuthException.IdentityAlreadyLinked -> R.string.auth_error_google_linked
+            is AuthException.RateLimited -> R.string.auth_error_rate_limited
+            is AuthException.InvalidPassword -> R.string.auth_error_invalid_password
+            is AuthException.InvalidEmail -> R.string.auth_error_invalid_email_sentence
+            is AuthException.EmailDeliveryFailed -> R.string.auth_error_email_delivery
+            is AuthException.Forbidden -> R.string.auth_error_forbidden
+            is AuthException.Unauthorized -> R.string.auth_error_unauthorized
+            is AuthException.CursorExpired -> R.string.auth_error_cursor_expired
+            is AuthException.NetworkError -> R.string.auth_error_network
+            is AuthException.SerializationError -> R.string.auth_error_serialization
+            is AuthException.ApiError -> R.string.auth_error_server
+            is AuthException.Unknown -> R.string.auth_error_unknown
+        }
+    )
+
+    /** A user-facing message in the app's current language. */
+    private fun text(@StringRes id: Int): String = getApplication<Application>().getString(id)
 
     private companion object {
         const val TAG = "AuthViewModel"

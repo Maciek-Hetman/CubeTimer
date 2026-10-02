@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="solve_count">
+        <item quantity="one">%d ułożenie</item>
+        <item quantity="few">%d ułożenia</item>
+        <item quantity="many">%d ułożeń</item>
+        <item quantity="other">%d ułożenia</item>
+    </plurals>
+
+    <string name="stats_title">Statystyki</string>
+    <string name="stats_no_solves">Brak ułożeń</string>
+    <string name="stats_no_solves_in_filter">Brak ułożeń w wybranym filtrze</string>
+    <string name="stats_charts">Wykresy</string>
+    <string name="stats_personal_best">REKORD ŻYCIOWY</string>
+    <string name="stats_standard_averages">Standardowe średnie</string>
+    <string name="stats_collapse_section">Zwiń: %s</string>
+    <string name="stats_expand_section">Rozwiń: %s</string>
+    <string name="stats_large_averages">Długie średnie</string>
+    <plurals name="stats_requires_solves">
+        <item quantity="one">Wymaga %1$d ułożenia (%2$d/%1$d)</item>
+        <item quantity="few">Wymaga %1$d ułożeń (%2$d/%1$d)</item>
+        <item quantity="many">Wymaga %1$d ułożeń (%2$d/%1$d)</item>
+        <item quantity="other">Wymaga %1$d ułożeń (%2$d/%1$d)</item>
+    </plurals>
+    <plurals name="stats_window_solves">
+        <item quantity="one">Okno: %d ułożenie</item>
+        <item quantity="few">Okno: %d ułożenia</item>
+        <item quantity="many">Okno: %d ułożeń</item>
+        <item quantity="other">Okno: %d ułożenia</item>
+    </plurals>
+    <string name="stats_not_available">b.d.</string>
+    <string name="stats_pb_time">PB: %s</string>
+    <string name="stats_session_metrics">Sesje i szczegółowe dane</string>
+    <string name="stats_session_avg">Średnia sesji</string>
+    <string name="stats_mean_solve">Średnie ułożenie</string>
+    <string name="stats_session_std_dev">Odch. std. sesji</string>
+    <string name="stats_time_cubing">Czas układania w sesji</string>
+    <string name="stats_total_solves">Wszystkie ułożenia</string>
+    <string name="stats_all_time_mean">Średnia ogółem</string>
+    <string name="stats_std_dev">Odchylenie std.</string>
+    <string name="stats_time_solving">Łączny czas układania</string>
+    <string name="stats_time_in_app">Czas w aplikacji</string>
+    <string name="stats_penalty_distribution">Rozkład kar</string>
+    <string name="stats_penalties_none" formatted="false">100% czystych (0 kar)</string>
+    <string name="stats_penalties_summary">DNF: %1$d (%2$d%%) • +2: %3$d (%4$d%%)</string>
+    <string name="stats_pb_progress">Postęp rekordów</string>
+    <string name="stats_no_pbs">Brak rekordów</string>
+    <string name="stats_single">Single</string>
+    <string name="stats_solve_times">Czasy ułożeń</string>
+    <string name="stats_solve_times_empty">Ułóż więcej, aby zobaczyć czasy ułożeń</string>
+    <string name="stats_progress_chart">Wykres postępu</string>
+    <string name="stats_progress_chart_empty">Ułóż 5 razy, aby zobaczyć wykres postępu</string>
+    <string name="stats_range_last_n">Ostatnie %d</string>
+    <string name="stats_range_all">Wszystkie</string>
+</resources>

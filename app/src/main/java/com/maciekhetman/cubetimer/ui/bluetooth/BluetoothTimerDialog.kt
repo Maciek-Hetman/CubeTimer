@@ -36,21 +36,24 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.maciekhetman.cubetimer.R
 import com.maciekhetman.cubetimer.data.bluetooth.BluetoothTimerState
 import com.maciekhetman.cubetimer.data.bluetooth.BluetoothTimerStatus
 import com.maciekhetman.cubetimer.data.bluetooth.DiscoveredTimer
 import com.maciekhetman.cubetimer.viewmodel.TimerViewModel
 
 /** Short connection summary shared by Settings and the timer header. */
+@Composable
 fun bluetoothStatusLabel(status: BluetoothTimerStatus): String = when (status) {
-    BluetoothTimerStatus.Unsupported -> "Not supported on this device"
-    BluetoothTimerStatus.Disconnected -> "Not connected"
-    BluetoothTimerStatus.Scanning -> "Searching…"
-    is BluetoothTimerStatus.Connecting -> "Connecting…"
+    BluetoothTimerStatus.Unsupported -> stringResource(R.string.bt_status_unsupported)
+    BluetoothTimerStatus.Disconnected -> stringResource(R.string.bt_status_disconnected)
+    BluetoothTimerStatus.Scanning -> stringResource(R.string.bt_status_searching)
+    is BluetoothTimerStatus.Connecting -> stringResource(R.string.bt_status_connecting)
     is BluetoothTimerStatus.Connected -> status.deviceName
 }
 
@@ -138,19 +141,18 @@ fun BluetoothTimerDialog(
                 contentDescription = null
             )
         },
-        title = { Text("Bluetooth timer") },
+        title = { Text(stringResource(R.string.bluetooth_timer)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 when (status) {
-                    BluetoothTimerStatus.Unsupported -> Text("This device doesn't support Bluetooth Low Energy.")
+                    BluetoothTimerStatus.Unsupported -> Text(stringResource(R.string.bt_dialog_unsupported))
                     is BluetoothTimerStatus.Connected -> Text(
-                        "Connected to ${status.deviceName} (${status.model.displayName}). " +
-                            "Put both hands on the timer to start a solve."
+                        stringResource(R.string.bt_dialog_connected, status.deviceName, status.model.displayName)
                     )
                     is BluetoothTimerStatus.Connecting -> Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                         Spacer(modifier = Modifier.width(12.dp))
-                        Text("Connecting to ${status.deviceName}…")
+                        Text(stringResource(R.string.bt_dialog_connecting, status.deviceName))
                     }
                     BluetoothTimerStatus.Scanning, BluetoothTimerStatus.Disconnected -> DiscoveryContent(
                         scanning = status == BluetoothTimerStatus.Scanning,
@@ -159,7 +161,7 @@ fun BluetoothTimerDialog(
                     )
                 }
                 val error = state.error ?: if (permissionDenied) {
-                    "Bluetooth permission was denied. Allow it in system settings to use a Bluetooth timer."
+                    stringResource(R.string.bt_dialog_permission_denied)
                 } else {
                     null
                 }
@@ -174,13 +176,13 @@ fun BluetoothTimerDialog(
         },
         confirmButton = {
             when (status) {
-                is BluetoothTimerStatus.Connected -> TextButton(onClick = onDisconnect) { Text("Disconnect") }
-                BluetoothTimerStatus.Disconnected -> TextButton(onClick = { start() }) { Text("Search") }
+                is BluetoothTimerStatus.Connected -> TextButton(onClick = onDisconnect) { Text(stringResource(R.string.bt_disconnect)) }
+                BluetoothTimerStatus.Disconnected -> TextButton(onClick = { start() }) { Text(stringResource(R.string.bt_search)) }
                 else -> Unit
             }
         },
         dismissButton = {
-            TextButton(onClick = dismiss) { Text(if (status is BluetoothTimerStatus.Connected) "Done" else "Close") }
+            TextButton(onClick = dismiss) { Text(stringResource(if (status is BluetoothTimerStatus.Connected) R.string.action_done else R.string.action_close)) }
         }
     )
 }
@@ -198,22 +200,25 @@ private fun DiscoveryContent(
                 Spacer(modifier = Modifier.width(8.dp))
             }
             Text(
-                text = when {
-                    scanning && timers.isEmpty() -> "Looking for GAN and QiYi timers…"
-                    timers.isEmpty() -> "No timers found."
-                    else -> "Tap your timer to connect."
-                },
+                text = stringResource(
+                    when {
+                        scanning && timers.isEmpty() -> R.string.bt_dialog_looking
+                        timers.isEmpty() -> R.string.bt_dialog_none_found
+                        else -> R.string.bt_dialog_tap_to_connect
+                    }
+                ),
                 style = MaterialTheme.typography.bodyMedium
             )
         }
         if (timers.isEmpty()) {
             Text(
-                text = "Switch the timer on and keep it close to the phone." +
+                text = stringResource(
                     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-                        " On this Android version, Location must also be turned on for Bluetooth scanning."
+                        R.string.bt_dialog_scan_hint_location
                     } else {
-                        ""
-                    },
+                        R.string.bt_dialog_scan_hint
+                    }
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

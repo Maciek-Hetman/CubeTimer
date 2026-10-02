@@ -1,5 +1,6 @@
 package com.maciekhetman.cubetimer.ui.sync
 
+import android.content.res.Resources
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,15 +23,18 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.maciekhetman.cubetimer.R
 import com.maciekhetman.cubetimer.viewmodel.ConflictSideUi
 import com.maciekhetman.cubetimer.viewmodel.ConflictUiModel
 
 /** "1 conflict needs review" / "3 conflicts need review". */
-fun syncConflictLabel(count: Int): String =
-    if (count == 1) "1 conflict needs review" else "$count conflicts need review"
+fun syncConflictLabel(resources: Resources, count: Int): String =
+    resources.getQuantityString(R.plurals.sync_conflicts_need_review, count, count)
 
 /**
  * Lists unresolved sync conflicts, each comparing this device's version with the server's and
@@ -60,13 +64,13 @@ fun SyncConflictList(
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
-                text = syncConflictLabel(conflicts.size),
+                text = syncConflictLabel(LocalResources.current, conflicts.size),
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.error
             )
         }
         Text(
-            text = "These items were changed here and on another device. Choose which version to keep.",
+            text = stringResource(R.string.sync_conflicts_explanation),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -111,9 +115,9 @@ private fun SyncConflictCard(
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(modifier = Modifier.height(8.dp))
-            ConflictSide(label = "This device", side = conflict.local)
+            ConflictSide(label = stringResource(R.string.sync_conflict_this_device), side = conflict.local)
             Spacer(modifier = Modifier.height(6.dp))
-            ConflictSide(label = "Server", side = conflict.server)
+            ConflictSide(label = stringResource(R.string.sync_conflict_server), side = conflict.server)
             Spacer(modifier = Modifier.height(10.dp))
             FilledTonalButton(
                 onClick = onKeepLocal,
@@ -121,7 +125,7 @@ private fun SyncConflictCard(
                 shape = RoundedCornerShape(20.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Keep this device's")
+                Text(stringResource(R.string.sync_conflict_keep_local))
             }
             OutlinedButton(
                 onClick = onKeepServer,
@@ -129,7 +133,7 @@ private fun SyncConflictCard(
                 shape = RoundedCornerShape(20.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Keep server's")
+                Text(stringResource(R.string.sync_conflict_keep_server))
             }
         }
     }

@@ -78,12 +78,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.maciekhetman.cubetimer.R
 import com.maciekhetman.cubetimer.domain.TimeFormatter
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Penalty
@@ -96,6 +100,7 @@ import com.maciekhetman.cubetimer.ui.components.SessionCardActions
 import com.maciekhetman.cubetimer.ui.components.SessionCardEmptyOrLoadingMessage
 import com.maciekhetman.cubetimer.ui.components.SessionCardHeader
 import com.maciekhetman.cubetimer.ui.components.SessionCardSolveRow
+import com.maciekhetman.cubetimer.ui.components.displaySessionName
 import com.maciekhetman.cubetimer.ui.dialogs.HistoryFilterSortBottomSheet
 import com.maciekhetman.cubetimer.ui.dialogs.ShareableSolveCardDialog
 import com.maciekhetman.cubetimer.viewmodel.HistoryUiEffect
@@ -161,12 +166,13 @@ fun HistoryScreen(
         viewModel.clearSelection()
     }
 
+    val resources = LocalResources.current
     LaunchedEffect(viewModel) {
         viewModel.effects.collectLatest { effect ->
             suspend fun showUndo(message: String, onUndo: () -> Unit) {
                 val result = snackbarHostState.showSnackbar(
                     message = message,
-                    actionLabel = "Undo",
+                    actionLabel = resources.getString(R.string.action_undo),
                     duration = SnackbarDuration.Short
                 )
                 if (result == SnackbarResult.ActionPerformed) onUndo()
@@ -175,7 +181,9 @@ fun HistoryScreen(
                 is HistoryUiEffect.ShowUndoSnackbar ->
                     showUndo(effect.message) { viewModel.restoreSolve(effect.solve) }
                 is HistoryUiEffect.ShowUndoSessionDelete ->
-                    showUndo("Deleted \"${effect.sessionName}\"") { viewModel.restoreSession(effect.snapshot) }
+                    showUndo(resources.getString(R.string.history_session_deleted, displaySessionName(resources, effect.sessionName))) {
+                        viewModel.restoreSession(effect.snapshot)
+                    }
                 is HistoryUiEffect.ShowUndoBatchDelete ->
                     showUndo(effect.message) { viewModel.undoDeleteBatch(effect.deletedSolves) }
                 is HistoryUiEffect.ShowUndoClearAll ->
@@ -222,7 +230,7 @@ fun HistoryScreen(
                     )
                 } else {
                     CollapsingTopBar(
-                        title = "History",
+                        title = stringResource(R.string.nav_history),
                         currentMode = currentMode,
                         onModeSelected = onModeSelected,
                         scrollBehavior = scrollBehavior,
@@ -235,19 +243,19 @@ fun HistoryScreen(
                                         }
                                     }
                                 ) {
-                                    Icon(Icons.Default.FilterList, contentDescription = "Filter & Sort")
+                                    Icon(Icons.Default.FilterList, contentDescription = stringResource(R.string.history_filter_sort))
                                 }
                             }
                             Box {
                                 IconButton(onClick = { showOverflowMenu = true }) {
-                                    Icon(Icons.Default.MoreVert, contentDescription = "More options")
+                                    Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.action_more_options))
                                 }
                                 DropdownMenu(
                                     expanded = showOverflowMenu,
                                     onDismissRequest = { showOverflowMenu = false }
                                 ) {
                                     DropdownMenuItem(
-                                        text = { Text("Export all solves") },
+                                        text = { Text(stringResource(R.string.history_export_all)) },
                                         leadingIcon = { Icon(Icons.Outlined.FileDownload, contentDescription = null) },
                                         onClick = {
                                             showOverflowMenu = false
@@ -255,7 +263,7 @@ fun HistoryScreen(
                                         }
                                     )
                                     DropdownMenuItem(
-                                        text = { Text("Import solves") },
+                                        text = { Text(stringResource(R.string.history_import)) },
                                         leadingIcon = { Icon(Icons.Outlined.FileUpload, contentDescription = null) },
                                         onClick = {
                                             showOverflowMenu = false
@@ -266,7 +274,7 @@ fun HistoryScreen(
                                     )
                                     HorizontalDivider()
                                     DropdownMenuItem(
-                                        text = { Text("Delete all solves", color = MaterialTheme.colorScheme.error) },
+                                        text = { Text(stringResource(R.string.history_delete_all), color = MaterialTheme.colorScheme.error) },
                                         leadingIcon = {
                                             Icon(
                                                 Icons.Outlined.DeleteSweep,
@@ -393,8 +401,8 @@ fun HistoryScreen(
 
     uiState.sessionGroups.firstOrNull { it.session.id == sessionIdToDelete }?.let { group ->
         ConfirmDeleteDialog(
-            title = "Delete session?",
-            message = "\"${group.session.name}\" and all of its solves will be deleted.",
+            title = stringResource(R.string.history_delete_session_title),
+            message = stringResource(R.string.history_delete_session_message, displaySessionName(group.session.name)),
             onConfirm = { viewModel.deleteSession(group.session) },
             onDismiss = { sessionIdToDelete = null }
         )
@@ -403,8 +411,8 @@ fun HistoryScreen(
     if (showDeleteSelectedDialog) {
         val count = uiState.selectedSolveIds.size
         ConfirmDeleteDialog(
-            title = "Delete $count ${if (count == 1) "solve" else "solves"}?",
-            message = "The selected solves will be deleted.",
+            title = pluralStringResource(R.plurals.history_delete_selected_title, count, count),
+            message = stringResource(R.string.history_delete_selected_message),
             onConfirm = viewModel::deleteSelectedSolves,
             onDismiss = { showDeleteSelectedDialog = false }
         )
@@ -412,9 +420,9 @@ fun HistoryScreen(
 
     if (showDeleteAllDialog) {
         ConfirmDeleteDialog(
-            title = "Delete all solves?",
-            message = "Every solve in the current puzzle scope will be deleted.",
-            confirmLabel = "Delete all",
+            title = stringResource(R.string.history_delete_all_title),
+            message = stringResource(R.string.history_delete_all_message),
+            confirmLabel = stringResource(R.string.history_delete_all_confirm),
             onConfirm = viewModel::deleteAllSolves,
             onDismiss = { showDeleteAllDialog = false }
         )
@@ -469,17 +477,15 @@ private fun HistoryEmptyState(
         }
         Spacer(modifier = Modifier.height(20.dp))
         Text(
-            text = if (hasActiveFilters) "No matching sessions" else "No solves yet",
+            text = stringResource(if (hasActiveFilters) R.string.history_empty_filtered else R.string.stats_no_solves),
             style = MaterialTheme.typography.titleLarge,
             textAlign = TextAlign.Center
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = if (hasActiveFilters) {
-                "Try adjusting or resetting your filters."
-            } else {
-                "Your sessions and solves will show up here."
-            },
+            text = stringResource(
+                if (hasActiveFilters) R.string.history_empty_filtered_hint else R.string.history_empty_hint
+            ),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
@@ -487,7 +493,7 @@ private fun HistoryEmptyState(
         if (hasActiveFilters) {
             Spacer(modifier = Modifier.height(20.dp))
             FilledTonalButton(onClick = onResetFilters) {
-                Text("Reset filters")
+                Text(stringResource(R.string.history_reset_filters))
             }
         }
     }
@@ -499,13 +505,13 @@ private fun ConfirmDeleteDialog(
     message: String,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
-    confirmLabel: String = "Delete"
+    confirmLabel: String = stringResource(R.string.action_delete)
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Outlined.Delete, contentDescription = null) },
         title = { Text(title, textAlign = TextAlign.Center) },
-        text = { Text("$message You can undo this right after.") },
+        text = { Text(stringResource(R.string.history_confirm_with_undo, message)) },
         confirmButton = {
             TextButton(
                 onClick = {
@@ -518,7 +524,7 @@ private fun ConfirmDeleteDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
         }
     )
 }
@@ -653,7 +659,7 @@ internal fun HistorySolveCard(
                     ) {
                         Icon(
                             imageVector = Icons.Outlined.Delete,
-                            contentDescription = "Delete",
+                            contentDescription = stringResource(R.string.action_delete),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -700,9 +706,8 @@ private fun PenaltyToggle(
     }
 }
 
-private val timestampFormat by lazy {
+// Not cached: the app's language can change while it runs (system per-app language setting).
+private fun formatTimestamp(timestamp: Long): String {
     val locale = Locale.getDefault()
-    SimpleDateFormat(DateFormat.getBestDateTimePattern(locale, "yMMMdjm"), locale)
+    return SimpleDateFormat(DateFormat.getBestDateTimePattern(locale, "yMMMdjm"), locale).format(Date(timestamp))
 }
-
-private fun formatTimestamp(timestamp: Long): String = timestampFormat.format(Date(timestamp))

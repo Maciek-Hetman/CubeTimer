@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sync_dialog_title">Cloud Synchronization</string>
+    <string name="sync_dialog_guest">You are currently in guest mode. Your solves and sessions are saved locally on this device.</string>
+    <string name="sync_dialog_guest_pitch">Sign in to back up your solves to the cloud and sync across all your devices.</string>
+    <string name="sync_dialog_needs_review">Some changes need your review.</string>
+    <string name="sync_dialog_up_to_date">All data is up to date.</string>
+    <string name="sync_dialog_syncing">Synchronizing changes with cloud…</string>
+    <string name="sync_dialog_offline">Device is offline. Changes will sync automatically when reconnected.</string>
+    <string name="sync_dialog_error">A synchronization error occurred.</string>
+    <string name="sync_dialog_last_synced">Last synced: %s</string>
+    <plurals name="sync_dialog_pending">
+        <item quantity="one">Pending upload: %d change</item>
+        <item quantity="other">Pending upload: %d changes</item>
+    </plurals>
+    <string name="sync_dialog_sync_now">Sync Now</string>
+
+    <plurals name="sync_conflicts_need_review">
+        <item quantity="one">%d conflict needs review</item>
+        <item quantity="other">%d conflicts need review</item>
+    </plurals>
+    <string name="sync_conflicts_explanation">These items were changed here and on another device. Choose which version to keep.</string>
+    <string name="sync_conflict_this_device">This device</string>
+    <string name="sync_conflict_server">Server</string>
+    <string name="sync_conflict_keep_local">Keep this device\'s</string>
+    <string name="sync_conflict_keep_server">Keep server\'s</string>
+    <string name="sync_conflict_session">Session</string>
+    <string name="sync_conflict_solve">Solve</string>
+    <string name="sync_conflict_deleted">Deleted</string>
+    <string name="sync_conflict_unreadable">Details unavailable</string>
+    <string name="sync_conflict_archived">Archived</string>
+    <string name="sync_conflict_active">Active</string>
+    <string name="sync_conflict_resolve_failed">Couldn\'t resolve the conflict. Try again.</string>
+</resources>

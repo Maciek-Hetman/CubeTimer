@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_export">Eksportuj</string>
+
+    <string-array name="session_name_months">
+        <item>sty</item>
+        <item>lut</item>
+        <item>mar</item>
+        <item>kwi</item>
+        <item>maj</item>
+        <item>cze</item>
+        <item>lip</item>
+        <item>sie</item>
+        <item>wrz</item>
+        <item>paź</item>
+        <item>lis</item>
+        <item>gru</item>
+    </string-array>
+    <string name="session_name_morning">rano</string>
+    <string name="session_name_afternoon">popołudnie</string>
+    <string name="session_name_evening">wieczór</string>
+    <string name="session_name_night">noc</string>
+
+    <string name="session_no_solves">Brak ułożeń w tej sesji</string>
+    <string name="session_no_matching_solves">Żadne ułożenie nie pasuje do filtrów</string>
+    <string name="session_best">Najlepszy</string>
+    <string name="session_average">Średnia</string>
+    <string name="session_collapse">Zwiń sesję</string>
+    <string name="session_expand">Rozwiń sesję</string>
+
+    <string name="activity_title">Aktywność</string>
+    <string name="activity_less">Mniej</string>
+    <string name="activity_more">Więcej</string>
+
+    <string name="timing_device_touch_a11y">Pomiar dotykiem</string>
+    <string name="timing_device_bluetooth_a11y_status">Timer Bluetooth, %s</string>
+
+    <plurals name="selection_count">
+        <item quantity="one">Zaznaczono: %d</item>
+        <item quantity="few">Zaznaczono: %d</item>
+        <item quantity="many">Zaznaczono: %d</item>
+        <item quantity="other">Zaznaczono: %d</item>
+    </plurals>
+    <string name="selection_cancel">Anuluj zaznaczenie</string>
+    <string name="selection_select_all">Zaznacz wszystko</string>
+    <string name="selection_deselect_all">Odznacz wszystko</string>
+    <string name="selection_export">Eksportuj zaznaczone ułożenia</string>
+    <string name="selection_delete">Usuń zaznaczone ułożenia</string>
+
+    <string name="mode_select">Wybierz kostkę</string>
+    <string name="mode_selected">Wybrana kostka</string>
+
+    <string name="stats_filter_all_time">Cały okres (%d)</string>
+    <string name="stats_filter_active_session">Bieżąca sesja (%d)</string>
+    <string name="stats_current_ao5">Bieżąca Ao5</string>
+    <string name="stats_current_ao12">Bieżąca Ao12</string>
+    <string name="stats_session_best">Najlepszy w sesji</string>
+    <string name="stats_session_worst">Najgorszy w sesji</string>
+</resources>

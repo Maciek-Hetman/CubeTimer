@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="history_deleted_solves">
+        <item quantity="one">Usunięto %d ułożenie</item>
+        <item quantity="few">Usunięto %d ułożenia</item>
+        <item quantity="many">Usunięto %d ułożeń</item>
+        <item quantity="other">Usunięto %d ułożenia</item>
+    </plurals>
+    <plurals name="history_cleared_solves">
+        <item quantity="one">Wyczyszczono %d ułożenie</item>
+        <item quantity="few">Wyczyszczono %d ułożenia</item>
+        <item quantity="many">Wyczyszczono %d ułożeń</item>
+        <item quantity="other">Wyczyszczono %d ułożenia</item>
+    </plurals>
+    <plurals name="history_restored_solves">
+        <item quantity="one">Przywrócono %d ułożenie</item>
+        <item quantity="few">Przywrócono %d ułożenia</item>
+        <item quantity="many">Przywrócono %d ułożeń</item>
+        <item quantity="other">Przywrócono %d ułożenia</item>
+    </plurals>
+    <string name="history_solve_deleted">Usunięto ułożenie</string>
+    <string name="history_no_solves_deleted">Nie usunięto żadnych ułożeń</string>
+    <string name="history_session_not_found">Nie znaleziono sesji lub została już usunięta</string>
+    <string name="history_session_restored">Przywrócono sesję „%s”</string>
+    <string name="history_no_solves_to_clear">Brak ułożeń do wyczyszczenia</string>
+
+    <plurals name="history_exported_solves">
+        <item quantity="one">Wyeksportowano %d ułożenie do CSV</item>
+        <item quantity="few">Wyeksportowano %d ułożenia do CSV</item>
+        <item quantity="many">Wyeksportowano %d ułożeń do CSV</item>
+        <item quantity="other">Wyeksportowano %d ułożenia do CSV</item>
+    </plurals>
+    <plurals name="history_exported_session">
+        <item quantity="one">Wyeksportowano %1$d ułożenie z sesji „%2$s” do CSV</item>
+        <item quantity="few">Wyeksportowano %1$d ułożenia z sesji „%2$s” do CSV</item>
+        <item quantity="many">Wyeksportowano %1$d ułożeń z sesji „%2$s” do CSV</item>
+        <item quantity="other">Wyeksportowano %1$d ułożenia z sesji „%2$s” do CSV</item>
+    </plurals>
+    <plurals name="history_exported_selected">
+        <item quantity="one">Wyeksportowano %d zaznaczone ułożenie do CSV</item>
+        <item quantity="few">Wyeksportowano %d zaznaczone ułożenia do CSV</item>
+        <item quantity="many">Wyeksportowano %d zaznaczonych ułożeń do CSV</item>
+        <item quantity="other">Wyeksportowano %d zaznaczonego ułożenia do CSV</item>
+    </plurals>
+    <string name="history_nothing_to_export">Brak ułożeń do eksportu w bieżącym zakresie</string>
+    <string name="history_nothing_to_export_session">Brak ułożeń do eksportu w sesji „%s”</string>
+    <string name="history_nothing_selected_to_export">Nie zaznaczono ułożeń do eksportu</string>
+    <string name="history_selected_not_found">Nie znaleziono zaznaczonych ułożeń</string>
+
+    <plurals name="history_imported_solves">
+        <item quantity="one">Zaimportowano %d ułożenie</item>
+        <item quantity="few">Zaimportowano %d ułożenia</item>
+        <item quantity="many">Zaimportowano %d ułożeń</item>
+        <item quantity="other">Zaimportowano %d ułożenia</item>
+    </plurals>
+    <plurals name="history_import_duplicates_skipped">
+        <item quantity="one">pominięto %d duplikat</item>
+        <item quantity="few">pominięto %d duplikaty</item>
+        <item quantity="many">pominięto %d duplikatów</item>
+        <item quantity="other">pominięto %d duplikatu</item>
+    </plurals>
+    <plurals name="history_import_malformed_skipped">
+        <item quantity="one">pominięto %d błędny wiersz</item>
+        <item quantity="few">pominięto %d błędne wiersze</item>
+        <item quantity="many">pominięto %d błędnych wierszy</item>
+        <item quantity="other">pominięto %d błędnego wiersza</item>
+    </plurals>
+    <string name="history_import_empty">Plik CSV jest pusty</string>
+    <string name="history_import_invalid">Nieprawidłowy plik CSV: %s</string>
+    <string name="csv_problem_missing_header_row">brak wiersza nagłówka kolumn.</string>
+    <string name="csv_problem_invalid_comment">nieprawidłowy komentarz nagłówka, oczekiwano „# Source: CubeTimer”.</string>
+    <string name="csv_problem_missing_source_comment">brak wymaganego komentarza „# Source: CubeTimer”.</string>
+    <string name="csv_problem_missing_columns">brak wymaganych kolumn: %s</string>
+
+    <string name="history_error_delete_solves">Nie udało się usunąć ułożeń</string>
+    <string name="history_error_restore_solves">Nie udało się przywrócić ułożeń</string>
+    <string name="history_error_delete_session">Nie udało się usunąć sesji</string>
+    <string name="history_error_restore_session">Nie udało się przywrócić sesji</string>
+    <string name="history_error_clear">Nie udało się wyczyścić historii</string>
+    <string name="history_error_export">Nie udało się wyeksportować ułożeń</string>
+    <string name="history_error_export_session">Nie udało się wyeksportować sesji</string>
+    <string name="history_error_export_selected">Nie udało się wyeksportować zaznaczonych ułożeń</string>
+    <string name="history_error_import_csv">Import CSV nie powiódł się</string>
+    <string name="history_error_import">Nie udało się zaimportować ułożeń</string>
+    <string name="history_error_update_penalty">Nie udało się zmienić kary</string>
+    <string name="history_error_delete_solve">Nie udało się usunąć ułożenia</string>
+    <string name="history_error_restore_solve">Nie udało się przywrócić ułożenia</string>
+</resources>

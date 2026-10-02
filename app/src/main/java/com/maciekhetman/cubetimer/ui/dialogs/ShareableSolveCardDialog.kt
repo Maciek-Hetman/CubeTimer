@@ -4,9 +4,11 @@ import android.app.Activity
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
+import android.content.res.Resources
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
+import android.text.format.DateFormat
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
@@ -50,6 +52,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.draw
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.stringResource
 import androidx.core.graphics.createBitmap
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.ClipEntry
@@ -63,7 +67,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
-import com.maciekhetman.cubetimer.domain.HistoricalPbCalculator
+import com.maciekhetman.cubetimer.R
 import com.maciekhetman.cubetimer.domain.TimeFormatter
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Penalty
@@ -135,15 +139,14 @@ fun Modifier.recordPicture(captureState: PictureCaptureState): Modifier = this.d
  */
 object SolveShareHelper {
 
-    private val shareDateFormat by lazy {
-        SimpleDateFormat("MMM d, yyyy h:mm a", Locale.ENGLISH)
-    }
-
+    /** In the app's language; not cached, as that can change while the app runs. */
     fun formatSolveDate(timestamp: Long): String {
-        return shareDateFormat.format(Date(timestamp))
+        val locale = Locale.getDefault()
+        return SimpleDateFormat(DateFormat.getBestDateTimePattern(locale, "yMMMdjmm"), locale).format(Date(timestamp))
     }
 
     fun formatShareText(
+        resources: Resources,
         solve: SolveTime,
         isPb: Boolean = false,
         pbDeltaText: String? = null
@@ -157,13 +160,13 @@ object SolveShareHelper {
         val formattedDate = formatSolveDate(solve.timestamp)
 
         return buildString {
-            appendLine("CubeTimer - ${solve.mode.displayName} Solve")
-            appendLine("Time: $timeString$pbSuffix")
+            appendLine(resources.getString(R.string.share_text_title, solve.mode.displayName))
+            appendLine(resources.getString(R.string.share_text_time, timeString + pbSuffix))
             if (solve.scramble.isNotBlank()) {
-                appendLine("Scramble: ${solve.scramble}")
+                appendLine(resources.getString(R.string.share_text_scramble, solve.scramble))
             }
-            appendLine("Date: $formattedDate")
-            append("Timer: ${solve.timingDevice.displayName}")
+            appendLine(resources.getString(R.string.share_text_date, formattedDate))
+            append(resources.getString(R.string.share_timer, resources.getString(solve.timingDevice.labelRes)))
         }
     }
 
@@ -197,12 +200,12 @@ object SolveShareHelper {
             type = "image/png"
             putExtra(Intent.EXTRA_STREAM, imageUri)
             putExtra(Intent.EXTRA_TEXT, shareText)
-            putExtra(Intent.EXTRA_TITLE, "CubeTimer Solve")
-            clipData = ClipData.newRawUri("CubeTimer Solve Card", imageUri)
+            putExtra(Intent.EXTRA_TITLE, context.getString(R.string.share_title))
+            clipData = ClipData.newRawUri(context.getString(R.string.share_title), imageUri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
 
-        val chooser = Intent.createChooser(sendIntent, "Share Solve").apply {
+        val chooser = Intent.createChooser(sendIntent, context.getString(R.string.share_chooser_title)).apply {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             if (context !is Activity) {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -215,9 +218,9 @@ object SolveShareHelper {
         val sendIntent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, shareText)
-            putExtra(Intent.EXTRA_TITLE, "CubeTimer Solve")
+            putExtra(Intent.EXTRA_TITLE, context.getString(R.string.share_title))
         }
-        val chooser = Intent.createChooser(sendIntent, "Share Solve").apply {
+        val chooser = Intent.createChooser(sendIntent, context.getString(R.string.share_chooser_title)).apply {
             if (context !is Activity) {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
@@ -237,10 +240,10 @@ fun ShareableSolveCardDialog(
     isPb: Boolean,
     pbDelta: Long?,
     modifier: Modifier = Modifier,
-    formattedPbDelta: String? = null,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val coroutineScope = rememberCoroutineScope()
     val clipboard = LocalClipboard.current
     val haptic = LocalHapticFeedback.current
@@ -249,24 +252,20 @@ fun ShareableSolveCardDialog(
     var isSharing by remember { mutableStateOf(false) }
 
     val eventTitle = when (solve.mode) {
-        Mode.CUBE_2x2 -> "2x2 Cube"
-        Mode.CUBE_3x3 -> "3x3 Cube"
-        Mode.CUBE_4x4 -> "4x4 Cube"
-        Mode.CUBE_5x5 -> "5x5 Cube"
-        Mode.MEGAMINX -> "Megaminx"
-        Mode.PYRAMINX -> "Pyraminx"
+        Mode.CUBE_2x2, Mode.CUBE_3x3, Mode.CUBE_4x4, Mode.CUBE_5x5 ->
+            stringResource(R.string.scramble_preview_cube_title, solve.mode.displayName)
+        Mode.MEGAMINX, Mode.PYRAMINX -> solve.mode.displayName
     }
 
-    val pbDisplayText = formattedPbDelta ?: run {
-        if (isPb) {
-            if (priorBestTime != null && pbDelta != null) {
-                HistoricalPbCalculator.formatPbDelta(pbDelta, priorBestTime)
-            } else {
-                "PB (First solve)"
-            }
-        } else {
-            null
-        }
+    // Worded here rather than taken from HistoricalPbResult.formattedDelta, which is English.
+    val pbDisplayText = when {
+        !isPb -> null
+        priorBestTime != null && pbDelta != null -> stringResource(
+            R.string.pb_delta,
+            TimeFormatter.formatTime(pbDelta),
+            TimeFormatter.formatTime(priorBestTime)
+        )
+        else -> stringResource(R.string.pb_first_solve)
     }
 
     Dialog(
@@ -325,7 +324,7 @@ fun ShareableSolveCardDialog(
                             }
 
                             Text(
-                                text = "Solve #$solveNumber",
+                                text = stringResource(R.string.share_solve_number, solveNumber),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.primary
@@ -435,7 +434,7 @@ fun ShareableSolveCardDialog(
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Text(
-                                    text = "Timer: ${solve.timingDevice.displayName}",
+                                    text = stringResource(R.string.share_timer, stringResource(solve.timingDevice.labelRes)),
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     fontWeight = FontWeight.Medium
@@ -487,15 +486,19 @@ fun ShareableSolveCardDialog(
                                         onClick = {
                                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                             coroutineScope.launch {
-                                                clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("Scramble", solve.scramble)))
-                                                Toast.makeText(context, "Scramble copied!", Toast.LENGTH_SHORT).show()
+                                                clipboard.setClipEntry(
+                                                    ClipEntry(
+                                                        ClipData.newPlainText(resources.getString(R.string.scramble_clip_label), solve.scramble)
+                                                    )
+                                                )
+                                                Toast.makeText(context, R.string.scramble_copied, Toast.LENGTH_SHORT).show()
                                             }
                                         },
                                         modifier = Modifier.size(36.dp)
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.ContentCopy,
-                                            contentDescription = "Copy scramble",
+                                            contentDescription = stringResource(R.string.scramble_copy),
                                             modifier = Modifier.size(18.dp),
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -533,7 +536,7 @@ fun ShareableSolveCardDialog(
                             .height(48.dp),
                         shape = RoundedCornerShape(20.dp)
                     ) {
-                        Text("Close")
+                        Text(stringResource(R.string.action_close))
                     }
 
                     Button(
@@ -546,6 +549,7 @@ fun ShareableSolveCardDialog(
                                 try {
                                     val bitmap = pictureCaptureState.captureBitmap()
                                     val shareText = SolveShareHelper.formatShareText(
+                                        resources = resources,
                                         solve = solve,
                                         isPb = isPb,
                                         pbDeltaText = pbDisplayText
@@ -567,7 +571,7 @@ fun ShareableSolveCardDialog(
                                     }
                                 } catch (e: Exception) {
                                     Log.e("ShareableSolveCard", "Sharing failed", e)
-                                    Toast.makeText(context, "Could not share solve", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, R.string.share_failed, Toast.LENGTH_SHORT).show()
                                 } finally {
                                     isSharing = false
                                 }
@@ -595,7 +599,7 @@ fun ShareableSolveCardDialog(
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Share")
+                            Text(stringResource(R.string.action_share))
                         }
                     }
                 }
@@ -619,7 +623,6 @@ fun ShareableSolveCardDialog(
         priorBestTime = detail.priorBestTime,
         isPb = detail.isPb,
         pbDelta = detail.pbDelta,
-        formattedPbDelta = detail.formattedPbDelta,
         onDismiss = onDismiss,
         modifier = modifier
     )

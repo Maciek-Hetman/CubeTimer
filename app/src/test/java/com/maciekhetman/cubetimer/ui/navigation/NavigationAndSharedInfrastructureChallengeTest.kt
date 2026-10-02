@@ -1,5 +1,6 @@
 package com.maciekhetman.cubetimer.ui.navigation
 
+import android.content.Context
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.History
@@ -7,6 +8,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.test.core.app.ApplicationProvider
 import com.maciekhetman.cubetimer.AppDestinations
 import com.maciekhetman.cubetimer.model.StatsFilter
 import org.junit.Assert.assertEquals
@@ -29,6 +31,9 @@ import org.robolectric.annotation.Config
 @Config(sdk = [34])
 class NavigationAndSharedInfrastructureChallengeTest {
 
+    private fun label(destination: AppDestinations): String =
+        ApplicationProvider.getApplicationContext<Context>().getString(destination.labelRes)
+
     // =============================================================================================
     // 1. FLOATING NAVIGATION BAR CONTAINER GEOMETRY & DESTINATION MAPPING
     // =============================================================================================
@@ -46,16 +51,16 @@ class NavigationAndSharedInfrastructureChallengeTest {
         assertEquals(4, expectedDestinations.size)
 
         // Verify icon mappings
-        assertEquals("Timer", AppDestinations.TIMER.label)
+        assertEquals("Timer", label(AppDestinations.TIMER))
         assertEquals(Icons.Default.Home, AppDestinations.TIMER.icon)
 
-        assertEquals("Stats", AppDestinations.STATS.label)
+        assertEquals("Stats", label(AppDestinations.STATS))
         assertEquals(Icons.Default.BarChart, AppDestinations.STATS.icon)
 
-        assertEquals("History", AppDestinations.HISTORY.label)
+        assertEquals("History", label(AppDestinations.HISTORY))
         assertEquals(Icons.Default.History, AppDestinations.HISTORY.icon)
 
-        assertEquals("Settings", AppDestinations.SETTINGS.label)
+        assertEquals("Settings", label(AppDestinations.SETTINGS))
         assertEquals(Icons.Default.Settings, AppDestinations.SETTINGS.icon)
     }
 

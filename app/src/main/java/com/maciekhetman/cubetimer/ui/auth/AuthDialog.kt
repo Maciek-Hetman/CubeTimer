@@ -40,11 +40,13 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import com.maciekhetman.cubetimer.R
 import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.viewmodel.AuthViewModel
 
@@ -165,7 +167,7 @@ private fun LoginDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(24.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        title = { Text("Sign In") },
+        title = { Text(stringResource(R.string.auth_sign_in)) },
         text = {
             Column(
                 modifier = Modifier
@@ -185,7 +187,7 @@ private fun LoginDialog(
                 OutlinedTextField(
                     value = formState.email,
                     onValueChange = viewModel::onEmailChanged,
-                    label = { Text("Email") },
+                    label = { Text(stringResource(R.string.auth_email)) },
                     leadingIcon = { Icon(Icons.Default.Email, contentDescription = null) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
@@ -199,13 +201,13 @@ private fun LoginDialog(
                 OutlinedTextField(
                     value = formState.password,
                     onValueChange = viewModel::onPasswordChanged,
-                    label = { Text("Password") },
+                    label = { Text(stringResource(R.string.auth_password)) },
                     leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
                     trailingIcon = {
                         IconButton(onClick = viewModel::togglePasswordVisibility) {
                             Icon(
                                 imageVector = if (formState.isPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                contentDescription = "Toggle password visibility"
+                                contentDescription = stringResource(R.string.auth_toggle_password_visibility)
                             )
                         }
                     },
@@ -224,7 +226,7 @@ private fun LoginDialog(
                     horizontalArrangement = Arrangement.End
                 ) {
                     Text(
-                        text = "Forgot password?",
+                        text = stringResource(R.string.auth_forgot_password_link),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier
@@ -240,12 +242,12 @@ private fun LoginDialog(
                     horizontalArrangement = Arrangement.Center
                 ) {
                     Text(
-                        text = "Don't have an account? ",
+                        text = stringResource(R.string.auth_no_account) + " ",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "Register",
+                        text = stringResource(R.string.auth_register),
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary,
@@ -268,7 +270,7 @@ private fun LoginDialog(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                 }
-                Text("Sign In")
+                Text(stringResource(R.string.auth_sign_in))
             }
         },
         dismissButton = {
@@ -277,7 +279,7 @@ private fun LoginDialog(
                 onClick = onDismiss,
                 enabled = !formState.isLoading
             ) {
-                Text("Cancel")
+                Text(stringResource(R.string.action_cancel))
             }
         },
         modifier = modifier
@@ -296,7 +298,7 @@ private fun RegisterDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(24.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        title = { Text("Create Account") },
+        title = { Text(stringResource(R.string.auth_create_account)) },
         text = {
             Column(
                 modifier = Modifier
@@ -311,7 +313,7 @@ private fun RegisterDialog(
                 OutlinedTextField(
                     value = formState.email,
                     onValueChange = viewModel::onEmailChanged,
-                    label = { Text("Email") },
+                    label = { Text(stringResource(R.string.auth_email)) },
                     leadingIcon = { Icon(Icons.Default.Email, contentDescription = null) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
@@ -325,13 +327,13 @@ private fun RegisterDialog(
                 OutlinedTextField(
                     value = formState.password,
                     onValueChange = viewModel::onPasswordChanged,
-                    label = { Text("Password (min 10 characters)") },
+                    label = { Text(stringResource(R.string.auth_password_min)) },
                     leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
                     trailingIcon = {
                         IconButton(onClick = viewModel::togglePasswordVisibility) {
                             Icon(
                                 imageVector = if (formState.isPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                contentDescription = "Toggle password visibility"
+                                contentDescription = stringResource(R.string.auth_toggle_password_visibility)
                             )
                         }
                     },
@@ -348,7 +350,7 @@ private fun RegisterDialog(
                 OutlinedTextField(
                     value = formState.confirmPassword,
                     onValueChange = viewModel::onConfirmPasswordChanged,
-                    label = { Text("Confirm Password") },
+                    label = { Text(stringResource(R.string.auth_confirm_password)) },
                     leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
                     visualTransformation = if (formState.isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     singleLine = true,
@@ -365,12 +367,12 @@ private fun RegisterDialog(
                     horizontalArrangement = Arrangement.Center
                 ) {
                     Text(
-                        text = "Already have an account? ",
+                        text = stringResource(R.string.auth_have_account) + " ",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "Sign In",
+                        text = stringResource(R.string.auth_sign_in),
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary,
@@ -393,7 +395,7 @@ private fun RegisterDialog(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                 }
-                Text("Register")
+                Text(stringResource(R.string.auth_register))
             }
         },
         dismissButton = {
@@ -402,7 +404,7 @@ private fun RegisterDialog(
                 onClick = onDismiss,
                 enabled = !formState.isLoading
             ) {
-                Text("Cancel")
+                Text(stringResource(R.string.action_cancel))
             }
         },
         modifier = modifier
@@ -421,7 +423,7 @@ private fun ForgotPasswordDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(24.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        title = { Text("Forgot Password") },
+        title = { Text(stringResource(R.string.auth_forgot_password_title)) },
         text = {
             Column(
                 modifier = Modifier
@@ -429,7 +431,7 @@ private fun ForgotPasswordDialog(
                     .verticalScroll(rememberScrollState())
             ) {
                 Text(
-                    text = "Enter your account email and we'll send you a link to reset your password.",
+                    text = stringResource(R.string.auth_forgot_password_message),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -443,7 +445,7 @@ private fun ForgotPasswordDialog(
                 OutlinedTextField(
                     value = formState.email,
                     onValueChange = viewModel::onEmailChanged,
-                    label = { Text("Email") },
+                    label = { Text(stringResource(R.string.auth_email)) },
                     leadingIcon = { Icon(Icons.Default.Email, contentDescription = null) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
@@ -459,12 +461,12 @@ private fun ForgotPasswordDialog(
                     horizontalArrangement = Arrangement.Center
                 ) {
                     Text(
-                        text = "Remember your password? ",
+                        text = stringResource(R.string.auth_remember_password) + " ",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "Sign In",
+                        text = stringResource(R.string.auth_sign_in),
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary,
@@ -487,7 +489,7 @@ private fun ForgotPasswordDialog(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                 }
-                Text("Send Link")
+                Text(stringResource(R.string.auth_send_link))
             }
         },
         dismissButton = {
@@ -496,7 +498,7 @@ private fun ForgotPasswordDialog(
                 onClick = onDismiss,
                 enabled = !formState.isLoading
             ) {
-                Text("Cancel")
+                Text(stringResource(R.string.action_cancel))
             }
         },
         modifier = modifier
@@ -520,7 +522,7 @@ private fun ResetPasswordDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(24.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        title = { Text("Check your email") },
+        title = { Text(stringResource(R.string.auth_check_email_title)) },
         text = {
             Column(
                 modifier = Modifier
@@ -529,8 +531,10 @@ private fun ResetPasswordDialog(
             ) {
                 // The server answers the same way whether or not the address has an account.
                 Text(
-                    text = "If an account exists for ${email.ifEmpty { "that address" }}, we sent a link to " +
-                        "reset your password. Open it to choose a new password, then sign in here.",
+                    text = stringResource(
+                        R.string.auth_reset_link_sent,
+                        email.ifEmpty { stringResource(R.string.auth_reset_link_sent_fallback) }
+                    ),
                     style = MaterialTheme.typography.bodyMedium
                 )
 
@@ -541,12 +545,12 @@ private fun ResetPasswordDialog(
                     horizontalArrangement = Arrangement.Center
                 ) {
                     Text(
-                        text = "Didn't get it? ",
+                        text = stringResource(R.string.auth_didnt_get_it) + " ",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "Send again",
+                        text = stringResource(R.string.auth_send_again),
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary,
@@ -560,7 +564,7 @@ private fun ResetPasswordDialog(
                 shape = RoundedCornerShape(20.dp),
                 onClick = onNavigateToLogin
             ) {
-                Text("Sign In")
+                Text(stringResource(R.string.auth_sign_in))
             }
         },
         dismissButton = {
@@ -568,7 +572,7 @@ private fun ResetPasswordDialog(
                 shape = RoundedCornerShape(20.dp),
                 onClick = onDismiss
             ) {
-                Text("Close")
+                Text(stringResource(R.string.action_close))
             }
         },
         modifier = modifier
@@ -592,7 +596,7 @@ private fun EmailVerificationDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(24.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        title = { Text("Verify your email") },
+        title = { Text(stringResource(R.string.auth_verify_email_title)) },
         text = {
             Column(
                 modifier = Modifier
@@ -610,13 +614,15 @@ private fun EmailVerificationDialog(
                 }
 
                 Text(
-                    text = "We sent a verification link to ${email.ifEmpty { "your email address" }}. " +
-                        "Open it to verify your account, then sign in here.",
+                    text = stringResource(
+                        R.string.auth_verification_sent,
+                        email.ifEmpty { stringResource(R.string.auth_verification_sent_fallback) }
+                    ),
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Can't find it? Check your spam folder or send it again.",
+                    text = stringResource(R.string.auth_verification_spam_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -636,7 +642,7 @@ private fun EmailVerificationDialog(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                     }
-                    Text("Resend email")
+                    Text(stringResource(R.string.auth_resend_email))
                 }
             }
         },
@@ -646,7 +652,7 @@ private fun EmailVerificationDialog(
                 onClick = onNavigateToLogin,
                 enabled = !formState.isLoading
             ) {
-                Text("Sign In")
+                Text(stringResource(R.string.auth_sign_in))
             }
         },
         dismissButton = {
@@ -654,7 +660,7 @@ private fun EmailVerificationDialog(
                 shape = RoundedCornerShape(20.dp),
                 onClick = onDismiss
             ) {
-                Text("Close")
+                Text(stringResource(R.string.action_close))
             }
         },
         modifier = modifier
@@ -682,7 +688,7 @@ private fun UserProfileDialog(
                     tint = MaterialTheme.colorScheme.primary
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Account Profile")
+                Text(stringResource(R.string.auth_profile_title))
             }
         },
         text = {
@@ -718,7 +724,7 @@ private fun UserProfileDialog(
                     }
                     is AuthState.Guest -> {
                         Text(
-                            text = "Guest Mode",
+                            text = stringResource(R.string.auth_guest_mode),
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
@@ -732,7 +738,7 @@ private fun UserProfileDialog(
                     onClick = viewModel::adoptGuestData,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Import Unsynced Local Solves")
+                    Text(stringResource(R.string.auth_import_local_solves))
                 }
 
                 if (authState is AuthState.Authenticated || authState is AuthState.Admin) {
@@ -744,7 +750,7 @@ private fun UserProfileDialog(
                         enabled = !formState.isLoading,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Change password")
+                        Text(stringResource(R.string.auth_change_password))
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
@@ -756,7 +762,7 @@ private fun UserProfileDialog(
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Delete account")
+                        Text(stringResource(R.string.auth_delete_account))
                     }
                 }
             }
@@ -770,7 +776,7 @@ private fun UserProfileDialog(
                     contentColor = MaterialTheme.colorScheme.onError
                 )
             ) {
-                Text("Sign Out")
+                Text(stringResource(R.string.auth_sign_out))
             }
         },
         dismissButton = {
@@ -778,7 +784,7 @@ private fun UserProfileDialog(
                 shape = RoundedCornerShape(20.dp),
                 onClick = onDismiss
             ) {
-                Text("Close")
+                Text(stringResource(R.string.action_close))
             }
         },
         modifier = modifier
@@ -797,7 +803,7 @@ private fun DeleteAccountDialog(
         onDismissRequest = { if (!formState.isLoading) onCancel() },
         shape = RoundedCornerShape(24.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        title = { Text("Delete account?") },
+        title = { Text(stringResource(R.string.auth_delete_account_title)) },
         text = {
             Column(
                 modifier = Modifier
@@ -810,13 +816,12 @@ private fun DeleteAccountDialog(
                 }
 
                 Text(
-                    text = "Your account and all of its synced data will be permanently deleted from the " +
-                        "server. This can't be undone.",
+                    text = stringResource(R.string.auth_delete_account_message),
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Your solves and sessions stay on this device.",
+                    text = stringResource(R.string.auth_delete_account_local_note),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -840,7 +845,7 @@ private fun DeleteAccountDialog(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                 }
-                Text("Delete permanently")
+                Text(stringResource(R.string.auth_delete_permanently))
             }
         },
         dismissButton = {
@@ -849,7 +854,7 @@ private fun DeleteAccountDialog(
                 onClick = onCancel,
                 enabled = !formState.isLoading
             ) {
-                Text("Cancel")
+                Text(stringResource(R.string.action_cancel))
             }
         },
         modifier = modifier
@@ -875,7 +880,7 @@ private fun ChangePasswordDialog(
         onDismissRequest = { if (!formState.isLoading) onCancel() },
         shape = RoundedCornerShape(24.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        title = { Text("Change password") },
+        title = { Text(stringResource(R.string.auth_change_password)) },
         text = {
             Column(
                 modifier = Modifier
@@ -890,13 +895,13 @@ private fun ChangePasswordDialog(
                 OutlinedTextField(
                     value = formState.currentPassword,
                     onValueChange = viewModel::onCurrentPasswordChanged,
-                    label = { Text("Current password") },
+                    label = { Text(stringResource(R.string.auth_current_password)) },
                     leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
                     trailingIcon = {
                         IconButton(onClick = viewModel::togglePasswordVisibility) {
                             Icon(
                                 imageVector = if (formState.isPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                contentDescription = "Toggle password visibility"
+                                contentDescription = stringResource(R.string.auth_toggle_password_visibility)
                             )
                         }
                     },
@@ -913,7 +918,7 @@ private fun ChangePasswordDialog(
                 OutlinedTextField(
                     value = formState.password,
                     onValueChange = viewModel::onPasswordChanged,
-                    label = { Text("New password (min 10 characters)") },
+                    label = { Text(stringResource(R.string.auth_new_password_min)) },
                     leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
                     visualTransformation = passwordTransformation,
                     singleLine = true,
@@ -928,7 +933,7 @@ private fun ChangePasswordDialog(
                 OutlinedTextField(
                     value = formState.confirmPassword,
                     onValueChange = viewModel::onConfirmPasswordChanged,
-                    label = { Text("Confirm new password") },
+                    label = { Text(stringResource(R.string.auth_confirm_new_password)) },
                     leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
                     visualTransformation = passwordTransformation,
                     singleLine = true,
@@ -953,7 +958,7 @@ private fun ChangePasswordDialog(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                 }
-                Text("Change password")
+                Text(stringResource(R.string.auth_change_password))
             }
         },
         dismissButton = {
@@ -962,7 +967,7 @@ private fun ChangePasswordDialog(
                 onClick = onCancel,
                 enabled = !formState.isLoading
             ) {
-                Text("Cancel")
+                Text(stringResource(R.string.action_cancel))
             }
         },
         modifier = modifier
@@ -997,7 +1002,7 @@ private fun ProfileInfoCard(
                     AssistChip(
                         onClick = {},
                         shape = RoundedCornerShape(16.dp),
-                        label = { Text("VERIFIED") },
+                        label = { Text(stringResource(R.string.auth_badge_verified)) },
                         leadingIcon = {
                             Icon(
                                 Icons.Default.CheckCircle,
@@ -1016,7 +1021,7 @@ private fun ProfileInfoCard(
                     AssistChip(
                         onClick = {},
                         shape = RoundedCornerShape(16.dp),
-                        label = { Text("ADMIN") },
+                        label = { Text(stringResource(R.string.auth_badge_admin)) },
                         leadingIcon = {
                             Icon(
                                 Icons.Default.AdminPanelSettings,

@@ -63,6 +63,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -73,6 +74,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.maciekhetman.cubetimer.R
 import kotlin.math.roundToInt
 
 // Building blocks of the Settings screen, styled after Material 3 Expressive segmented lists: a section
@@ -350,7 +352,7 @@ fun SettingSliderRow(
     steps: Int,
     modifier: Modifier = Modifier,
     sliderModifier: Modifier = Modifier,
-    valueFormatter: (Int) -> String = { "${it}ms" },
+    valueFormatter: @Composable (Int) -> String = { stringResource(R.string.settings_value_millis, it) },
     icon: ImageVector? = null,
     supportingText: String? = null,
     enabled: Boolean = true,
@@ -435,14 +437,14 @@ fun <T> SettingChoiceRow(
     title: String,
     options: List<T>,
     selected: T,
-    optionLabel: (T) -> String,
+    optionLabel: @Composable (T) -> String,
     onSelect: (T) -> Unit,
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
     supportingText: String? = null,
     supportingTextColor: Color = Color.Unspecified,
     optionIcon: ((T) -> ImageVector)? = null,
-    optionContentDescription: ((T) -> String)? = null,
+    optionContentDescription: (@Composable (T) -> String)? = null,
     enabled: Boolean = true,
     isOptionEnabled: (T) -> Boolean = { true },
 ) {
@@ -477,7 +479,7 @@ fun <T> SettingChipChoiceRow(
     title: String,
     options: List<T>,
     selected: T,
-    optionLabel: (T) -> String,
+    optionLabel: @Composable (T) -> String,
     onSelect: (T) -> Unit,
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
@@ -521,7 +523,7 @@ fun <T> SettingMultiChoiceRow(
     title: String,
     options: List<T>,
     isSelected: (T) -> Boolean,
-    optionLabel: (T) -> String,
+    optionLabel: @Composable (T) -> String,
     onSelectedChange: (option: T, selected: Boolean) -> Unit,
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
@@ -565,11 +567,11 @@ fun <T> SettingMultiChoiceRow(
 fun <T> ConnectedButtonGroup(
     options: List<T>,
     selected: T,
-    optionLabel: (T) -> String,
+    optionLabel: @Composable (T) -> String,
     onSelect: (T) -> Unit,
     modifier: Modifier = Modifier,
     optionIcon: ((T) -> ImageVector)? = null,
-    optionContentDescription: ((T) -> String)? = null,
+    optionContentDescription: (@Composable (T) -> String)? = null,
     enabled: Boolean = true,
     isOptionEnabled: (T) -> Boolean = { true },
 ) {

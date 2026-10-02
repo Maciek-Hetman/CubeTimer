@@ -12,11 +12,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.maciekhetman.cubetimer.R
 import com.maciekhetman.cubetimer.model.SolveTime
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.ZoneId
+import java.time.format.TextStyle
 import java.util.*
 
 private data class ActivityTile(
@@ -103,7 +108,7 @@ fun ActivityTracker(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = "Activity",
+                text = stringResource(R.string.activity_title),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(bottom = 4.dp)
@@ -115,7 +120,7 @@ fun ActivityTracker(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Less",
+                    text = stringResource(R.string.activity_less),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -135,7 +140,7 @@ fun ActivityTracker(
                     )
                 }
                 Text(
-                    text = "More",
+                    text = stringResource(R.string.activity_more),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -155,7 +160,11 @@ fun ActivityTracker(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
                 modifier = Modifier.padding(end = 12.dp)
             ) {
-                listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat").forEach { day ->
+                val locale = LocalConfiguration.current.locales[0]
+                listOf(
+                    DayOfWeek.SUNDAY, DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY,
+                    DayOfWeek.THURSDAY, DayOfWeek.FRIDAY, DayOfWeek.SATURDAY
+                ).map { it.getDisplayName(TextStyle.SHORT, locale) }.forEach { day ->
                     Box(
                         modifier = Modifier
                             .height(20.dp)

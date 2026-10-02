@@ -38,12 +38,15 @@ import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.maciekhetman.cubetimer.R
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.ui.components.Scramble2DPreview
 import kotlinx.coroutines.launch
@@ -61,17 +64,15 @@ fun ScramblePreviewDialog(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val clipboard = LocalClipboard.current
     val coroutineScope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
 
     val eventTitle = when (mode) {
-        Mode.CUBE_2x2 -> "2x2 Cube"
-        Mode.CUBE_3x3 -> "3x3 Cube"
-        Mode.CUBE_4x4 -> "4x4 Cube"
-        Mode.CUBE_5x5 -> "5x5 Cube"
-        Mode.MEGAMINX -> "Megaminx"
-        Mode.PYRAMINX -> "Pyraminx"
+        Mode.CUBE_2x2, Mode.CUBE_3x3, Mode.CUBE_4x4, Mode.CUBE_5x5 ->
+            stringResource(R.string.scramble_preview_cube_title, mode.displayName)
+        Mode.MEGAMINX, Mode.PYRAMINX -> mode.displayName
     }
 
     Dialog(
@@ -114,7 +115,7 @@ fun ScramblePreviewDialog(
                     }
 
                     Text(
-                        text = "Scramble Preview",
+                        text = stringResource(R.string.scramble_preview_title),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.primary
@@ -165,15 +166,17 @@ fun ScramblePreviewDialog(
                                 onClick = {
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                     coroutineScope.launch {
-                                        clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("Scramble", scramble)))
-                                        Toast.makeText(context, "Scramble copied!", Toast.LENGTH_SHORT).show()
+                                        clipboard.setClipEntry(
+                                            ClipEntry(ClipData.newPlainText(resources.getString(R.string.scramble_clip_label), scramble))
+                                        )
+                                        Toast.makeText(context, R.string.scramble_copied, Toast.LENGTH_SHORT).show()
                                     }
                                 },
                                 modifier = Modifier.size(36.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.ContentCopy,
-                                    contentDescription = "Copy scramble",
+                                    contentDescription = stringResource(R.string.scramble_copy),
                                     modifier = Modifier.size(18.dp),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -199,7 +202,7 @@ fun ScramblePreviewDialog(
                         contentPadding = PaddingValues(horizontal = 12.dp)
                     ) {
                         Text(
-                            text = "Close",
+                            text = stringResource(R.string.action_close),
                             maxLines = 1
                         )
                     }
@@ -225,7 +228,7 @@ fun ScramblePreviewDialog(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "New Scramble",
+                            text = stringResource(R.string.scramble_new),
                             maxLines = 1
                         )
                     }

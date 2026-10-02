@@ -18,6 +18,8 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
+import androidx.annotation.StringRes
+import com.maciekhetman.cubetimer.R
 import com.maciekhetman.cubetimer.domain.bluetooth.QiyiTimerProtocol
 import com.maciekhetman.cubetimer.domain.bluetooth.SmartTimerEvent
 import com.maciekhetman.cubetimer.domain.bluetooth.SmartTimerModel
@@ -56,6 +58,9 @@ class AndroidBluetoothTimerManager(
 ) : BluetoothTimerManager {
 
     private val appContext = context.applicationContext
+
+    /** A user-facing error, in the app's language at the time it happens. */
+    private fun text(@StringRes id: Int, vararg args: Any): String = appContext.getString(id, *args)
     private val adapter: BluetoothAdapter? =
         appContext.getSystemService(BluetoothManager::class.java)?.adapter
     private val bleSupported =
@@ -108,7 +113,7 @@ class AndroidBluetoothTimerManager(
         override fun onScanFailed(errorCode: Int) {
             Log.w(TAG, "BLE scan failed: $errorCode")
             _state.update {
-                it.copy(status = BluetoothTimerStatus.Disconnected, error = "Bluetooth scan failed (code $errorCode)")
+                it.copy(status = BluetoothTimerStatus.Disconnected, error = text(R.string.bt_error_scan_failed, errorCode))
             }
         }
     }
@@ -135,11 +140,11 @@ class AndroidBluetoothTimerManager(
     override fun startScan() {
         if (!bleSupported) return
         if (!hasPermissions()) {
-            _state.update { it.copy(error = "Bluetooth permission is required to find your timer") }
+            _state.update { it.copy(error = text(R.string.bt_error_scan_permission)) }
             return
         }
         if (!isBluetoothEnabled()) {
-            _state.update { it.copy(error = "Turn on Bluetooth to find your timer") }
+            _state.update { it.copy(error = text(R.string.bt_error_turn_on)) }
             return
         }
         if (connection != null) return
@@ -153,7 +158,7 @@ class AndroidBluetoothTimerManager(
                 scanCallback
             )
         } catch (e: SecurityException) {
-            _state.update { it.copy(status = BluetoothTimerStatus.Disconnected, error = "Bluetooth permission was denied") }
+            _state.update { it.copy(status = BluetoothTimerStatus.Disconnected, error = text(R.string.bt_error_permission_denied)) }
             return
         }
         scanStopJob?.cancel()
@@ -180,7 +185,7 @@ class AndroidBluetoothTimerManager(
 
     override fun connect(address: String) {
         if (!bleSupported || !hasPermissions()) {
-            _state.update { it.copy(error = "Bluetooth permission is required to connect to your timer") }
+            _state.update { it.copy(error = text(R.string.bt_error_connect_permission)) }
             return
         }
         stopScan()
@@ -188,7 +193,7 @@ class AndroidBluetoothTimerManager(
 
         val details = synchronized(scanRecords) { scanRecords[address] }
         if (details == null) {
-            _state.update { it.copy(error = "Timer not found. Scan again and make sure it is switched on.") }
+            _state.update { it.copy(error = text(R.string.bt_error_timer_not_found)) }
             return
         }
         val driver = when (details.model) {
@@ -196,7 +201,7 @@ class AndroidBluetoothTimerManager(
             SmartTimerModel.QIYI -> {
                 val mac = SmartTimerDetector.qiyiMac(details.qiyiManufacturerData, address, details.name)
                 if (mac == null) {
-                    _state.update { it.copy(error = "Couldn't read this QiYi timer's address") }
+                    _state.update { it.copy(error = text(R.string.bt_error_qiyi_address)) }
                     return
                 }
                 QiyiTimerDriver(mac)
@@ -239,7 +244,7 @@ class AndroidBluetoothTimerManager(
         fun open(device: BluetoothDevice) {
             connectTimeout = scope.launch {
                 delay(CONNECT_TIMEOUT_MS)
-                if (!ready) fail("Couldn't connect to $deviceName")
+                if (!ready) fail(text(R.string.bt_error_connect_failed, deviceName))
             }
             gatt = try {
                 // The BluetoothGattConnectionSettings overload that replaces this is API 37+ only.
@@ -248,7 +253,7 @@ class AndroidBluetoothTimerManager(
             } catch (e: SecurityException) {
                 null
             }
-            if (gatt == null) fail("Couldn't connect to $deviceName")
+            if (gatt == null) fail(text(R.string.bt_error_connect_failed, deviceName))
         }
 
         fun close(notify: Boolean) {
@@ -350,7 +355,7 @@ class AndroidBluetoothTimerManager(
         private fun onServicesReady(gatt: BluetoothGatt) {
             worker = scope.launch {
                 if (!enableNotifications(gatt)) {
-                    fail("$deviceName doesn't look like a supported timer")
+                    fail(text(R.string.bt_error_unsupported_device, deviceName))
                     return@launch
                 }
                 ready = true
@@ -379,9 +384,9 @@ class AndroidBluetoothTimerManager(
             override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
                 if (closed) return
                 if (status == BluetoothGatt.GATT_SUCCESS && newState == BluetoothProfile.STATE_CONNECTED) {
-                    if (!gatt.discoverServices()) fail("Couldn't read $deviceName's services")
+                    if (!gatt.discoverServices()) fail(text(R.string.bt_error_services, deviceName))
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED || status != BluetoothGatt.GATT_SUCCESS) {
-                    fail(if (ready) null else "Couldn't connect to $deviceName")
+                    fail(if (ready) null else text(R.string.bt_error_connect_failed, deviceName))
                 }
             }
 
@@ -390,7 +395,7 @@ class AndroidBluetoothTimerManager(
                 if (status == BluetoothGatt.GATT_SUCCESS) {
                     onServicesReady(gatt)
                 } else {
-                    fail("Couldn't read $deviceName's services")
+                    fail(text(R.string.bt_error_services, deviceName))
                 }
             }
 

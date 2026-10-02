@@ -25,18 +25,18 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import com.maciekhetman.cubetimer.R
 import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.viewmodel.AuthViewModel
 
 // Dialogs opened from a link in a CubeSync email (see AuthLink). Completing either one signs this
 // device in to the account the link belongs to and adopts its guest solves, and a link can come
 // from anyone, so both wait for the user to confirm and neither acts while someone is signed in.
-
-private const val ONLY_IF_REQUESTED = "Only continue if you asked for this email."
 
 private fun AuthState.signedInEmail(): String? = when (this) {
     is AuthState.Authenticated -> user.email
@@ -58,7 +58,7 @@ internal fun VerifyEmailLinkDialog(
         onDismissRequest = { if (!formState.isLoading) onDismiss() },
         shape = RoundedCornerShape(24.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        title = { Text("Verify your email") },
+        title = { Text(stringResource(R.string.auth_verify_email_title)) },
         text = {
             Column(
                 modifier = Modifier
@@ -74,12 +74,12 @@ internal fun VerifyEmailLinkDialog(
                     SignedInNotice(signedInEmail)
                 } else {
                     Text(
-                        text = "Finish verifying your email and sign in on this device?",
+                        text = stringResource(R.string.auth_link_verify_question),
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Solves saved on this device will be added to that account. $ONLY_IF_REQUESTED",
+                        text = stringResource(R.string.auth_link_verify_note),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -102,7 +102,7 @@ internal fun VerifyEmailLinkDialog(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                     }
-                    Text("Verify and sign in")
+                    Text(stringResource(R.string.auth_link_verify_confirm))
                 }
             }
         },
@@ -112,7 +112,7 @@ internal fun VerifyEmailLinkDialog(
                 onClick = onDismiss,
                 enabled = !formState.isLoading
             ) {
-                Text(if (signedInEmail != null) "Close" else "Cancel")
+                Text(stringResource(if (signedInEmail != null) R.string.action_close else R.string.action_cancel))
             }
         },
         modifier = modifier
@@ -132,7 +132,7 @@ internal fun ResetPasswordLinkDialog(
         onDismissRequest = { if (!formState.isLoading) onDismiss() },
         shape = RoundedCornerShape(24.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        title = { Text("Choose a new password") },
+        title = { Text(stringResource(R.string.auth_link_reset_title)) },
         text = {
             Column(
                 modifier = Modifier
@@ -150,13 +150,13 @@ internal fun ResetPasswordLinkDialog(
                     OutlinedTextField(
                         value = formState.password,
                         onValueChange = viewModel::onPasswordChanged,
-                        label = { Text("New password (min 10 characters)") },
+                        label = { Text(stringResource(R.string.auth_new_password_min)) },
                         leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
                         trailingIcon = {
                             IconButton(onClick = viewModel::togglePasswordVisibility) {
                                 Icon(
                                     imageVector = if (formState.isPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = "Toggle password visibility"
+                                    contentDescription = stringResource(R.string.auth_toggle_password_visibility)
                                 )
                             }
                         },
@@ -173,7 +173,7 @@ internal fun ResetPasswordLinkDialog(
                     OutlinedTextField(
                         value = formState.confirmPassword,
                         onValueChange = viewModel::onConfirmPasswordChanged,
-                        label = { Text("Confirm new password") },
+                        label = { Text(stringResource(R.string.auth_confirm_new_password)) },
                         leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
                         visualTransformation = if (formState.isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         singleLine = true,
@@ -186,7 +186,7 @@ internal fun ResetPasswordLinkDialog(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
-                        text = "You'll be signed in on this device. $ONLY_IF_REQUESTED",
+                        text = stringResource(R.string.auth_link_reset_note),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -208,7 +208,7 @@ internal fun ResetPasswordLinkDialog(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                     }
-                    Text("Set password")
+                    Text(stringResource(R.string.auth_link_reset_confirm))
                 }
             }
         },
@@ -218,7 +218,7 @@ internal fun ResetPasswordLinkDialog(
                 onClick = onDismiss,
                 enabled = !formState.isLoading
             ) {
-                Text(if (signedInEmail != null) "Close" else "Cancel")
+                Text(stringResource(if (signedInEmail != null) R.string.action_close else R.string.action_cancel))
             }
         },
         modifier = modifier
@@ -228,7 +228,7 @@ internal fun ResetPasswordLinkDialog(
 @Composable
 private fun SignedInNotice(email: String) {
     Text(
-        text = "You're signed in as $email. Sign out first to use this link.",
+        text = stringResource(R.string.auth_link_signed_in, email),
         style = MaterialTheme.typography.bodyMedium
     )
 }

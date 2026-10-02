@@ -58,23 +58,36 @@ class CsvImporter(
                     while (next != null && (next.isEmpty() || (next.size == 1 && next[0].isBlank()))) {
                         next = reader.readNextRecord()
                     }
-                    next ?: return@withContext CsvImportStatus.InvalidFile("CSV file missing column header row.")
+                    next ?: return@withContext CsvImportStatus.InvalidFile(
+                        "CSV file missing column header row.",
+                        CsvImportStatus.InvalidFile.Problem.MISSING_HEADER_ROW
+                    )
                 } else if (isOtherComment) {
-                    return@withContext CsvImportStatus.InvalidFile("Invalid comment header. Expected '# Source: CubeTimer'.")
+                    return@withContext CsvImportStatus.InvalidFile(
+                        "Invalid comment header. Expected '# Source: CubeTimer'.",
+                        CsvImportStatus.InvalidFile.Problem.INVALID_COMMENT
+                    )
                 } else {
                     // Tolerant fallback: Check if firstRecord itself is the header row
                     val candidateCols = firstRecord.map { it.trim().lowercase() }.toSet()
                     if (CsvFormat.REQUIRED_COLUMNS.all { it in candidateCols }) {
                         firstRecord
                     } else {
-                        return@withContext CsvImportStatus.InvalidFile("File missing required '# Source: CubeTimer' comment header.")
+                        return@withContext CsvImportStatus.InvalidFile(
+                            "File missing required '# Source: CubeTimer' comment header.",
+                            CsvImportStatus.InvalidFile.Problem.MISSING_SOURCE_COMMENT
+                        )
                     }
                 }
 
                 val colMap = headerRecord.mapIndexed { idx, name -> name.trim().lowercase() to idx }.toMap()
                 val missingCols = CsvFormat.REQUIRED_COLUMNS.filter { it !in colMap }
                 if (missingCols.isNotEmpty()) {
-                    return@withContext CsvImportStatus.InvalidFile("Missing required column(s): ${missingCols.joinToString()}")
+                    return@withContext CsvImportStatus.InvalidFile(
+                        "Missing required column(s): ${missingCols.joinToString()}",
+                        CsvImportStatus.InvalidFile.Problem.MISSING_COLUMNS,
+                        missingCols
+                    )
                 }
 
                 // Indices

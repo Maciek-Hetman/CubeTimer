@@ -1,7 +1,9 @@
 package com.maciekhetman.cubetimer.ui.screens
 
+import android.content.res.Resources
 import android.os.Build
 import android.widget.Toast
+import androidx.annotation.StringRes
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -81,7 +83,9 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
@@ -89,6 +93,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.maciekhetman.cubetimer.BuildConfig
+import com.maciekhetman.cubetimer.R
 import com.maciekhetman.cubetimer.data.bluetooth.BluetoothTimerStatus
 import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.Mode
@@ -127,12 +132,6 @@ private val SettingsMaxWidth = 640.dp
 
 private val TimingDeviceOptions = listOf(TimingDevice.KEYBOARD, TimingDevice.EXTERNAL_TIMER)
 
-/** Supporting text of the settings that only touch timing uses. */
-private const val TOUCH_ONLY_NOTE = "Not used with a Bluetooth timer"
-
-/** Supporting text of the settings that focus mode overrides while solving. */
-private const val FOCUS_MODE_NOTE = "Focus mode hides everything"
-
 /**
  * Settings: the account card on top, then the timer's settings grouped by when they apply (timing,
  * while solving, the timer screen between solves), then appearance, general and About.
@@ -159,7 +158,7 @@ fun SettingsScreen(
             uriHandler.openUri(url)
         } catch (e: IllegalArgumentException) {
             // Thrown when nothing on the device can open a web link.
-            Toast.makeText(context, "No app available to open this link", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, R.string.error_no_app_for_link, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -171,7 +170,7 @@ fun SettingsScreen(
             // No mode menu: nothing here depends on the current mode, and "Default puzzle" below
             // would read as a second picker for the same thing.
             CollapsingTopBar(
-                title = "Settings",
+                title = stringResource(R.string.nav_settings),
                 scrollBehavior = scrollBehavior
             )
         }
@@ -260,14 +259,14 @@ fun AccountSection(
     val user = authState.currentUser
     SettingsSection(title = null, modifier = modifier) {
         SettingsItem(
-            title = user?.email ?: "Sign in",
+            title = user?.email ?: stringResource(R.string.account_sign_in),
             titleStyle = MaterialTheme.typography.titleMedium,
             titleMaxLines = 1,
             titleOverflow = TextOverflow.MiddleEllipsis,
             supportingText = when (authState) {
-                is AuthState.Admin -> "Signed in · Admin"
-                is AuthState.Authenticated -> "Signed in"
-                AuthState.Guest, AuthState.Loading -> "Back up your solves and sync them across devices"
+                is AuthState.Admin -> stringResource(R.string.account_signed_in_admin)
+                is AuthState.Authenticated -> stringResource(R.string.account_signed_in)
+                AuthState.Guest, AuthState.Loading -> stringResource(R.string.account_guest_pitch)
             },
             leadingContent = { AccountAvatar(authState) },
             trailingContent = { SettingsChevron() },
@@ -278,17 +277,17 @@ fun AccountSection(
         )
         if (user != null) {
             SettingsItem(
-                title = "Cloud Sync",
+                title = stringResource(R.string.sync_cloud_sync),
                 leadingContent = { SyncStatusBadge(syncUiState) },
                 supportingContent = {
                     Text(
-                        text = syncStatusLabel(syncUiState),
+                        text = syncStatusLabel(LocalResources.current, syncUiState),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     if (syncUiState.conflictCount > 0) {
                         Text(
-                            text = syncConflictHint(syncUiState.conflictCount),
+                            text = syncConflictHint(LocalResources.current, syncUiState.conflictCount),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.error
                         )
@@ -324,14 +323,19 @@ private fun TimingSection(
     // As on the timer screen: no Bluetooth timer without BLE, unless one is already selected.
     val bluetoothAvailable = bluetoothSelected || bluetoothTimerState.status != BluetoothTimerStatus.Unsupported
 
-    SettingsSection(title = "Timing", modifier = modifier) {
+    val touchOnlyNote = stringResource(R.string.settings_touch_only_note)
+    SettingsSection(title = stringResource(R.string.settings_section_timing), modifier = modifier) {
         SettingChoiceRow(
-            title = "Timing device",
+            title = stringResource(R.string.settings_timing_device),
             icon = if (bluetoothSelected) Icons.Filled.Bluetooth else Icons.Filled.TouchApp,
-            supportingText = if (bluetoothAvailable) null else "Bluetooth timers aren't supported on this device",
+            supportingText = if (bluetoothAvailable) null else stringResource(R.string.settings_bluetooth_unsupported),
             options = TimingDeviceOptions,
             selected = if (bluetoothSelected) TimingDevice.EXTERNAL_TIMER else TimingDevice.KEYBOARD,
-            optionLabel = { if (it == TimingDevice.EXTERNAL_TIMER) "Bluetooth" else "Touch" },
+            optionLabel = {
+                stringResource(
+                    if (it == TimingDevice.EXTERNAL_TIMER) R.string.timing_device_bluetooth else R.string.timing_device_touch
+                )
+            },
             optionIcon = { if (it == TimingDevice.EXTERNAL_TIMER) Icons.Filled.Bluetooth else Icons.Filled.TouchApp },
             isOptionEnabled = { it != TimingDevice.EXTERNAL_TIMER || bluetoothAvailable },
             onSelect = { device ->
@@ -345,9 +349,9 @@ private fun TimingSection(
             BluetoothTimerRow(status = bluetoothTimerState.status, onClick = onManageBluetoothTimer)
         }
         SettingSliderRow(
-            title = "Start delay",
+            title = stringResource(R.string.settings_start_delay),
             icon = Icons.Filled.PanTool,
-            supportingText = if (bluetoothSelected) TOUCH_ONLY_NOTE else null,
+            supportingText = if (bluetoothSelected) touchOnlyNote else null,
             value = timerStartDelayMillis,
             valueRange = 0f..TIMER_START_DELAY_MAX_MILLIS.toFloat(),
             steps = TIMER_START_DELAY_MAX_MILLIS / TIMER_START_DELAY_STEP_MILLIS - 1,
@@ -355,9 +359,9 @@ private fun TimingSection(
             onValueChangeFinished = viewModel::setTimerStartDelayMillis
         )
         SettingToggleRow(
-            title = "Inspection",
+            title = stringResource(R.string.settings_inspection),
             icon = Icons.Filled.HourglassTop,
-            supportingText = if (bluetoothSelected) TOUCH_ONLY_NOTE else null,
+            supportingText = if (bluetoothSelected) touchOnlyNote else null,
             checked = inspectionEnabled,
             enabled = !bluetoothSelected,
             onCheckedChange = viewModel::setInspectionEnabled
@@ -373,7 +377,7 @@ private fun BluetoothTimerRow(status: BluetoothTimerStatus, onClick: () -> Unit)
     // Selected with nothing connected or connecting: no solve can start until that is fixed.
     val unavailable = status == BluetoothTimerStatus.Disconnected || status == BluetoothTimerStatus.Unsupported
     SettingsItem(
-        title = "Bluetooth timer",
+        title = stringResource(R.string.bluetooth_timer),
         supportingText = bluetoothStatusLabel(status),
         supportingTextColor = when {
             status is BluetoothTimerStatus.Connected -> colors.primary
@@ -408,18 +412,19 @@ private fun WhileSolvingSection(viewModel: TimerViewModel, modifier: Modifier = 
     val hideAveragesDuringSolve by viewModel.hideAveragesDuringSolve.collectAsStateWithLifecycle()
     val hideLastResultsDuringSolve by viewModel.hideLastResultsDuringSolve.collectAsStateWithLifecycle()
 
-    SettingsSection(title = "While solving", modifier = modifier) {
+    val focusModeNote = stringResource(R.string.settings_focus_mode_note)
+    SettingsSection(title = stringResource(R.string.settings_section_while_solving), modifier = modifier) {
         SettingToggleRow(
-            title = "Focus mode",
+            title = stringResource(R.string.settings_focus_mode),
             icon = Icons.Filled.CenterFocusStrong,
-            supportingText = "Blank screen while the timer runs",
+            supportingText = stringResource(R.string.settings_focus_mode_summary),
             checked = focusMode,
             onCheckedChange = viewModel::setFocusMode
         )
         SettingChoiceRow(
-            title = "Running time",
+            title = stringResource(R.string.settings_running_time),
             icon = Icons.Filled.Timer,
-            supportingText = if (focusMode) FOCUS_MODE_NOTE else null,
+            supportingText = if (focusMode) focusModeNote else null,
             options = RunningTimerDisplay.entries,
             selected = runningTimerDisplay,
             // Samples of what the timer shows; screen readers get the full names.
@@ -427,17 +432,17 @@ private fun WhileSolvingSection(viewModel: TimerViewModel, modifier: Modifier = 
                 when (display) {
                     RunningTimerDisplay.FULL -> "12.34"
                     RunningTimerDisplay.SECONDS_ONLY -> "12"
-                    RunningTimerDisplay.HIDDEN -> "Hidden"
+                    RunningTimerDisplay.HIDDEN -> stringResource(R.string.settings_running_time_hidden)
                 }
             },
-            optionContentDescription = { it.displayName },
+            optionContentDescription = { stringResource(it.labelRes) },
             enabled = !focusMode,
             onSelect = viewModel::setRunningTimerDisplay
         )
         SettingMultiChoiceRow(
-            title = "Show while solving",
+            title = stringResource(R.string.settings_show_while_solving),
             icon = Icons.Filled.Visibility,
-            supportingText = if (focusMode) FOCUS_MODE_NOTE else null,
+            supportingText = if (focusMode) focusModeNote else null,
             options = SolveOverlay.entries,
             isSelected = { overlay ->
                 when (overlay) {
@@ -446,7 +451,7 @@ private fun WhileSolvingSection(viewModel: TimerViewModel, modifier: Modifier = 
                     SolveOverlay.LAST_RESULTS -> !hideLastResultsDuringSolve
                 }
             },
-            optionLabel = { it.label },
+            optionLabel = { stringResource(it.labelRes) },
             enabled = !focusMode,
             onSelectedChange = { overlay, show ->
                 when (overlay) {
@@ -460,10 +465,10 @@ private fun WhileSolvingSection(viewModel: TimerViewModel, modifier: Modifier = 
 }
 
 /** The parts of the timer screen that "Show while solving" can hide while the timer runs. */
-private enum class SolveOverlay(val label: String) {
-    SCRAMBLE("Scramble"),
-    AVERAGES("Averages"),
-    LAST_RESULTS("Last results")
+private enum class SolveOverlay(@StringRes val labelRes: Int) {
+    SCRAMBLE(R.string.settings_overlay_scramble),
+    AVERAGES(R.string.settings_overlay_averages),
+    LAST_RESULTS(R.string.settings_overlay_last_results)
 }
 
 /** The timer screen between solves: the scramble, the averages and last results, and the start hint. */
@@ -475,39 +480,39 @@ private fun TimerScreenSection(viewModel: TimerViewModel, modifier: Modifier = M
     val hideLastResultsOnTimer by viewModel.hideLastResultsOnTimer.collectAsStateWithLifecycle()
     val hideStartHint by viewModel.hideStartHint.collectAsStateWithLifecycle()
 
-    SettingsSection(title = "Timer screen", modifier = modifier) {
+    SettingsSection(title = stringResource(R.string.settings_section_timer_screen), modifier = modifier) {
         SettingSliderRow(
-            title = "Scramble size",
+            title = stringResource(R.string.settings_scramble_size),
             icon = Icons.Filled.FormatSize,
             value = scrambleScalePercent,
             valueRange = 70f..140f,
             steps = 13,
-            valueFormatter = { "$it%" },
+            valueFormatter = { stringResource(R.string.settings_value_percent, it) },
             onValueChangeFinished = { percent -> viewModel.setScrambleScalePercent(percent) }
         )
         SettingToggleRow(
-            title = "New scramble button",
+            title = stringResource(R.string.settings_new_scramble_button),
             icon = Icons.Filled.Refresh,
             checked = showScrambleRefreshButton,
             onCheckedChange = viewModel::setShowScrambleRefreshButton
         )
         SettingMultiChoiceRow(
-            title = "Averages",
+            title = stringResource(R.string.settings_averages),
             icon = Icons.Filled.Functions,
             options = TimerAverageOptions,
             isSelected = { it in timerAverages },
-            optionLabel = { "Ao$it" },
+            optionLabel = { stringResource(R.string.average_of_n, it) },
             onSelectedChange = viewModel::setTimerAverageEnabled
         )
         // Stored as "hide" flags; shown the positive way round so on means visible.
         SettingToggleRow(
-            title = "Last results",
+            title = stringResource(R.string.settings_last_results),
             icon = Icons.Filled.FormatListNumbered,
             checked = !hideLastResultsOnTimer,
             onCheckedChange = { show -> viewModel.setHideLastResultsOnTimer(!show) }
         )
         SettingToggleRow(
-            title = "Start hint",
+            title = stringResource(R.string.settings_start_hint),
             icon = Icons.Filled.TipsAndUpdates,
             checked = !hideStartHint,
             onCheckedChange = { show -> viewModel.setHideStartHint(!show) }
@@ -523,22 +528,22 @@ private fun AppearanceSection(viewModel: TimerViewModel, modifier: Modifier = Mo
     val dynamicColorSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val dynamicColorActive = dynamicColorSupported && dynamicColorEnabled
 
-    SettingsSection(title = "Appearance", modifier = modifier) {
+    SettingsSection(title = stringResource(R.string.settings_section_appearance), modifier = modifier) {
         if (dynamicColorSupported) {
             SettingToggleRow(
-                title = "Dynamic color",
+                title = stringResource(R.string.settings_dynamic_color),
                 icon = Icons.Filled.Palette,
                 checked = dynamicColorEnabled,
                 onCheckedChange = viewModel::setDynamicColorEnabled
             )
         }
         SettingToggleRow(
-            title = "AMOLED dark",
+            title = stringResource(R.string.settings_amoled),
             icon = Icons.Filled.DarkMode,
             supportingText = if (dynamicColorActive) {
-                "Not available with dynamic color"
+                stringResource(R.string.settings_amoled_unavailable)
             } else {
-                "Pure black background in dark theme"
+                stringResource(R.string.settings_amoled_summary)
             },
             checked = amoledEnabled,
             enabled = !dynamicColorActive,
@@ -552,9 +557,9 @@ private fun GeneralSection(viewModel: TimerViewModel, modifier: Modifier = Modif
     val defaultMode by viewModel.defaultMode.collectAsStateWithLifecycle()
     val hapticsEnabled by viewModel.hapticsEnabled.collectAsStateWithLifecycle()
 
-    SettingsSection(title = "General", modifier = modifier) {
+    SettingsSection(title = stringResource(R.string.settings_section_general), modifier = modifier) {
         SettingChipChoiceRow(
-            title = "Default puzzle",
+            title = stringResource(R.string.settings_default_puzzle),
             icon = Icons.Filled.ViewInAr,
             options = Mode.entries,
             selected = defaultMode,
@@ -562,7 +567,7 @@ private fun GeneralSection(viewModel: TimerViewModel, modifier: Modifier = Modif
             onSelect = viewModel::setDefaultMode
         )
         SettingToggleRow(
-            title = "Haptic feedback",
+            title = stringResource(R.string.settings_haptics),
             icon = Icons.Filled.Vibration,
             checked = hapticsEnabled,
             onCheckedChange = viewModel::setHapticsEnabled
@@ -586,30 +591,30 @@ fun AboutSection(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        SettingsSection(title = "About") {
+        SettingsSection(title = stringResource(R.string.settings_section_about)) {
             SettingsItem(
-                title = "Version",
+                title = stringResource(R.string.settings_version),
                 icon = Icons.Filled.Info,
                 supportingText = versionName
             )
-            SettingLinkRow(title = "Website", icon = Icons.Filled.Language, onClick = { onOpenUrl(ABOUT_URL) })
-            SettingLinkRow(title = "Source code", icon = Icons.Filled.Code, onClick = { onOpenUrl(SOURCE_CODE_URL) })
-            SettingLinkRow(title = "Report a problem", icon = Icons.Filled.BugReport, onClick = { onOpenUrl(ISSUES_URL) })
+            SettingLinkRow(title = stringResource(R.string.settings_website), icon = Icons.Filled.Language, onClick = { onOpenUrl(ABOUT_URL) })
+            SettingLinkRow(title = stringResource(R.string.settings_source_code), icon = Icons.Filled.Code, onClick = { onOpenUrl(SOURCE_CODE_URL) })
+            SettingLinkRow(title = stringResource(R.string.settings_report_problem), icon = Icons.Filled.BugReport, onClick = { onOpenUrl(ISSUES_URL) })
         }
         SettingsSection(title = null) {
             SettingLinkRow(
-                title = "Privacy policy",
+                title = stringResource(R.string.settings_privacy_policy),
                 icon = Icons.Filled.PrivacyTip,
                 onClick = { onOpenUrl(PRIVACY_POLICY_URL) }
             )
             SettingLinkRow(
-                title = "Open-source licenses",
+                title = stringResource(R.string.settings_licenses),
                 icon = Icons.Filled.Gavel,
                 opensExternally = false,
                 onClick = onLicensesClick
             )
             SettingLinkRow(
-                title = "Delete account on the web",
+                title = stringResource(R.string.settings_delete_account_web),
                 icon = Icons.Filled.PersonRemove,
                 onClick = { onOpenUrl(ACCOUNT_DELETION_URL) }
             )
@@ -617,16 +622,20 @@ fun AboutSection(
     }
 }
 
-fun syncStatusLabel(syncUiState: SyncUiState): String = when (syncUiState.status) {
-    SyncStatusType.SYNCED -> "Synced"
-    SyncStatusType.SYNCING -> "Syncing…"
-    SyncStatusType.OFFLINE -> if (syncUiState.pendingCount > 0) "Offline (${syncUiState.pendingCount} pending)" else "Offline"
-    SyncStatusType.ERROR -> "Sync error"
+fun syncStatusLabel(resources: Resources, syncUiState: SyncUiState): String = when (syncUiState.status) {
+    SyncStatusType.SYNCED -> resources.getString(R.string.sync_status_synced)
+    SyncStatusType.SYNCING -> resources.getString(R.string.sync_status_syncing)
+    SyncStatusType.OFFLINE -> if (syncUiState.pendingCount > 0) {
+        resources.getQuantityString(R.plurals.sync_status_offline_pending, syncUiState.pendingCount, syncUiState.pendingCount)
+    } else {
+        resources.getString(R.string.sync_status_offline)
+    }
+    SyncStatusType.ERROR -> resources.getString(R.string.sync_status_error)
 }
 
 /** "1 conflict needs attention" / "3 conflicts need attention" - shown under the Cloud Sync row. */
-fun syncConflictHint(count: Int): String =
-    if (count == 1) "1 conflict needs attention" else "$count conflicts need attention"
+fun syncConflictHint(resources: Resources, count: Int): String =
+    resources.getQuantityString(R.plurals.sync_conflicts_need_attention, count, count)
 
 /**
  * The account card's avatar: the user's initial on a primary "cookie", or a person on a neutral one for

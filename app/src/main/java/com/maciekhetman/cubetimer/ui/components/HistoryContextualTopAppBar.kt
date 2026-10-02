@@ -15,7 +15,10 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import com.maciekhetman.cubetimer.R
 
 /**
  * Contextual top app bar shown on the History screen while solves are multi-selected.
@@ -34,28 +37,28 @@ fun HistoryContextualTopAppBar(
     TopAppBar(
         title = {
             Text(
-                text = "$selectedCount selected",
+                text = pluralStringResource(R.plurals.selection_count, selectedCount, selectedCount),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
         },
         navigationIcon = {
             IconButton(onClick = onDismiss) {
-                Icon(Icons.Default.Close, contentDescription = "Cancel selection")
+                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.selection_cancel))
             }
         },
         actions = {
             IconButton(onClick = onSelectAllToggle) {
                 Icon(
                     imageVector = if (isAllSelected) Icons.Default.Deselect else Icons.Default.SelectAll,
-                    contentDescription = if (isAllSelected) "Deselect All" else "Select All"
+                    contentDescription = stringResource(if (isAllSelected) R.string.selection_deselect_all else R.string.selection_select_all)
                 )
             }
             IconButton(onClick = onExportSelected) {
-                Icon(Icons.Outlined.FileDownload, contentDescription = "Export selected solves")
+                Icon(Icons.Outlined.FileDownload, contentDescription = stringResource(R.string.selection_export))
             }
             IconButton(onClick = onDeleteSelected) {
-                Icon(Icons.Outlined.Delete, contentDescription = "Delete selected solves")
+                Icon(Icons.Outlined.Delete, contentDescription = stringResource(R.string.selection_delete))
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(

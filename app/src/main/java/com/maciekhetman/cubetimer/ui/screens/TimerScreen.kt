@@ -28,6 +28,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.Alignment
@@ -43,6 +44,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.maciekhetman.cubetimer.R
 import com.maciekhetman.cubetimer.domain.AverageCalculator
 import com.maciekhetman.cubetimer.domain.TimeFormatter
 import com.maciekhetman.cubetimer.model.Inspection
@@ -266,6 +268,17 @@ fun TimerScreen(
                 }
             }
 
+            val timerAreaDescription = stringResource(
+                when {
+                    bluetoothMode -> R.string.timer_a11y_bluetooth
+                    isSolving -> R.string.timer_a11y_tap_to_stop
+                    isInspecting && timerStartDelayMillis == 0 -> R.string.timer_a11y_tap_to_start
+                    isInspecting -> R.string.timer_a11y_hold_release_to_start
+                    inspectionEnabled -> R.string.timer_a11y_tap_to_inspect
+                    timerStartDelayMillis == 0 -> R.string.timer_a11y_tap_to_start
+                    else -> R.string.timer_a11y_hold_to_start
+                }
+            )
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -275,15 +288,7 @@ fun TimerScreen(
                         bottom = if (showBottomContent) bottomContentHeight + 12.dp else 96.dp
                     )
                     .semantics {
-                        contentDescription = when {
-                            bluetoothMode -> "Timer controlled by Bluetooth timer"
-                            isSolving -> "Tap to stop timer"
-                            isInspecting && timerStartDelayMillis == 0 -> "Tap to start timer"
-                            isInspecting -> "Hold and release to start timer"
-                            inspectionEnabled -> "Tap to start inspection"
-                            timerStartDelayMillis == 0 -> "Tap to start timer"
-                            else -> "Tap and hold to start timer"
-                        }
+                        contentDescription = timerAreaDescription
                     }
                     .then(
                         if (!isFinished && recordCelebration == null && !bluetoothMode) {
@@ -456,16 +461,18 @@ private fun TimerContent(
                         onClick = onConnectBluetoothTimer,
                         shape = RoundedCornerShape(20.dp)
                     ) {
-                        Text("Connect Bluetooth timer")
+                        Text(stringResource(R.string.timer_connect_bluetooth))
                     }
                 } else if (!hideStartHint) {
                     Text(
-                        text = when {
-                            bluetoothMode -> "Place both hands on the timer"
-                            inspectionEnabled -> "Tap to start inspection"
-                            noStartDelay -> "Tap to start"
-                            else -> "Tap and hold to start"
-                        },
+                        text = stringResource(
+                            when {
+                                bluetoothMode -> R.string.timer_hint_bluetooth
+                                inspectionEnabled -> R.string.timer_hint_tap_to_inspect
+                                noStartDelay -> R.string.timer_hint_tap_to_start
+                                else -> R.string.timer_hint_hold_to_start
+                            }
+                        ),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -487,14 +494,14 @@ private fun TimerContent(
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = if (state.isHolding) "Hold..." else "Release to start!",
+                        text = stringResource(if (state.isHolding) R.string.timer_hold else R.string.timer_release_to_start),
                         style = MaterialTheme.typography.bodyLarge,
                         color = color,
                         fontWeight = if (state.isHolding) null else FontWeight.Bold
                     )
                 } else if (!hideStartHint) {
                     Text(
-                        text = if (noStartDelay) "Tap to start" else "Hold and release to start",
+                        text = stringResource(if (noStartDelay) R.string.timer_hint_tap_to_start else R.string.timer_hint_hold_release_to_start),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -508,7 +515,7 @@ private fun TimerContent(
                     },
                     shape = RoundedCornerShape(20.dp)
                 ) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.action_cancel))
                 }
             }
             is TimerState.Holding -> {
@@ -529,14 +536,14 @@ private fun TimerContent(
                     Spacer(modifier = Modifier.height(16.dp))
                 }
                 Text(
-                    text = "Hold...",
+                    text = stringResource(R.string.timer_hold),
                     style = MaterialTheme.typography.bodyLarge,
                     color = color
                 )
             }
             is TimerState.Ready -> {
                 Text(
-                    text = if (bluetoothMode) "Lift your hands to start!" else "Release to start!",
+                    text = stringResource(if (bluetoothMode) R.string.timer_lift_hands_to_start else R.string.timer_release_to_start),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.tertiary,
                     fontWeight = FontWeight.Bold
@@ -544,7 +551,7 @@ private fun TimerContent(
             }
             is TimerState.Running -> {
                 Text(
-                    text = if (bluetoothMode) "Stop on the timer" else "Tap to stop",
+                    text = stringResource(if (bluetoothMode) R.string.timer_stop_on_timer else R.string.timer_tap_to_stop),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -558,8 +565,10 @@ private fun TimerContent(
                 ) {
                     if (state.inspectionPenalty != Penalty.NONE) {
                         Text(
-                            text = "Inspection penalty: " +
-                                if (state.inspectionPenalty == Penalty.DNF) "DNF" else "+2",
+                            text = stringResource(
+                                R.string.timer_inspection_penalty,
+                                if (state.inspectionPenalty == Penalty.DNF) "DNF" else "+2"
+                            ),
                             style = MaterialTheme.typography.bodyLarge,
                             color = if (state.inspectionPenalty == Penalty.DNF) {
                                 MaterialTheme.colorScheme.error
@@ -579,7 +588,7 @@ private fun TimerContent(
                         shape = RoundedCornerShape(20.dp)
                     ) {
                         Text(
-                            text = "Save Time",
+                            text = stringResource(R.string.timer_save_time),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
@@ -636,7 +645,7 @@ private fun TimerContent(
                             shape = RoundedCornerShape(20.dp)
                         ) {
                             Text(
-                                text = "Discard",
+                                text = stringResource(R.string.action_discard),
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Bold
                             )
@@ -651,8 +660,8 @@ private fun TimerContent(
         AlertDialog(
             onDismissRequest = { showDiscardDialog = false },
             shape = RoundedCornerShape(24.dp),
-            title = { Text("Discard solve?") },
-            text = { Text("This solve will be removed without saving.") },
+            title = { Text(stringResource(R.string.timer_discard_title)) },
+            text = { Text(stringResource(R.string.timer_discard_message)) },
             confirmButton = {
                 FilledTonalButton(
                     onClick = {
@@ -666,7 +675,7 @@ private fun TimerContent(
                         contentColor = MaterialTheme.colorScheme.onErrorContainer
                     )
                 ) {
-                    Text("Discard")
+                    Text(stringResource(R.string.action_discard))
                 }
             },
             dismissButton = {
@@ -677,7 +686,7 @@ private fun TimerContent(
                     },
                     shape = RoundedCornerShape(20.dp)
                 ) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.action_cancel))
                 }
             }
         )
@@ -773,7 +782,7 @@ private fun AveragesDisplay(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     row.forEach { (count, average) ->
-                        AverageStat(label = "Ao$count", time = average)
+                        AverageStat(label = stringResource(R.string.average_of_n, count), time = average)
                     }
                 }
             }
@@ -954,7 +963,7 @@ private fun ScrambleDisplay(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Refresh,
-                        contentDescription = "Generate new scramble",
+                        contentDescription = stringResource(R.string.timer_new_scramble),
                         modifier = Modifier
                             .size(iconSize)
                             .rotate(refreshRotation.value)
@@ -1035,7 +1044,7 @@ private fun RecordCelebrationOverlay(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Text(
-                            text = "New record",
+                            text = stringResource(R.string.timer_new_record),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary,
@@ -1047,9 +1056,9 @@ private fun RecordCelebrationOverlay(
                         ) {
                             Text(
                                 text = when (it.type) {
-                                    RecordType.BEST_SINGLE -> "Best Single"
-                                    RecordType.BEST_AO5 -> "Best Average of 5"
-                                    RecordType.BEST_AO12 -> "Best Average of 12"
+                                    RecordType.BEST_SINGLE -> stringResource(R.string.record_best_single)
+                                    RecordType.BEST_AO5 -> stringResource(R.string.record_best_ao5)
+                                    RecordType.BEST_AO12 -> stringResource(R.string.record_best_ao12)
                                 },
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.SemiBold,
@@ -1071,7 +1080,7 @@ private fun RecordCelebrationOverlay(
                                 .fillMaxWidth()
                         )
                         Text(
-                            text = "Tap to continue",
+                            text = stringResource(R.string.timer_tap_to_continue),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center

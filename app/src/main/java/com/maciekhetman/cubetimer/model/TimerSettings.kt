@@ -1,11 +1,14 @@
 package com.maciekhetman.cubetimer.model
 
+import androidx.annotation.StringRes
+import com.maciekhetman.cubetimer.R
+
 val TimerAverageOptions = listOf(5, 12, 25, 50, 100)
 
-enum class RunningTimerDisplay(val displayName: String) {
-    FULL("Show decimals"),
-    SECONDS_ONLY("Hide decimals"),
-    HIDDEN("Hide timer")
+enum class RunningTimerDisplay(@StringRes val labelRes: Int) {
+    FULL(R.string.running_timer_display_full),
+    SECONDS_ONLY(R.string.running_timer_display_seconds),
+    HIDDEN(R.string.running_timer_display_hidden)
 }
 
 /** The touch timer's start delay (how long to hold before it is ready), also used to start a solve from inspection. */

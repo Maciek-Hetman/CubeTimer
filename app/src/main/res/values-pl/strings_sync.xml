@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sync_dialog_title">Synchronizacja w chmurze</string>
+    <string name="sync_dialog_guest">Korzystasz z trybu gościa. Twoje ułożenia i sesje są zapisywane tylko na tym urządzeniu.</string>
+    <string name="sync_dialog_guest_pitch">Zaloguj się, aby zachować kopię ułożeń w chmurze i synchronizować je na wszystkich urządzeniach.</string>
+    <string name="sync_dialog_needs_review">Niektóre zmiany wymagają Twojej decyzji.</string>
+    <string name="sync_dialog_up_to_date">Wszystkie dane są aktualne.</string>
+    <string name="sync_dialog_syncing">Synchronizowanie zmian z chmurą…</string>
+    <string name="sync_dialog_offline">Urządzenie jest offline. Zmiany zsynchronizują się automatycznie po połączeniu.</string>
+    <string name="sync_dialog_error">Wystąpił błąd synchronizacji.</string>
+    <string name="sync_dialog_last_synced">Ostatnia synchronizacja: %s</string>
+    <plurals name="sync_dialog_pending">
+        <item quantity="one">Do wysłania: %d zmiana</item>
+        <item quantity="few">Do wysłania: %d zmiany</item>
+        <item quantity="many">Do wysłania: %d zmian</item>
+        <item quantity="other">Do wysłania: %d zmiany</item>
+    </plurals>
+    <string name="sync_dialog_sync_now">Synchronizuj teraz</string>
+
+    <plurals name="sync_conflicts_need_review">
+        <item quantity="one">%d konflikt do przejrzenia</item>
+        <item quantity="few">%d konflikty do przejrzenia</item>
+        <item quantity="many">%d konfliktów do przejrzenia</item>
+        <item quantity="other">%d konfliktu do przejrzenia</item>
+    </plurals>
+    <string name="sync_conflicts_explanation">Te elementy zmieniono tutaj i na innym urządzeniu. Wybierz, którą wersję zachować.</string>
+    <string name="sync_conflict_this_device">To urządzenie</string>
+    <string name="sync_conflict_server">Serwer</string>
+    <string name="sync_conflict_keep_local">Zachowaj wersję z urządzenia</string>
+    <string name="sync_conflict_keep_server">Zachowaj wersję z serwera</string>
+    <string name="sync_conflict_session">Sesja</string>
+    <string name="sync_conflict_solve">Ułożenie</string>
+    <string name="sync_conflict_deleted">Usunięto</string>
+    <string name="sync_conflict_unreadable">Szczegóły niedostępne</string>
+    <string name="sync_conflict_archived">Zarchiwizowana</string>
+    <string name="sync_conflict_active">Aktywna</string>
+    <string name="sync_conflict_resolve_failed">Nie udało się rozwiązać konfliktu. Spróbuj ponownie.</string>
+</resources>
