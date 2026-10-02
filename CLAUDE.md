@@ -181,9 +181,12 @@ signed-in owners' session-less solves are left alone, as the server accepts them
   `TimingDevice.EXTERNAL_TIMER` the timer screen ignores touches and `TimerViewModel.onSmartTimerEvent` drives
   the same `TimerState` machine; `Stopped` carries the timer's own time and `TimerState.Finished.timingDevice`
   is saved with the solve. `BluetoothTimerDialog` handles permissions, enabling Bluetooth, scanning and connecting.
-- Optional WCA inspection for touch timing (Settings → Timing: `inspection_enabled`, `inspection_start_gesture` =
-  "Tap and hold" / "Tap"): a press in Idle enters `TimerState.Inspecting` (15 s countdown, "+2" from 15 s, "DNF"
-  from 17 s; that press's release is ignored). The solve then starts per the gesture, the penalty is fixed by the
+- Touch timing's start delay (`timer_start_delay_millis`) is 0–500 ms in 50 ms steps (`normalizeTimerStartDelayMillis`
+  in `TimerSettings.kt`; older builds' larger values read as 500). At 0 a press is `Ready` at once, so a tap starts.
+- Optional WCA inspection for touch timing (Settings → Timing: `inspection_enabled`): a press in Idle enters
+  `TimerState.Inspecting` (15 s countdown, "+2" from 15 s, "DNF" from 17 s; that press's release is ignored). The
+  solve then starts with a hold for the same start delay, then release (there is no separate gesture setting; a
+  stale `inspection_start_gesture` key from older builds is ignored). The penalty is fixed by the
   inspection time at that moment and rides in `Finished.inspectionPenalty`; saving keeps the worse of it and the
   chosen penalty. "Cancel" (`cancelInspection`) returns to Idle. `isTimerBusy` (running or inspecting) gates
   mode/device switching and navigation; `isTimerRunning` is unchanged. Bluetooth timers ignore the setting.

@@ -16,7 +16,6 @@ import com.maciekhetman.cubetimer.domain.AverageCalculator
 import com.maciekhetman.cubetimer.domain.ScrambleGenerator
 import com.maciekhetman.cubetimer.domain.bluetooth.SmartTimerEvent
 import com.maciekhetman.cubetimer.model.Inspection
-import com.maciekhetman.cubetimer.model.InspectionStartGesture
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Penalty
 import com.maciekhetman.cubetimer.model.RecordCelebration
@@ -125,9 +124,6 @@ class TimerViewModel(
 
     val inspectionEnabled: StateFlow<Boolean> = settingsRepository.inspectionEnabledFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
-
-    val inspectionStartGesture: StateFlow<InspectionStartGesture> = settingsRepository.inspectionStartGestureFlow
-        .stateIn(viewModelScope, SharingStarted.Eagerly, InspectionStartGesture.HOLD)
 
     /** Touch timing, or a Bluetooth timer driving the timer instead of the screen. */
     val timingDevice: StateFlow<TimingDevice> = settingsRepository.timingDeviceFlow
@@ -301,8 +297,6 @@ class TimerViewModel(
     private var inspectionHoldDuration: Long = 0
     /** The press that began inspection is still down; its release must not start anything. */
     private var inspectionStartPressDown = false
-    /** Tap gesture: a press happened during inspection and its release starts the solve. */
-    private var inspectionTapDown = false
     private var activeInspectionPenalty: Penalty = Penalty.NONE
 
     /** Puzzle and scramble captured when the solve started, so a later refresh or mode change cannot be saved with it. */
@@ -416,10 +410,7 @@ class TimerViewModel(
             is TimerState.Inspecting -> {
                 // A new press means the release of the one that began inspection was lost.
                 inspectionStartPressDown = false
-                when (inspectionStartGesture.value) {
-                    InspectionStartGesture.HOLD -> if (inspectionHoldStart == null) startInspectionHold(eventUptimeMillis)
-                    InspectionStartGesture.TAP -> inspectionTapDown = true
-                }
+                if (inspectionHoldStart == null) startInspectionHold(eventUptimeMillis)
             }
             is TimerState.Running -> {
                 stopTimer(eventUptimeMillis)
@@ -474,7 +465,9 @@ class TimerViewModel(
         if (_timerState.value !is TimerState.Inspecting) return
         val holdStart = inspectionHoldStart
         val progress = holdStart?.let {
-            ((nowMillis - it).toFloat() / inspectionHoldDuration).coerceIn(0f, 1f)
+            // No start delay: ready as soon as the finger is down.
+            if (inspectionHoldDuration <= 0L) 1f
+            else ((nowMillis - it).toFloat() / inspectionHoldDuration).coerceIn(0f, 1f)
         }
         _timerState.value = TimerState.Inspecting((nowMillis - inspectionStartTime).coerceAtLeast(0L), progress)
     }
@@ -493,9 +486,6 @@ class TimerViewModel(
             } else {
                 publishInspection(releaseUptimeMillis)
             }
-        } else if (inspectionTapDown) {
-            inspectionTapDown = false
-            startSolveFromInspection(releaseUptimeMillis)
         }
     }
 
@@ -514,13 +504,17 @@ class TimerViewModel(
         inspectionJob = null
         inspectionHoldStart = null
         inspectionStartPressDown = false
-        inspectionTapDown = false
     }
 
     private fun startHoldTimer(pressStartUptimeMillis: Long) {
         holdJob?.cancel()
+        val holdDuration = timerStartDelayMillis.value.toLong()
+        if (holdDuration <= 0L) {
+            // No start delay: set synchronously, so a release that follows at once still starts the solve.
+            _timerState.value = TimerState.Ready
+            return
+        }
         holdJob = viewModelScope.launch {
-            val holdDuration = timerStartDelayMillis.value.toLong()
             val updateInterval = 16L // ~60fps
 
             while (true) {
@@ -808,12 +802,6 @@ class TimerViewModel(
     fun setInspectionEnabled(enabled: Boolean) {
         viewModelScope.launch {
             settingsRepository.setInspectionEnabled(enabled)
-        }
-    }
-
-    fun setInspectionStartGesture(gesture: InspectionStartGesture) {
-        viewModelScope.launch {
-            settingsRepository.setInspectionStartGesture(gesture)
         }
     }
 
