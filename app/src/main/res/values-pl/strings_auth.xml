@@ -39,7 +39,6 @@
     <string name="auth_new_password_min">Nowe hasło (min. 10 znaków)</string>
     <string name="auth_confirm_new_password">Potwierdź nowe hasło</string>
     <string name="auth_badge_verified">ZWERYFIKOWANE</string>
-    <string name="auth_badge_admin">ADMIN</string>
 
     <string name="auth_link_verify_question">Dokończyć potwierdzanie adresu e-mail i zalogować się na tym urządzeniu?</string>
     <string name="auth_link_verify_note">Ułożenia zapisane na tym urządzeniu zostaną dodane do tego konta. Kontynuuj tylko, jeśli ten e-mail został wysłany na Twoją prośbę.</string>

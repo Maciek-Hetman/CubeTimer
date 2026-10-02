@@ -24,9 +24,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.BluetoothConnected
 import androidx.compose.material.icons.filled.BluetoothDisabled
@@ -264,8 +262,7 @@ fun AccountSection(
             titleMaxLines = 1,
             titleOverflow = TextOverflow.MiddleEllipsis,
             supportingText = when (authState) {
-                is AuthState.Admin -> stringResource(R.string.account_signed_in_admin)
-                is AuthState.Authenticated -> stringResource(R.string.account_signed_in)
+                is AuthState.Authenticated, is AuthState.Admin -> stringResource(R.string.account_signed_in)
                 AuthState.Guest, AuthState.Loading -> stringResource(R.string.account_guest_pitch)
             },
             leadingContent = { AccountAvatar(authState) },
@@ -670,19 +667,6 @@ private fun AccountAvatar(authState: AuthState) {
                     modifier = Modifier.size(28.dp)
                 )
             }
-        }
-        if (authState is AuthState.Admin) {
-            Icon(
-                imageVector = Icons.Filled.AdminPanelSettings,
-                contentDescription = null,
-                tint = colors.error,
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .offset(x = 4.dp, y = 4.dp)
-                    .background(colors.surfaceContainer, CircleShape)
-                    .padding(3.dp)
-                    .size(18.dp)
-            )
         }
     }
 }

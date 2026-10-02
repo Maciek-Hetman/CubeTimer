@@ -16,7 +16,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
@@ -711,15 +710,13 @@ private fun UserProfileDialog(
                     is AuthState.Authenticated -> {
                         ProfileInfoCard(
                             email = authState.user.email,
-                            isVerified = authState.user.isEmailVerified,
-                            isAdmin = false
+                            isVerified = authState.user.isEmailVerified
                         )
                     }
                     is AuthState.Admin -> {
                         ProfileInfoCard(
                             email = authState.user.email,
-                            isVerified = authState.user.isEmailVerified,
-                            isAdmin = true
+                            isVerified = authState.user.isEmailVerified
                         )
                     }
                     is AuthState.Guest -> {
@@ -977,8 +974,7 @@ private fun ChangePasswordDialog(
 @Composable
 private fun ProfileInfoCard(
     email: String,
-    isVerified: Boolean,
-    isAdmin: Boolean
+    isVerified: Boolean
 ) {
     Card(
         shape = RoundedCornerShape(24.dp),
@@ -1013,25 +1009,6 @@ private fun ProfileInfoCard(
                         colors = AssistChipDefaults.assistChipColors(
                             containerColor = MaterialTheme.colorScheme.primaryContainer,
                             labelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    )
-                }
-
-                if (isAdmin) {
-                    AssistChip(
-                        onClick = {},
-                        shape = RoundedCornerShape(16.dp),
-                        label = { Text(stringResource(R.string.auth_badge_admin)) },
-                        leadingIcon = {
-                            Icon(
-                                Icons.Default.AdminPanelSettings,
-                                contentDescription = null,
-                                modifier = Modifier.size(14.dp)
-                            )
-                        },
-                        colors = AssistChipDefaults.assistChipColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer,
-                            labelColor = MaterialTheme.colorScheme.onErrorContainer
                         )
                     )
                 }

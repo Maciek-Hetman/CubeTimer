@@ -39,7 +39,6 @@
     <string name="auth_new_password_min">New password (min 10 characters)</string>
     <string name="auth_confirm_new_password">Confirm new password</string>
     <string name="auth_badge_verified">VERIFIED</string>
-    <string name="auth_badge_admin">ADMIN</string>
 
     <string name="auth_link_verify_question">Finish verifying your email and sign in on this device?</string>
     <string name="auth_link_verify_note">Solves saved on this device will be added to that account. Only continue if you asked for this email.</string>
