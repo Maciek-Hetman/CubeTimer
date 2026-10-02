@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_release_notes">Informacje o wydaniach</string>
+    <string name="release_notes_title">Informacje o wydaniach</string>
+    <string name="release_notes_version">Wersja %1$s</string>
+
+    <string name="release_notes_2_0_0_sync">Synchronizacja w chmurze: zaloguj się, aby mieć rozwiązania i sesje na każdym urządzeniu, a konflikty rozwiązuj w oknie synchronizacji.</string>
+    <string name="release_notes_2_0_0_account">Narzędzia konta: linki do weryfikacji e-maila i resetu hasła, zmiana hasła i usunięcie konta bezpośrednio w aplikacji.</string>
+    <string name="release_notes_2_0_0_inspection">Opcjonalna inspekcja WCA z odliczaniem 15 sekund oraz automatycznym +2 / DNF.</string>
+    <string name="release_notes_2_0_0_start_delay">Opóźnienie startu od 0 do 500 ms, dzięki czemu zwykłe dotknięcie może od razu uruchomić timer.</string>
+    <string name="release_notes_2_0_0_settings">Przeprojektowane ustawienia w stylu Material 3 Expressive oraz sekcja „O aplikacji”.</string>
+    <string name="release_notes_2_0_0_polish">Polskie tłumaczenie. Język wybierzesz w systemowych ustawieniach języka dla aplikacji.</string>
+    <string name="release_notes_2_0_0_csv">Eksport i import CSV zawierają urządzenie pomiarowe i chronią przed wstrzyknięciem formuł do arkusza.</string>
+</resources>

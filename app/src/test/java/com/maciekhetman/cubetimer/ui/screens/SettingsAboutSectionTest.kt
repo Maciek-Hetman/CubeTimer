@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import com.maciekhetman.cubetimer.ui.dialogs.OpenSourceLicensesDialog
+import com.maciekhetman.cubetimer.ui.dialogs.ReleaseNotesDialog
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -28,6 +29,7 @@ class SettingsAboutSectionTest {
 
     private val openedUrls = mutableListOf<String>()
     private var licensesClicks = 0
+    private var releaseNotesClicks = 0
 
     private fun render() {
         composeTestRule.setContent {
@@ -37,6 +39,7 @@ class SettingsAboutSectionTest {
                     AboutSection(
                         versionName = "1.2.3",
                         onOpenUrl = { openedUrls += it },
+                        onReleaseNotesClick = { releaseNotesClicks++ },
                         onLicensesClick = { licensesClicks++ }
                     )
                 }
@@ -105,6 +108,32 @@ class SettingsAboutSectionTest {
 
         assertEquals(1, licensesClicks)
         assertEquals(emptyList<String>(), openedUrls)
+    }
+
+    @Test
+    fun releaseNotesRowInvokesOnReleaseNotesClickWithoutOpeningALink() {
+        render()
+
+        composeTestRule.onNodeWithText("Release notes").performScrollTo().performClick()
+
+        assertEquals(1, releaseNotesClicks)
+        assertEquals(emptyList<String>(), openedUrls)
+    }
+
+    @Test
+    fun releaseNotesDialogListsTheCurrentVersionsChangesAndCloses() {
+        var dismissed = 0
+        composeTestRule.setContent {
+            MaterialTheme {
+                ReleaseNotesDialog(onDismiss = { dismissed++ })
+            }
+        }
+
+        composeTestRule.onNodeWithText("Version 2.0.0").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Optional WCA inspection", substring = true).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Close").performClick()
+
+        assertEquals(1, dismissed)
     }
 
     @Test

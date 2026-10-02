@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_release_notes">Release notes</string>
+    <string name="release_notes_title">Release notes</string>
+    <string name="release_notes_version">Version %1$s</string>
+
+    <string name="release_notes_2_0_0_sync">Cloud sync: sign in to keep your solves and sessions on every device, and resolve sync conflicts from the sync dialog.</string>
+    <string name="release_notes_2_0_0_account">Account tools: email verification and password reset links, change password and delete account, all in the app.</string>
+    <string name="release_notes_2_0_0_inspection">Optional WCA inspection with a 15-second countdown and automatic +2 / DNF.</string>
+    <string name="release_notes_2_0_0_start_delay">Start delay from 0 to 500 ms, so a tap can start the timer right away.</string>
+    <string name="release_notes_2_0_0_settings">Settings redesigned in Material 3 Expressive style, with an About section.</string>
+    <string name="release_notes_2_0_0_polish">Polish translation. Pick the language in your system\'s per-app language settings.</string>
+    <string name="release_notes_2_0_0_csv">CSV export and import now carry the timing device and guard against spreadsheet formula injection.</string>
+</resources>
