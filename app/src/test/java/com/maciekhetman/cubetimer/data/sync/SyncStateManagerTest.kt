@@ -19,6 +19,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -193,6 +194,62 @@ class SyncStateManagerTest {
             assertEquals(SyncStatusType.OFFLINE, offlineItem.status)
             cancelAndIgnoreRemainingEvents()
         }
+    }
+
+    @Test
+    fun testUnreachableServerWhileDeviceIsOnlineShowsOffline() = runTest {
+        syncStateManager.setOnlineForTest(true)
+
+        syncStateManager.syncUiState.test {
+            awaitItem() // Initial guest
+
+            fakeAuthManager.setAuthState(AuthState.Authenticated(User(id = "usr_1", email = "test@example.com")))
+
+            var item = awaitItem()
+            while (item.isGuest) {
+                item = awaitItem()
+            }
+            assertEquals(SyncStatusType.SYNCED, item.status)
+
+            // How the sync engine reports a request that never reached the server (DNS failure,
+            // timeout, unreachable host) while the device itself still has a network.
+            syncStateManager.setOffline()
+
+            while (item.status != SyncStatusType.OFFLINE) {
+                item = awaitItem()
+            }
+            assertTrue(syncStateManager.isOnline.value)
+            assertNull(item.errorMessage)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun testStaleSyncingFlagLeftByAnEarlierProcessIsClearedAtStartup() = runTest {
+        val user = User(id = "usr_1", email = "test@example.com")
+        // What a process killed mid-sync leaves behind.
+        database.syncMetadataDao().upsert(
+            SyncMetadataEntity(ownerId = user.id, deviceId = "dev_1", isSyncing = true)
+        )
+
+        val manager = SyncStateManager(
+            context = context,
+            database = database,
+            authManager = fakeAuthManager,
+            clearStaleSyncingFlags = true
+        )
+        manager.setOnlineForTest(true)
+        fakeAuthManager.setAuthState(AuthState.Authenticated(user))
+
+        manager.syncUiState.test {
+            var item = awaitItem()
+            while (item.isGuest || item.status == SyncStatusType.SYNCING) {
+                item = awaitItem()
+            }
+            assertEquals(SyncStatusType.SYNCED, item.status)
+            cancelAndIgnoreRemainingEvents()
+        }
+        assertEquals(false, database.syncMetadataDao().getMetadata(user.id)?.isSyncing)
     }
 
     private class FakeAuthManager : AuthManager {

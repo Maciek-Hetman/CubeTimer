@@ -73,4 +73,31 @@ class SyncMetadataDaoTest {
         assertEquals(false, current?.isSyncing)
         assertEquals("Network timeout", current?.lastError)
     }
+
+    @Test
+    fun testClearStaleSyncingFlagsResetsEveryOwnersFlagAndNothingElse() = runTest {
+        syncMetadataDao.upsert(
+            SyncMetadataEntity(
+                ownerId = "user-a",
+                cursor = 7L,
+                lastSyncTime = "2026-08-30T10:00:00.000Z",
+                deviceId = "dev-123",
+                isSyncing = true,
+                lastError = "Server 500 internal error"
+            )
+        )
+        syncMetadataDao.upsert(SyncMetadataEntity(ownerId = "user-b", deviceId = "dev-123", isSyncing = true))
+        syncMetadataDao.upsert(SyncMetadataEntity(ownerId = "user-c", deviceId = "dev-123", isSyncing = false))
+
+        assertEquals(2, syncMetadataDao.clearStaleSyncingFlags())
+
+        val a = syncMetadataDao.getMetadata("user-a")
+        assertEquals(false, a?.isSyncing)
+        assertEquals(7L, a?.cursor)
+        assertEquals("2026-08-30T10:00:00.000Z", a?.lastSyncTime)
+        assertEquals("Server 500 internal error", a?.lastError)
+        assertEquals(false, syncMetadataDao.getMetadata("user-b")?.isSyncing)
+        assertEquals(false, syncMetadataDao.getMetadata("user-c")?.isSyncing)
+        assertEquals(0, syncMetadataDao.clearStaleSyncingFlags())
+    }
 }

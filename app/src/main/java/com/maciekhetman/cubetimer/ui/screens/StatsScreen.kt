@@ -79,7 +79,7 @@ fun StatsScreen(
 
     val activeSessionSolvesCount = remember(solves, effectiveActiveSession) {
         val activeId = effectiveActiveSession?.id
-        if (activeId != null) solves.count { it.sessionId == activeId } else solves.size
+        if (activeId != null) solves.count { it.sessionId == activeId } else 0
     }
 
     Scaffold(

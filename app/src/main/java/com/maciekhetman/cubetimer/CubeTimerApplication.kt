@@ -34,6 +34,7 @@ import com.maciekhetman.cubetimer.data.sync.work.SyncScheduler
 import com.maciekhetman.cubetimer.data.sync.work.SyncWorker
 import com.maciekhetman.cubetimer.data.sync.work.WorkManagerSyncScheduler
 import com.maciekhetman.cubetimer.domain.AndroidSha1PrngProvider
+import com.maciekhetman.cubetimer.domain.csv.CsvImporter
 import com.maciekhetman.cubetimer.model.AuthState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -108,7 +109,8 @@ class CubeTimerApplication : Application(), Configuration.Provider {
             context = this,
             database = database,
             authManager = authManager,
-            onTriggerSync = { scheduleImmediateSyncIfAuthenticated() }
+            onTriggerSync = { scheduleImmediateSyncIfAuthenticated() },
+            clearStaleSyncingFlags = true
         )
     }
 
@@ -144,6 +146,13 @@ class CubeTimerApplication : Application(), Configuration.Provider {
             solveDao = database.solveDao(),
             sessionDao = database.sessionDao(),
             syncOutboxDao = database.syncOutboxDao(),
+            database = database,
+            syncTrigger = { scheduleImmediateSyncIfAuthenticated() }
+        )
+    }
+
+    val csvImporter: CsvImporter by lazy {
+        CsvImporter(
             database = database,
             syncTrigger = { scheduleImmediateSyncIfAuthenticated() }
         )

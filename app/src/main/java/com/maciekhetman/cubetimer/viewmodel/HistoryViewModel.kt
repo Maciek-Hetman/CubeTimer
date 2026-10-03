@@ -153,7 +153,8 @@ class HistoryViewModel(
         solvesRepository = (application as CubeTimerApplication).solvesRepository,
         sessionManager = application.sessionManager,
         sessionRepository = application.sessionRepository,
-        authManager = application.authManager
+        authManager = application.authManager,
+        csvImporter = application.csvImporter
     )
 
     private val effectiveDatabase: CubeDatabase = database

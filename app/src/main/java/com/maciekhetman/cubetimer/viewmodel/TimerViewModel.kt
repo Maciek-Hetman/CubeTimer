@@ -80,7 +80,7 @@ class TimerViewModel(
     val currentMode: StateFlow<Mode> = _currentMode.asStateFlow()
 
     val dynamicColorEnabled: StateFlow<Boolean> = settingsRepository.dynamicColorEnabledFlow
-        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     val defaultMode: StateFlow<Mode> = settingsRepository.defaultModeFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, Mode.CUBE_3x3)
@@ -207,12 +207,15 @@ class TimerViewModel(
         @StringRes errorMessage: Int,
         write: suspend () -> Unit
     ) {
+        // The entries this write stands for. A later edit of the same solve replaces its entry, and
+        // settling that newer one here would let this write's (older) emission drop it early.
+        val entries = ids.mapNotNull { pendingWrites[it] }
         viewModelScope.launch {
             try {
                 write()
-                settlePending(ids)
+                entries.forEach { it.settledAtEmission = emissionCount }
             } catch (e: CancellationException) {
-                settlePending(ids)
+                entries.forEach { it.settledAtEmission = emissionCount }
                 throw e
             } catch (e: Exception) {
                 onWriteFailed(ownerId, ids, errorMessage, e)
@@ -263,11 +266,12 @@ class TimerViewModel(
     ) { modeSolves, activeSes, filter ->
         when (filter) {
             is StatsFilter.ActiveSession -> {
+                // No open session (deleted, fresh sign-in, puzzle never timed) means nothing to show.
                 val activeId = activeSes?.id
                 if (activeId != null) {
                     modeSolves.filter { it.sessionId == activeId }
                 } else {
-                    modeSolves
+                    emptyList()
                 }
             }
             is StatsFilter.AllSessions -> modeSolves

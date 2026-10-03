@@ -185,6 +185,30 @@ class StatsFilterTest {
         assertEquals(sessionBId, timerViewModel.statsFilteredSolves.value.first().sessionId)
     }
 
+    @Test
+    fun testActiveSessionFilterShowsNothingWithoutAnActiveSession() = runTest(testDispatcher) {
+        val now = System.currentTimeMillis()
+        val solveA = SolveTime(id = UUID.randomUUID().toString(), timeInMillis = 12000L, mode = Mode.CUBE_3x3, timestamp = now, sessionId = sessionAId)
+        val solveB = SolveTime(id = UUID.randomUUID().toString(), timeInMillis = 9500L, mode = Mode.CUBE_3x3, timestamp = now + 1000, sessionId = sessionBId)
+
+        timerViewModel.restoreSolves(listOf(solveA, solveB))
+        timerViewModel.setStatsFilter(StatsFilter.ActiveSession)
+        advanceUntilIdle()
+        assertEquals(1, timerViewModel.statsFilteredSolves.value.size)
+
+        // No open session any more (e.g. the active one was deleted): the filter must not fall back to every solve
+        fakeSessionManager.clearActiveSession()
+        advanceUntilIdle()
+
+        assertEquals(2, timerViewModel.solves.value.size)
+        assertTrue(timerViewModel.statsFilteredSolves.value.isEmpty())
+
+        // Only the Active session filter is affected
+        timerViewModel.setStatsFilter(StatsFilter.AllSessions)
+        advanceUntilIdle()
+        assertEquals(2, timerViewModel.statsFilteredSolves.value.size)
+    }
+
     private class FakeSessionManager(
         private val sessionA: Session,
         private val sessionB: Session
@@ -200,6 +224,11 @@ class StatsFilterTest {
         /** Test control: simulate the automatic session rolling over to another session. */
         fun switchActiveSession(sessionId: String) {
             _activeSession.value = if (sessionId == sessionA.id) sessionA else sessionB
+        }
+
+        /** Test control: simulate there being no open session. */
+        fun clearActiveSession() {
+            _activeSession.value = null
         }
     }
 

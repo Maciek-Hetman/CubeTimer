@@ -203,12 +203,15 @@ class SyncEngineImpl(
                 setSyncError(resolvedOwnerId, e.message)
                 SyncResult.AuthError(e.message)
             } catch (e: AuthException.NetworkError) {
+                // Not a sync error: nothing is wrong that a later attempt can't fix, and a persisted
+                // last_error would show ERROR (and the badge) until some sync succeeds. Only the
+                // syncing flag is cleared, which setSyncError would otherwise have done.
                 stateManager.setOffline()
-                setSyncError(resolvedOwnerId, e.message)
+                setSyncing(resolvedOwnerId, false)
                 SyncResult.Offline(e.message)
             } catch (e: IOException) {
                 stateManager.setOffline()
-                setSyncError(resolvedOwnerId, e.message ?: "Network error")
+                setSyncing(resolvedOwnerId, false)
                 SyncResult.Offline(e.message ?: "Network unreachable")
             } catch (e: Exception) {
                 stateManager.setError(e.message)

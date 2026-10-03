@@ -8,6 +8,7 @@
     <string name="sync_dialog_syncing">Synchronizing changes with cloud…</string>
     <string name="sync_dialog_offline">Device is offline. Changes will sync automatically when reconnected.</string>
     <string name="sync_dialog_error">A synchronization error occurred.</string>
+    <string name="sync_dialog_error_hint">Your changes stay on this device. Sync will try again automatically, or tap Sync Now.</string>
     <string name="sync_dialog_last_synced">Last synced: %s</string>
     <plurals name="sync_dialog_pending">
         <item quantity="one">Pending upload: %d change</item>

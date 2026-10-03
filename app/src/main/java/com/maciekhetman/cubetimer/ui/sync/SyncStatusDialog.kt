@@ -189,7 +189,8 @@ fun SyncStatusDialog(
                         )
                     }
 
-                    if (syncState.errorMessage != null) {
+                    // Not syncState.errorMessage: that is raw, untranslated exception/server text.
+                    if (syncState.status == SyncStatusType.ERROR) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Card(
                             shape = RoundedCornerShape(24.dp),
@@ -199,7 +200,7 @@ fun SyncStatusDialog(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                text = syncState.errorMessage,
+                                text = stringResource(R.string.sync_dialog_error_hint),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onErrorContainer,
                                 modifier = Modifier.padding(10.dp)

@@ -14,6 +14,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -123,7 +124,7 @@ class ShareableSolveCardDialogTest {
     }
 
     @Test
-    fun `saveBitmapToShareCache creates PNG and generates valid FileProvider URI`() {
+    fun `saveBitmapToShareCache creates PNG`() {
         val context = RuntimeEnvironment.getApplication()
         val bitmap = Bitmap.createBitmap(200, 200, Bitmap.Config.ARGB_8888)
 
@@ -141,6 +142,17 @@ class ShareableSolveCardDialogTest {
         assertEquals(0x50.toByte(), magicBytes[1]) // 'P'
         assertEquals(0x4E.toByte(), magicBytes[2]) // 'N'
         assertEquals(0x47.toByte(), magicBytes[3]) // 'G'
+    }
+
+    @Test
+    fun `saveBitmapToShareCache file generates valid FileProvider URI`() {
+        assumeTrue(
+            "FileProvider only matches '/' separated paths, and Robolectric on Windows produces '\\' ones",
+            File.separatorChar == '/'
+        )
+        val context = RuntimeEnvironment.getApplication()
+        val bitmap = Bitmap.createBitmap(200, 200, Bitmap.Config.ARGB_8888)
+        val file = SolveShareHelper.saveBitmapToShareCache(context, bitmap, "test_solve_abc")
 
         // Verify FileProvider URI resolution for share_images path
         val authority = "${context.packageName}.fileprovider"

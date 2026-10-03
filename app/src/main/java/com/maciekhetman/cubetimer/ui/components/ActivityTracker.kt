@@ -20,9 +20,10 @@ import com.maciekhetman.cubetimer.R
 import com.maciekhetman.cubetimer.model.SolveTime
 import java.time.DayOfWeek
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.TextStyle
-import java.util.*
+import java.time.temporal.TemporalAdjusters
 
 private data class ActivityTile(
     val isFuture: Boolean,
@@ -34,6 +35,13 @@ private data class ActivityData(
     val weeksList: List<List<ActivityTile>>
 )
 
+/**
+ * First day of the [weeks]-week grid ending in the week of [today]. The grid is always
+ * Sunday-first (its row labels are fixed Sunday..Saturday), whatever the locale's first day of the week is.
+ */
+internal fun activityGridStart(today: LocalDate, weeks: Int): LocalDate =
+    today.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY)).minusWeeks(weeks - 1L)
+
 @Composable
 fun ActivityTracker(
     solves: List<SolveTime>,
@@ -44,40 +52,26 @@ fun ActivityTracker(
     val activityData = remember(solves) {
         val zone = ZoneId.systemDefault()
 
-        // Group solves by date (ignoring time). Using java.time here avoids mutating a single
-        // shared Calendar instance from within the groupBy lambda.
+        // Group solves by local date (ignoring time).
         val solvesByDate = solves.groupBy { solve ->
             Instant.ofEpochMilli(solve.timestamp)
                 .atZone(zone)
                 .toLocalDate()
-                .atStartOfDay(zone)
-                .toInstant()
-                .toEpochMilli()
         }
         
         val maxSolves = solvesByDate.values.maxOfOrNull { it.size } ?: 1
         
         // Pre-generate grid cells
-        val startCalendar = Calendar.getInstance()
-        startCalendar.add(Calendar.WEEK_OF_YEAR, -weeks + 1)
-        startCalendar.set(Calendar.DAY_OF_WEEK, Calendar.SUNDAY)
-        startCalendar.set(Calendar.HOUR_OF_DAY, 0)
-        startCalendar.set(Calendar.MINUTE, 0)
-        startCalendar.set(Calendar.SECOND, 0)
-        startCalendar.set(Calendar.MILLISECOND, 0)
-        
-        val today = Calendar.getInstance()
+        val today = LocalDate.now(zone)
+        val start = activityGridStart(today, weeks)
         
         val weeksList = List(weeks) { weekIndex ->
             List(7) { dayIndex ->
                 // Calculate date for this cell
-                val cellCalendar = startCalendar.clone() as Calendar
-                cellCalendar.add(Calendar.WEEK_OF_YEAR, weekIndex)
-                cellCalendar.add(Calendar.DAY_OF_WEEK, dayIndex)
+                val date = start.plusDays(weekIndex * 7L + dayIndex)
                 
-                val dateMillis = cellCalendar.timeInMillis
-                val isFuture = cellCalendar.after(today)
-                val solvesCount = solvesByDate[dateMillis]?.size ?: 0
+                val isFuture = date.isAfter(today)
+                val solvesCount = solvesByDate[date]?.size ?: 0
                 val level = when {
                     solvesCount == 0 -> 0
                     solvesCount <= maxSolves / 4 -> 1

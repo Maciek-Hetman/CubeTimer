@@ -5,11 +5,13 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.util.Log
 import com.maciekhetman.cubetimer.data.auth.AuthManager
 import com.maciekhetman.cubetimer.data.local.CubeDatabase
 import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.SyncStatusType
 import com.maciekhetman.cubetimer.model.SyncUiState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -38,7 +40,8 @@ class SyncStateManager(
     private val authManager: AuthManager? = null,
     private val onTriggerSync: (suspend () -> Unit)? = null,
     coroutineScope: CoroutineScope? = null,
-    private val ioDispatcher: kotlinx.coroutines.CoroutineDispatcher = Dispatchers.IO
+    private val ioDispatcher: kotlinx.coroutines.CoroutineDispatcher = Dispatchers.IO,
+    clearStaleSyncingFlags: Boolean = false
 ) {
     private val scope = coroutineScope ?: CoroutineScope(SupervisorJob() + ioDispatcher)
 
@@ -63,6 +66,21 @@ class SyncStateManager(
 
     init {
         registerNetworkCallback()
+        if (clearStaleSyncingFlags && database != null) {
+            // The manager is created once per process, before the SyncEngine that uses it, so no sync
+            // of this process can be running yet: a persisted is_syncing flag was left behind by one
+            // that died with an earlier process. A sync that starts right after still shows SYNCING
+            // through the in-memory flag.
+            scope.launch {
+                try {
+                    database.syncMetadataDao().clearStaleSyncingFlags()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "Could not clear stale syncing flags", e)
+                }
+            }
+        }
     }
 
     private data class LocalSyncState(
@@ -126,6 +144,16 @@ class SyncStateManager(
                             conflictCount = conflictCount
                         )
                         !local.isOnline -> SyncUiState(
+                            status = SyncStatusType.OFFLINE,
+                            lastSyncTime = metadata?.lastSyncTime,
+                            pendingCount = pendingCount,
+                            errorMessage = null,
+                            isGuest = false,
+                            conflictCount = conflictCount
+                        )
+                        // The last attempt couldn't reach the server (unreachable, DNS, timeout) although
+                        // the device reports a network. Not persisted, so it isn't a sticky error.
+                        local.syncStatus == SyncStatus.OFFLINE -> SyncUiState(
                             status = SyncStatusType.OFFLINE,
                             lastSyncTime = metadata?.lastSyncTime,
                             pendingCount = pendingCount,
@@ -249,5 +277,9 @@ class SyncStateManager(
         } catch (_: Exception) {
             // In unit test environments without network service mock, ignore
         }
+    }
+
+    private companion object {
+        const val TAG = "SyncStateManager"
     }
 }
