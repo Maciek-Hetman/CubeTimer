@@ -36,7 +36,6 @@ data class AuthFormState(
     val emailError: String? = null,
     val passwordError: String? = null,
     val confirmPasswordError: String? = null,
-    val tokenError: String? = null,
     val isPasswordVisible: Boolean = false,
     val currentPassword: String = "",
     val currentPasswordError: String? = null

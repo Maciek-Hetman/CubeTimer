@@ -1,6 +1,5 @@
 package com.maciekhetman.cubetimer.data.session
 
-import com.maciekhetman.cubetimer.data.auth.AuthManager
 import com.maciekhetman.cubetimer.data.local.converter.CubeTypeConverters
 import com.maciekhetman.cubetimer.data.local.dao.SolveDao
 import com.maciekhetman.cubetimer.domain.session.AutomaticSessionHelper
@@ -9,10 +8,8 @@ import com.maciekhetman.cubetimer.model.Session
 import com.maciekhetman.cubetimer.model.SessionKind
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -20,22 +17,13 @@ import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.util.UUID
 
-@OptIn(ExperimentalCoroutinesApi::class)
 class SessionManagerImpl(
     private val sessionRepository: SessionRepository,
     private val solveDao: SolveDao,
-    private val authManager: AuthManager,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : SessionManager {
 
     private val sessionMutex = Mutex()
-
-    override fun getActiveSessionFlow(mode: Mode): Flow<Session?> {
-        return authManager.authState.flatMapLatest {
-            val ownerId = authManager.currentOwnerId
-            getActiveSessionFlow(ownerId, mode)
-        }.distinctUntilChanged()
-    }
 
     override fun getActiveSessionFlow(ownerId: String, mode: Mode): Flow<Session?> {
         return sessionRepository.observeActiveSessions(ownerId, mode)

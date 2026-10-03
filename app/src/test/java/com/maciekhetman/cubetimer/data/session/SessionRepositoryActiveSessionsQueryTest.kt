@@ -18,11 +18,10 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 /**
- * [SessionRepositoryImpl.getActiveSessions] (solve-save path, manual-session fallback) filters by
- * owner / event / deleted / archived in SQL via [com.maciekhetman.cubetimer.data.local.dao.SessionDao.getActiveSessionsByEvent]
- * rather than loading every session of the owner, and returns them newest first like
- * `observeActiveSessionsByEvent`. Also covers the chunked cascade delete / restore of sessions
- * holding more solves than SQLite's bound-parameter limit.
+ * [SessionRepositoryImpl.observeActiveSessions] filters by owner / event / deleted / archived in SQL
+ * via [com.maciekhetman.cubetimer.data.local.dao.SessionDao.observeActiveSessionsByEvent]
+ * rather than loading every session of the owner, and returns them newest first. Also covers the
+ * chunked cascade delete / restore of sessions holding more solves than SQLite's bound-parameter limit.
  */
 @RunWith(RobolectricTestRunner::class)
 class SessionRepositoryActiveSessionsQueryTest {
@@ -55,7 +54,7 @@ class SessionRepositoryActiveSessionsQueryTest {
     )
 
     @Test
-    fun getActiveSessionsByEvent_filtersInSqlAndOrdersNewestFirst() = runTest {
+    fun observeActiveSessionsByEvent_filtersInSqlAndOrdersNewestFirst() = runTest {
         val dao = database.sessionDao()
         dao.upsertAll(
             listOf(
@@ -69,15 +68,13 @@ class SessionRepositoryActiveSessionsQueryTest {
             )
         )
 
-        val fromDao = dao.getActiveSessionsByEvent("owner-a", "3x3")
+        val fromDao = dao.observeActiveSessionsByEvent("owner-a", "3x3").first()
         assertEquals(listOf("new", "mid", "old"), fromDao.map { it.id })
-        // Same rows and order as the reactive query the UI uses.
-        assertEquals(dao.observeActiveSessionsByEvent("owner-a", "3x3").first(), fromDao)
 
-        val fromRepo = repository.getActiveSessions("owner-a", Mode.CUBE_3x3)
+        val fromRepo = repository.observeActiveSessions("owner-a", Mode.CUBE_3x3).first()
         assertEquals(listOf("new", "mid", "old"), fromRepo.map { it.id })
-        assertEquals(listOf("other-event"), repository.getActiveSessions("owner-a", Mode.CUBE_2x2).map { it.id })
-        assertEquals(emptyList<String>(), repository.getActiveSessions("nobody", Mode.CUBE_3x3).map { it.id })
+        assertEquals(listOf("other-event"), repository.observeActiveSessions("owner-a", Mode.CUBE_2x2).first().map { it.id })
+        assertEquals(emptyList<String>(), repository.observeActiveSessions("nobody", Mode.CUBE_3x3).first().map { it.id })
     }
 
     @Test
@@ -101,9 +98,5 @@ class SessionRepositoryActiveSessionsQueryTest {
         repository.restoreSessionWithSolves(snapshot, "guest")
         assertEquals(2100, database.solveDao().getSolvesBySession("guest", "big").size)
         assertNull(database.sessionDao().getSessionById("big")!!.deletedAt)
-
-        // Plain deleteSession cascades through the same chunked soft-delete.
-        repository.deleteSession("big", "guest")
-        assertEquals(0, database.solveDao().getSolvesBySession("guest", "big").size)
     }
 }

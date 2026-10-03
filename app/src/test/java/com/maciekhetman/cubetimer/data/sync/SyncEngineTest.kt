@@ -492,6 +492,49 @@ class SyncEngineTest {
     }
 
     @Test
+    fun sync_onApiClientNetworkError_isOfflineAndLeavesNoStickyError() = runTest {
+        // What CubeSyncApiClientImpl throws for an unreachable host. A persisted last_error would
+        // pin the UI on ERROR until some later sync succeeds, for a failure the next attempt may not have.
+        fakeApiClient.respond = {
+            throw AuthException.NetworkError("Network request failed: Unable to resolve host \"api.example\"")
+        }
+
+        val result = syncEngine.sync(testUser.id)
+
+        assertTrue("got $result", result is SyncResult.Offline)
+        assertEquals(SyncStatus.OFFLINE, syncEngine.syncStatus.value)
+        val metadata = syncMetadataDao.getMetadata(testUser.id)
+        assertEquals(false, metadata?.isSyncing)
+        assertNull(metadata?.lastError)
+    }
+
+    @Test
+    fun sync_onIoException_isOfflineAndLeavesNoStickyError() = runTest {
+        fakeApiClient.shouldThrowNetworkError = true
+
+        val result = syncEngine.sync(testUser.id)
+
+        assertTrue("got $result", result is SyncResult.Offline)
+        assertEquals(SyncStatus.OFFLINE, syncEngine.syncStatus.value)
+        val metadata = syncMetadataDao.getMetadata(testUser.id)
+        assertEquals(false, metadata?.isSyncing)
+        assertNull(metadata?.lastError)
+    }
+
+    @Test
+    fun sync_onServerError_stillRecordsTheError() = runTest {
+        // Only network failures are exempt: a server that answers with a failure is an ERROR.
+        fakeApiClient.respond = { throw AuthException.ApiError("internal_error", "boom", 500) }
+
+        val result = syncEngine.sync(testUser.id)
+
+        assertTrue("got $result", result is SyncResult.Error)
+        val metadata = syncMetadataDao.getMetadata(testUser.id)
+        assertEquals(false, metadata?.isSyncing)
+        assertNotNull(metadata?.lastError)
+    }
+
+    @Test
     fun sync_onUnauthorized_returnsAuthErrorAndSetsStatus() = runTest {
         fakeApiClient.shouldThrowUnauthorized = true
 
@@ -639,7 +682,7 @@ class SyncEngineTest {
         /** When set, builds the response from the request (e.g. to answer its mutation ids). */
         var respond: (suspend (SyncRequest) -> SyncResponse)? = null
 
-        override suspend fun sync(request: SyncRequest, authToken: String?): SyncResponse {
+        override suspend fun sync(request: SyncRequest): SyncResponse {
             syncCallCount++
             syncRequests += request
             syncStarted.complete(Unit)
@@ -653,7 +696,7 @@ class SyncEngineTest {
             return syncResponse
         }
 
-        override suspend fun snapshot(request: SnapshotRequest, authToken: String?): SnapshotResponse {
+        override suspend fun snapshot(request: SnapshotRequest): SnapshotResponse {
             snapshotRequests += request
             return snapshotResponse
         }
@@ -666,11 +709,8 @@ class SyncEngineTest {
         override suspend fun logout(refreshToken: String) = Unit
         override suspend fun requestPasswordReset(email: String) = throw NotImplementedError()
         override suspend fun confirmPasswordReset(token: String, newPassword: String) = throw NotImplementedError()
-        override suspend fun loginWithGoogle(request: com.maciekhetman.cubetimer.data.remote.dto.GoogleAuthRequest) = throw NotImplementedError()
-        override suspend fun linkGoogle(request: com.maciekhetman.cubetimer.data.remote.dto.GoogleAuthRequest, authToken: String?) = Unit
-        override suspend fun getCurrentUser(authToken: String?) = throw NotImplementedError()
-        override suspend fun changePassword(request: com.maciekhetman.cubetimer.data.remote.dto.ChangePasswordRequest, authToken: String?) = Unit
-        override suspend fun deleteAccount(authToken: String?) = Unit
+        override suspend fun changePassword(request: com.maciekhetman.cubetimer.data.remote.dto.ChangePasswordRequest) = Unit
+        override suspend fun deleteAccount() = Unit
     }
 
     private class FakeTokenStorage : TokenStorage {
@@ -678,14 +718,12 @@ class SyncEngineTest {
         override fun getAccessToken(): String? = "valid-token"
         override fun setAccessToken(token: String?) {}
         override fun getRefreshToken(): String? = "refresh-token"
-        override fun setRefreshToken(token: String?) {}
         override fun getUserId(): String? = "user-1234"
         override fun getUserEmail(): String? = "user@test.com"
         override fun getUserRole(): String? = "user"
         override fun isUserEmailVerified(): Boolean = true
         override fun getDisplayName(): String? = "Test User"
         override fun saveAuthSession(accessToken: String, refreshToken: String, userId: String, userEmail: String, userRole: String, emailVerified: Boolean, displayName: String?) {}
-        override fun saveUser(user: User) {}
         override fun clearAuthData() {}
         override fun clearAll() {}
         override fun getCachedUser(): User? = null
@@ -700,12 +738,10 @@ class SyncEngineTest {
         override suspend fun initialize() {}
         override suspend fun register(email: String, password: String) = throw NotImplementedError()
         override suspend fun login(email: String, password: String) = throw NotImplementedError()
-        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String) = throw NotImplementedError()
         override suspend fun verifyEmail(token: String) = throw NotImplementedError()
         override suspend fun resendVerificationEmail(email: String) = throw NotImplementedError()
         override suspend fun requestPasswordReset(email: String) = throw NotImplementedError()
         override suspend fun resetPassword(token: String, newPassword: String) = throw NotImplementedError()
-        override suspend fun refreshSession() = throw NotImplementedError()
         override suspend fun logout() = throw NotImplementedError()
         override suspend fun adoptGuestData(userId: String) {}
     }

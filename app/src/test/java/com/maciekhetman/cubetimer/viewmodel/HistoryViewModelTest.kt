@@ -10,7 +10,6 @@ import com.maciekhetman.cubetimer.data.auth.AuthManager
 import com.maciekhetman.cubetimer.data.auth.AuthResult
 import com.maciekhetman.cubetimer.data.local.CubeDatabase
 import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
-import com.maciekhetman.cubetimer.data.session.SessionManagerImpl
 import com.maciekhetman.cubetimer.data.session.SessionRepositoryImpl
 import com.maciekhetman.cubetimer.data.local.converter.CubeTypeConverters
 import com.maciekhetman.cubetimer.domain.csv.CsvImportStatus
@@ -44,6 +43,7 @@ import org.robolectric.RobolectricTestRunner
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import com.maciekhetman.cubetimer.testutil.insertSession
+import com.maciekhetman.cubetimer.testutil.selectedSolves
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -54,7 +54,6 @@ class HistoryViewModelTest {
     private lateinit var database: CubeDatabase
     private lateinit var solvesRepository: SolvesRepository
     private lateinit var sessionRepository: SessionRepositoryImpl
-    private lateinit var sessionManager: SessionManagerImpl
     private lateinit var fakeAuthManager: FakeAuthManager
     private lateinit var viewModel: HistoryViewModel
 
@@ -84,11 +83,6 @@ class HistoryViewModelTest {
             syncOutboxDao = database.syncOutboxDao()
         )
         fakeAuthManager = FakeAuthManager()
-        sessionManager = SessionManagerImpl(
-            sessionRepository = sessionRepository,
-            solveDao = database.solveDao(),
-            authManager = fakeAuthManager
-        )
     }
 
     @After
@@ -101,7 +95,6 @@ class HistoryViewModelTest {
         return keepUiStateActive(HistoryViewModel(
             application = application,
             solvesRepository = solvesRepository,
-            sessionManager = sessionManager,
             sessionRepository = sessionRepository,
             authManager = fakeAuthManager,
             database = database,
@@ -119,7 +112,7 @@ class HistoryViewModelTest {
 
         viewModel = createViewModel()
         advanceUntilIdle()
-        viewModel.expandSession(session.id)
+        viewModel.toggleSessionExpanded(session.id)
         advanceUntilIdle()
 
         val solveTime = viewModel.uiState.value.sessionGroups.single().solves.single()
@@ -140,7 +133,7 @@ class HistoryViewModelTest {
 
         viewModel = createViewModel()
         advanceUntilIdle()
-        viewModel.expandSession(session.id)
+        viewModel.toggleSessionExpanded(session.id)
         advanceUntilIdle()
 
         val solveToDelete = viewModel.uiState.value.sessionGroups.single().solves.single()
@@ -153,7 +146,7 @@ class HistoryViewModelTest {
         assertNotNull(inDbSoftDeleted?.deletedAt)
 
         // Undo delete
-        viewModel.undoDelete()
+        viewModel.restoreSolve(solveToDelete)
         advanceUntilIdle()
 
         assertEquals(listOf(solveId), viewModel.uiState.value.sessionGroups.single().solves.map { it.id })
@@ -170,12 +163,13 @@ class HistoryViewModelTest {
 
         assertEquals(2, viewModel.uiState.value.sessionGroups.single().solveCount)
 
-        viewModel.clearHistory()
+        viewModel.deleteAllSolves()
         advanceUntilIdle()
 
         assertEquals(0, viewModel.uiState.value.sessionGroups.single().solveCount)
 
-        viewModel.undoClearHistory()
+        val clearEffect = viewModel.effects.first { it is HistoryUiEffect.ShowUndoClearAll } as HistoryUiEffect.ShowUndoClearAll
+        viewModel.undoDeleteAllSolves(clearEffect.deletedSolves)
         advanceUntilIdle()
 
         assertEquals(2, viewModel.uiState.value.sessionGroups.single().solveCount)
@@ -207,7 +201,7 @@ class HistoryViewModelTest {
 
         viewModel = createViewModel()
         advanceUntilIdle()
-        viewModel.expandSession(session.id)
+        viewModel.toggleSessionExpanded(session.id)
         advanceUntilIdle()
 
         val group = viewModel.uiState.value.sessionGroups.single()
@@ -298,7 +292,7 @@ class HistoryViewModelTest {
         assertTrue(group.solves.isEmpty())
 
         // Expand
-        viewModel.expandSession(session1.id)
+        viewModel.toggleSessionExpanded(session1.id)
         advanceUntilIdle()
 
         group = viewModel.uiState.value.sessionGroups.first { it.session.id == session1.id }
@@ -307,7 +301,7 @@ class HistoryViewModelTest {
         assertTrue(viewModel.uiState.value.expandedSessionIds.contains(session1.id))
 
         // Collapse
-        viewModel.collapseSession(session1.id)
+        viewModel.toggleSessionExpanded(session1.id)
         advanceUntilIdle()
 
         group = viewModel.uiState.value.sessionGroups.first { it.session.id == session1.id }
@@ -344,8 +338,8 @@ class HistoryViewModelTest {
         viewModel = createViewModel()
         advanceUntilIdle()
 
-        viewModel.expandSession(session1.id)
-        viewModel.expandSession(session2.id)
+        viewModel.toggleSessionExpanded(session1.id)
+        viewModel.toggleSessionExpanded(session2.id)
         advanceUntilIdle()
 
         val g1 = viewModel.uiState.value.sessionGroups.first { it.session.id == session1.id }
@@ -356,7 +350,7 @@ class HistoryViewModelTest {
         assertEquals(2, g2.solves.size)
 
         // Collapse session 1 only
-        viewModel.collapseSession(session1.id)
+        viewModel.toggleSessionExpanded(session1.id)
         advanceUntilIdle()
 
         val g1After = viewModel.uiState.value.sessionGroups.first { it.session.id == session1.id }
@@ -372,7 +366,7 @@ class HistoryViewModelTest {
 
         viewModel = createViewModel()
         advanceUntilIdle()
-        viewModel.expandSession(session1.id)
+        viewModel.toggleSessionExpanded(session1.id)
         advanceUntilIdle()
 
         assertFalse(viewModel.uiState.value.isSelectionMode)
@@ -427,7 +421,7 @@ class HistoryViewModelTest {
 
         viewModel = createViewModel()
         advanceUntilIdle()
-        viewModel.expandSession(session1.id)
+        viewModel.toggleSessionExpanded(session1.id)
         advanceUntilIdle()
 
         viewModel.selectAllSolves()
@@ -436,7 +430,7 @@ class HistoryViewModelTest {
         assertEquals(2, viewModel.uiState.value.selectedSolveIds.size)
         assertTrue(viewModel.uiState.value.selectedSolveIds.containsAll(listOf(solves[0].id, solves[1].id)))
 
-        val selectedSolves = viewModel.getSelectedSolves()
+        val selectedSolves = viewModel.uiState.value.selectedSolves()
         assertEquals(2, selectedSolves.size)
         assertEquals(setOf(solves[0].id, solves[1].id), selectedSolves.map { it.id }.toSet())
 
@@ -445,7 +439,7 @@ class HistoryViewModelTest {
         advanceUntilIdle()
 
         assertTrue(viewModel.uiState.value.selectedSolveIds.isEmpty())
-        assertTrue(viewModel.getSelectedSolves().isEmpty())
+        assertTrue(viewModel.uiState.value.selectedSolves().isEmpty())
     }
 
     @Test
@@ -454,7 +448,7 @@ class HistoryViewModelTest {
 
         viewModel = createViewModel()
         advanceUntilIdle()
-        viewModel.expandSession(session1.id)
+        viewModel.toggleSessionExpanded(session1.id)
         advanceUntilIdle()
 
         viewModel.startSelection(solves[0].id)
@@ -494,7 +488,7 @@ class HistoryViewModelTest {
 
         viewModel = createViewModel()
         advanceUntilIdle()
-        viewModel.expandSession(session1.id)
+        viewModel.toggleSessionExpanded(session1.id)
         advanceUntilIdle()
 
         viewModel.effects.test {
@@ -512,7 +506,7 @@ class HistoryViewModelTest {
             assertNotNull(database.solveDao().getSolveById(solves[0].id)?.deletedAt)
 
             // Undo session deletion
-            viewModel.undoDeleteSession()
+            viewModel.restoreSession(sessionEffect.snapshot)
             advanceUntilIdle()
 
             val restoreEffect = awaitItem()
@@ -542,7 +536,7 @@ class HistoryViewModelTest {
 
             assertEquals(0, viewModel.uiState.value.sessionGroups.single().solveCount)
 
-            viewModel.undoDeleteAllSolves()
+            viewModel.undoDeleteAllSolves(clearEffect.deletedSolves)
             advanceUntilIdle()
 
             val restoreEffect = awaitItem()
@@ -653,31 +647,31 @@ class HistoryViewModelTest {
 
         viewModel = createViewModel()
         advanceUntilIdle()
-        viewModel.expandSession(session.id)
+        viewModel.toggleSessionExpanded(session.id)
         advanceUntilIdle()
 
-        // 1. Sort FASTEST
-        viewModel.setSolveSort(SolveSortOrder.FASTEST)
+        // 1. Sort LOWEST_TIME
+        viewModel.setSolveSort(SolveSortOrder.LOWEST_TIME)
         advanceUntilIdle()
         var groupSolves = viewModel.uiState.value.sessionGroups.first().solves
         assertEquals(4, groupSolves.size)
         assertEquals("solve-fast", groupSolves.first().id)
 
-        // 2. Sort SLOWEST
-        viewModel.setSolveSort(SolveSortOrder.SLOWEST)
+        // 2. Sort HIGHEST_TIME
+        viewModel.setSolveSort(SolveSortOrder.HIGHEST_TIME)
         advanceUntilIdle()
         groupSolves = viewModel.uiState.value.sessionGroups.first().solves
         assertEquals("solve-slow", groupSolves.first().id)
 
-        // 3. PenaltyFilter.PLUS_TWO
-        viewModel.setPenaltyFilter(PenaltyFilter.PLUS_TWO)
+        // 3. PenaltyFilter.PLUS_TWO_ONLY
+        viewModel.setPenaltyFilter(PenaltyFilter.PLUS_TWO_ONLY)
         advanceUntilIdle()
         groupSolves = viewModel.uiState.value.sessionGroups.first().solves
         assertEquals(1, groupSolves.size)
         assertEquals("solve-p2", groupSolves.first().id)
 
-        // 4. PenaltyFilter.DNF
-        viewModel.setPenaltyFilter(PenaltyFilter.DNF)
+        // 4. PenaltyFilter.DNF_ONLY
+        viewModel.setPenaltyFilter(PenaltyFilter.DNF_ONLY)
         advanceUntilIdle()
         groupSolves = viewModel.uiState.value.sessionGroups.first().solves
         assertEquals(1, groupSolves.size)
@@ -714,8 +708,8 @@ class HistoryViewModelTest {
         assertEquals(2, viewModel.uiState.value.totalActiveFilterCount)
 
         // Change solve filters
-        viewModel.setSolveSort(SolveSortOrder.FASTEST) // +1
-        viewModel.setPenaltyFilter(PenaltyFilter.PLUS_TWO) // +1
+        viewModel.setSolveSort(SolveSortOrder.LOWEST_TIME) // +1
+        viewModel.setPenaltyFilter(PenaltyFilter.PLUS_TWO_ONLY) // +1
         viewModel.setTimeRangeFilter(10000L, 20000L) // +1
         advanceUntilIdle()
 
@@ -724,7 +718,10 @@ class HistoryViewModelTest {
         assertEquals(5, viewModel.uiState.value.totalActiveFilterCount)
 
         // Reset solve filters
-        viewModel.resetSolveFilters()
+        viewModel.setSolveSort(SolveSortOrder.MOST_RECENT)
+        viewModel.setPenaltyFilter(PenaltyFilter.ALL)
+        viewModel.setTimeRangeFilter(TimeRangeFilter())
+        viewModel.setDateRangeFilter(DateRangeFilter())
         advanceUntilIdle()
 
         assertEquals(2, viewModel.uiState.value.activeSessionFilterCount)
@@ -809,7 +806,7 @@ class HistoryViewModelTest {
 
         viewModel = createViewModel()
         advanceUntilIdle()
-        viewModel.expandSession(session.id)
+        viewModel.toggleSessionExpanded(session.id)
         advanceUntilIdle()
 
         // Select only the first solve
@@ -861,12 +858,10 @@ class HistoryViewModelTest {
         override suspend fun initialize() = Unit
         override suspend fun register(email: String, password: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun login(email: String, password: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
-        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun verifyEmail(token: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun resendVerificationEmail(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun requestPasswordReset(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun resetPassword(token: String, newPassword: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
-        override suspend fun refreshSession(): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun logout(): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun adoptGuestData(userId: String) = Unit
     }

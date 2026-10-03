@@ -106,7 +106,6 @@ class Milestone3Gen3Challenger2RollbackAndIsolationTest {
         sessionManager = SessionManagerImpl(
             sessionRepository = sessionRepository,
             solveDao = failingSolveDao,
-            authManager = fakeAuthManager,
             ioDispatcher = testDispatcher
         )
     }
@@ -124,7 +123,6 @@ class Milestone3Gen3Challenger2RollbackAndIsolationTest {
         return keepUiStateActive(HistoryViewModel(
             application = application,
             solvesRepository = solvesRepository,
-            sessionManager = sessionManager,
             sessionRepository = sessionRepository,
             authManager = fakeAuthManager,
             database = database,
@@ -157,7 +155,7 @@ class Milestone3Gen3Challenger2RollbackAndIsolationTest {
 
         val vm = createViewModel()
         advanceUntilIdle()
-        vm.expandSession(session.id)
+        vm.toggleSessionExpanded(session.id)
         advanceUntilIdle()
 
         val initialSolveItem = vm.solvesOf(session.id).single()
@@ -250,7 +248,7 @@ class Milestone3Gen3Challenger2RollbackAndIsolationTest {
 
         val vm = createViewModel()
         advanceUntilIdle()
-        vm.expandSession(session.id)
+        vm.toggleSessionExpanded(session.id)
         advanceUntilIdle()
 
         assertEquals(3, vm.solvesOf(session.id).size)
@@ -320,7 +318,7 @@ class Milestone3Gen3Challenger2RollbackAndIsolationTest {
 
         val vm = createViewModel()
         advanceUntilIdle()
-        vm.expandSession(session.id)
+        vm.toggleSessionExpanded(session.id)
         advanceUntilIdle()
 
         val item = vm.solvesOf(session.id).single()
@@ -340,7 +338,7 @@ class Milestone3Gen3Challenger2RollbackAndIsolationTest {
             assertTrue(deleteEffect is HistoryUiEffect.ShowUndoSnackbar)
 
             // Call undo
-            vm.undoDelete()
+            vm.restoreSolve(item)
             advanceUntilIdle()
 
             // Optimistic restore: solve is back in the list while the write is pending
@@ -380,7 +378,7 @@ class Milestone3Gen3Challenger2RollbackAndIsolationTest {
 
         val vm = createViewModel()
         advanceUntilIdle()
-        vm.expandSession(session.id)
+        vm.toggleSessionExpanded(session.id)
         advanceUntilIdle()
 
         assertEquals(3, vm.solvesOf(session.id).size)
@@ -390,7 +388,7 @@ class Milestone3Gen3Challenger2RollbackAndIsolationTest {
         repositoryDispatcher.holding = true
 
         vm.effects.test {
-            vm.clearHistory()
+            vm.deleteAllSolves()
             advanceUntilIdle()
 
             // Optimistically empty
@@ -494,19 +492,19 @@ class Milestone3Gen3Challenger2RollbackAndIsolationTest {
         realSolveDao.insertAll(solvesD)
 
         val vm = createViewModel()
-        vm.uiState.first { state -> state.activeSession?.id == sessionA.id && !state.isLoading }
+        vm.uiState.first { state -> !state.isLoading }
         advanceUntilIdle()
 
         // 1. Invariant: the 3x3 scope lists exactly Session A and Session B, with their own solve counts
         val state3x3 = vm.uiState.value
-        assertEquals(Mode.CUBE_3x3, state3x3.currentMode)
+        assertEquals(Mode.CUBE_3x3, vm.currentMode.value)
         assertEquals(setOf(sessionA.id, sessionB.id), state3x3.sessionGroups.map { it.session.id }.toSet())
         assertEquals(10, state3x3.sessionGroups.first { it.session.id == sessionA.id }.solveCount)
         assertEquals(20, state3x3.sessionGroups.first { it.session.id == sessionB.id }.solveCount)
 
         // 2. Invariant: an expanded session returns exactly its own solves without leakage
-        vm.expandSession(sessionA.id)
-        vm.expandSession(sessionB.id)
+        vm.toggleSessionExpanded(sessionA.id)
+        vm.toggleSessionExpanded(sessionB.id)
         advanceUntilIdle()
 
         val expanded = vm.uiState.value.sessionGroups
@@ -536,7 +534,7 @@ class Milestone3Gen3Challenger2RollbackAndIsolationTest {
         advanceUntilIdle()
 
         val state2x2 = vm.uiState.value
-        assertEquals(Mode.CUBE_2x2, state2x2.currentMode)
+        assertEquals(Mode.CUBE_2x2, vm.currentMode.value)
         assertEquals(listOf(sessionC.id), state2x2.sessionGroups.map { it.session.id })
         assertEquals(15, state2x2.sessionGroups.single().solveCount)
 
@@ -545,7 +543,7 @@ class Milestone3Gen3Challenger2RollbackAndIsolationTest {
         advanceUntilIdle()
 
         val stateMega = vm.uiState.value
-        assertEquals(Mode.MEGAMINX, stateMega.currentMode)
+        assertEquals(Mode.MEGAMINX, vm.currentMode.value)
         assertEquals(listOf(sessionD.id), stateMega.sessionGroups.map { it.session.id })
         assertEquals(5, stateMega.sessionGroups.single().solveCount)
     }
@@ -607,12 +605,10 @@ class Milestone3Gen3Challenger2RollbackAndIsolationTest {
         override suspend fun initialize() = Unit
         override suspend fun register(email: String, password: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun login(email: String, password: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
-        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun verifyEmail(token: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun resendVerificationEmail(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun requestPasswordReset(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun resetPassword(token: String, newPassword: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
-        override suspend fun refreshSession(): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun logout(): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun adoptGuestData(userId: String) = Unit
     }

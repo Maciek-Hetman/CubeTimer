@@ -46,9 +46,8 @@ class DataStoreMigrationStressTest {
         database.close()
     }
 
-    private suspend fun deleteAllGuestSolves() {
-        val solveDao = database.solveDao()
-        solveDao.getAllSolvesForOwner("guest").forEach { solveDao.deleteById(it.id) }
+    private fun deleteAllGuestSolves() {
+        database.openHelper.writableDatabase.execSQL("DELETE FROM solves WHERE owner_id = 'guest'")
     }
 
     @Test

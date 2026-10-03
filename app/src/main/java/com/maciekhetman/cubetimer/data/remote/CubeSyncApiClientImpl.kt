@@ -2,7 +2,6 @@ package com.maciekhetman.cubetimer.data.remote
 
 import com.maciekhetman.cubetimer.data.remote.dto.AuthResponse
 import com.maciekhetman.cubetimer.data.remote.dto.ChangePasswordRequest
-import com.maciekhetman.cubetimer.data.remote.dto.GoogleAuthRequest
 import com.maciekhetman.cubetimer.data.remote.dto.LoginRequest
 import com.maciekhetman.cubetimer.data.remote.dto.LogoutRequest
 import com.maciekhetman.cubetimer.data.remote.dto.PasswordResetConfirmRequest
@@ -11,7 +10,6 @@ import com.maciekhetman.cubetimer.data.remote.dto.RefreshRequest
 import com.maciekhetman.cubetimer.data.remote.dto.RegisterRequest
 import com.maciekhetman.cubetimer.data.remote.dto.ResendVerificationEmailRequest
 import com.maciekhetman.cubetimer.data.remote.dto.StatusResponse
-import com.maciekhetman.cubetimer.data.remote.dto.UserDto
 import com.maciekhetman.cubetimer.data.remote.dto.VerifyEmailRequest
 import com.maciekhetman.cubetimer.model.AuthException
 import kotlinx.coroutines.CancellationException
@@ -47,87 +45,46 @@ class CubeSyncApiClientImpl(
     override suspend fun confirmPasswordReset(token: String, newPassword: String): AuthResponse =
         executeSafe { apiService.resetPassword(PasswordResetConfirmRequest(token, newPassword)) }
 
-    override suspend fun loginWithGoogle(request: GoogleAuthRequest): AuthResponse =
-        executeSafe { apiService.loginWithGoogle(request) }
+    override suspend fun changePassword(request: ChangePasswordRequest): Unit =
+        executeSafeUnit { apiService.changePassword(request) }
 
-    override suspend fun linkGoogle(request: GoogleAuthRequest, authToken: String?): Unit =
-        executeSafeUnit {
-            val authHeader = authToken?.let { if (it.startsWith("Bearer ")) it else "Bearer $it" } ?: ""
-            apiService.linkGoogleAccount(authHeader, request)
-        }
-
-    override suspend fun getCurrentUser(authToken: String?): UserDto =
-        executeSafe {
-            val authHeader = authToken?.let { if (it.startsWith("Bearer ")) it else "Bearer $it" }
-            apiService.getCurrentUser(authHeader)
-        }
-
-    override suspend fun changePassword(request: ChangePasswordRequest, authToken: String?): Unit =
-        executeSafeUnit {
-            val authHeader = authToken?.let { if (it.startsWith("Bearer ")) it else "Bearer $it" }
-            apiService.changePassword(authHeader, request)
-        }
-
-    override suspend fun deleteAccount(authToken: String?): Unit =
-        executeSafeUnit {
-            val authHeader = authToken?.let { if (it.startsWith("Bearer ")) it else "Bearer $it" }
-            apiService.deleteAccount(authHeader)
-        }
+    override suspend fun deleteAccount(): Unit =
+        executeSafeUnit { apiService.deleteAccount() }
 
     override suspend fun sync(
-        request: com.maciekhetman.cubetimer.data.remote.dto.SyncRequest,
-        authToken: String?
+        request: com.maciekhetman.cubetimer.data.remote.dto.SyncRequest
     ): com.maciekhetman.cubetimer.data.remote.dto.SyncResponse =
-        executeSafe {
-            val authHeader = authToken?.let { if (it.startsWith("Bearer ")) it else "Bearer $it" }
-            apiService.sync(authHeader, request)
-        }
+        executeSafe { apiService.sync(request) }
 
     override suspend fun snapshot(
-        request: com.maciekhetman.cubetimer.data.remote.dto.SnapshotRequest,
-        authToken: String?
+        request: com.maciekhetman.cubetimer.data.remote.dto.SnapshotRequest
     ): com.maciekhetman.cubetimer.data.remote.dto.SnapshotResponse =
-        executeSafe {
-            val authHeader = authToken?.let { if (it.startsWith("Bearer ")) it else "Bearer $it" }
-            apiService.snapshot(authHeader, request)
+        executeSafe { apiService.snapshot(request) }
+
+    private suspend fun <T : Any> executeSafe(call: suspend () -> Response<T>): T =
+        executeGuarded(call) { response ->
+            response.body()
+                ?: throw AuthException.Unknown("Server returned empty body with status ${response.code()}")
         }
-
-    private suspend fun <T : Any> executeSafe(call: suspend () -> Response<T>): T {
-        try {
-            val response = call()
-            if (response.isSuccessful) {
-                val body = response.body()
-                if (body != null) {
-                    return body
-                }
-                throw AuthException.Unknown("Server returned empty body with status ${response.code()}")
-            }
-
-            val errorBodyString = response.errorBody()?.string()
-            val apiError = ErrorParser.parseApiError(errorBodyString)
-            val code = apiError?.error?.code
-            val message = apiError?.error?.message ?: response.message().ifBlank { "HTTP Error ${response.code()}" }
-
-            throw ErrorParser.toAuthException(code, message, response.code())
-        } catch (e: CancellationException) {
-            // Structured concurrency: a cancelled call is not an API failure, let it propagate.
-            throw e
-        } catch (e: AuthException) {
-            throw e
-        } catch (e: IOException) {
-            throw AuthException.NetworkError("Network request failed: ${e.message}", e)
-        } catch (e: SerializationException) {
-            throw AuthException.SerializationError("Failed to deserialize response: ${e.message}", e)
-        } catch (e: Exception) {
-            throw AuthException.Unknown("Unexpected error occurred: ${e.message}", e)
-        }
-    }
 
     private suspend fun executeSafeUnit(call: suspend () -> Response<Unit>) {
+        executeGuarded(call) { }
+    }
+
+    /**
+     * Runs [call] and turns every way it can fail into an [AuthException]: a non-2xx response into
+     * the server's own error, an I/O or (de)serialization failure into a network or serialization
+     * error. [onSuccess] maps a 2xx response to the result. It runs inside the same guard, so an
+     * [AuthException] it throws passes through unchanged.
+     */
+    private suspend fun <T, R> executeGuarded(
+        call: suspend () -> Response<T>,
+        onSuccess: (Response<T>) -> R
+    ): R {
         try {
             val response = call()
             if (response.isSuccessful) {
-                return
+                return onSuccess(response)
             }
 
             val errorBodyString = response.errorBody()?.string()

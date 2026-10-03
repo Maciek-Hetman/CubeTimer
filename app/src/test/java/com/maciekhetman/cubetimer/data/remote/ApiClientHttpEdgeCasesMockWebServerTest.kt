@@ -1,6 +1,7 @@
 package com.maciekhetman.cubetimer.data.remote
 
 import com.maciekhetman.cubetimer.data.auth.TokenStorage
+import com.maciekhetman.cubetimer.data.remote.dto.LoginRequest
 import com.maciekhetman.cubetimer.model.AuthException
 import com.maciekhetman.cubetimer.model.User
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,7 +19,7 @@ import org.junit.Test
 
 /**
  * Adversarial contract edge case tests against [MockWebServer] for the shared response handling in
- * [CubeSyncApiClientImpl], exercised through `GET /v1/me`:
+ * [CubeSyncApiClientImpl], exercised through `POST /v1/auth/login`:
  * - 401, 403, 500, 502 HTML responses
  * - Corrupted and empty JSON responses
  */
@@ -28,6 +29,7 @@ class ApiClientHttpEdgeCasesMockWebServerTest {
     private lateinit var apiClient: CubeSyncApiClient
     private lateinit var fakeTokenStorage: FakeTokenStorage
     private val json: Json = NetworkModule.json
+    private val loginRequest = LoginRequest("user@example.com", "Password123!")
 
     @Before
     fun setup() {
@@ -68,7 +70,7 @@ class ApiClientHttpEdgeCasesMockWebServerTest {
         )
 
         try {
-            apiClient.getCurrentUser()
+            apiClient.login(loginRequest)
             fail("Expected AuthException.Unauthorized was not thrown")
         } catch (e: AuthException.Unauthorized) {
             assertEquals("The access token has expired", e.message)
@@ -85,7 +87,7 @@ class ApiClientHttpEdgeCasesMockWebServerTest {
         )
 
         try {
-            apiClient.getCurrentUser()
+            apiClient.login(loginRequest)
             fail("Expected AuthException.Forbidden was not thrown")
         } catch (e: AuthException.Forbidden) {
             assertEquals("Insufficient permissions", e.message)
@@ -102,7 +104,7 @@ class ApiClientHttpEdgeCasesMockWebServerTest {
         )
 
         try {
-            apiClient.getCurrentUser()
+            apiClient.login(loginRequest)
             fail("Expected AuthException was not thrown")
         } catch (e: AuthException) {
             assertTrue(e.message.contains("Database replica unavailable"))
@@ -119,7 +121,7 @@ class ApiClientHttpEdgeCasesMockWebServerTest {
         )
 
         try {
-            apiClient.getCurrentUser()
+            apiClient.login(loginRequest)
             fail("Expected AuthException was not thrown on 502 HTML")
         } catch (_: AuthException) {
             // Expected: an HTML error page still surfaces as AuthException, not a parse error.
@@ -135,7 +137,7 @@ class ApiClientHttpEdgeCasesMockWebServerTest {
         )
 
         try {
-            apiClient.getCurrentUser()
+            apiClient.login(loginRequest)
             fail("Expected AuthException was not thrown on empty body")
         } catch (e: AuthException) {
             assertTrue(e is AuthException.SerializationError || e is AuthException.Unknown)
@@ -152,7 +154,7 @@ class ApiClientHttpEdgeCasesMockWebServerTest {
         )
 
         try {
-            apiClient.getCurrentUser()
+            apiClient.login(loginRequest)
             fail("Expected AuthException.SerializationError was not thrown")
         } catch (e: AuthException.SerializationError) {
             assertTrue(e.message.contains("Failed to deserialize"))
@@ -166,14 +168,12 @@ class ApiClientHttpEdgeCasesMockWebServerTest {
         override fun getAccessToken(): String? = accessToken
         override fun setAccessToken(token: String?) { accessToken = token ?: "" }
         override fun getRefreshToken(): String? = "test-refresh"
-        override fun setRefreshToken(token: String?) {}
         override fun getUserId(): String? = "user-1"
         override fun getUserEmail(): String? = "user@example.com"
         override fun getUserRole(): String? = "user"
         override fun isUserEmailVerified(): Boolean = true
         override fun getDisplayName(): String? = "User"
         override fun saveAuthSession(accessToken: String, refreshToken: String, userId: String, userEmail: String, userRole: String, emailVerified: Boolean, displayName: String?) {}
-        override fun saveUser(user: User) {}
         override fun clearAuthData() {}
         override fun clearAll() {}
         override fun getCachedUser(): User? = null

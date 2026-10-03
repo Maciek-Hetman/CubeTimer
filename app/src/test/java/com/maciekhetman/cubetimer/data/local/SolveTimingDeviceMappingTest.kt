@@ -29,7 +29,7 @@ class SolveTimingDeviceMappingTest {
         val mutation = entity.toUpsertMutation(clientTime = "2026-09-27T10:00:00.000Z")
         val data = NetworkModule.json.parseToJsonElement(mutation.payloadJson!!).jsonObject
         assertEquals("external_timer", data.getValue("timing_device").jsonPrimitive.content)
-        assertEquals("external_timer", solve.toSyncPayload().timingDevice)
+        assertEquals("external_timer", entity.toSyncPayload().timingDevice)
     }
 
     @Test

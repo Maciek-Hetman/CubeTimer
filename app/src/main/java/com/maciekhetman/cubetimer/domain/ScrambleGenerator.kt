@@ -22,15 +22,6 @@ import java.util.concurrent.Executors
  *    instantly when present and refills the cache in the background for the following call.
  */
 object ScrambleGenerator {
-    private val scramblersByMode = mapOf(
-        Mode.CUBE_2x2 to PuzzleRegistry.TWO,
-        Mode.CUBE_3x3 to PuzzleRegistry.THREE,
-        Mode.CUBE_4x4 to PuzzleRegistry.FOUR,
-        Mode.CUBE_5x5 to PuzzleRegistry.FIVE,
-        Mode.MEGAMINX to PuzzleRegistry.MEGA,
-        Mode.PYRAMINX to PuzzleRegistry.PYRA
-    )
-
     // A real single thread, not Dispatchers.Default.limitedParallelism(1): that only caps
     // concurrency and can hop between pool threads, rebuilding the ThreadLocal searchers on each.
     private val scrambleDispatcher = Executors.newSingleThreadExecutor { runnable ->
@@ -86,7 +77,18 @@ object ScrambleGenerator {
     }
 
     private fun generateScrambleBlocking(mode: Mode): String {
-        val registry = scramblersByMode.getValue(mode)
+        val registry = mode.puzzleRegistry
         return registry.getScrambler().generateScramble()
     }
 }
+
+/** The TNoodle puzzle that scrambles (and draws) this [Mode]; shared by scramble generation and the 2D preview. */
+internal val Mode.puzzleRegistry: PuzzleRegistry
+    get() = when (this) {
+        Mode.CUBE_2x2 -> PuzzleRegistry.TWO
+        Mode.CUBE_3x3 -> PuzzleRegistry.THREE
+        Mode.CUBE_4x4 -> PuzzleRegistry.FOUR
+        Mode.CUBE_5x5 -> PuzzleRegistry.FIVE
+        Mode.MEGAMINX -> PuzzleRegistry.MEGA
+        Mode.PYRAMINX -> PuzzleRegistry.PYRA
+    }

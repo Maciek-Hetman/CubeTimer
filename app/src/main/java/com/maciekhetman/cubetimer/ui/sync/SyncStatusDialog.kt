@@ -1,6 +1,5 @@
 package com.maciekhetman.cubetimer.ui.sync
 
-import android.text.format.DateFormat
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -43,11 +42,9 @@ import androidx.compose.ui.unit.dp
 import com.maciekhetman.cubetimer.R
 import com.maciekhetman.cubetimer.model.SyncStatusType
 import com.maciekhetman.cubetimer.model.SyncUiState
+import com.maciekhetman.cubetimer.ui.components.formatDateTime
 import com.maciekhetman.cubetimer.viewmodel.ConflictUiModel
-import java.text.SimpleDateFormat
 import java.time.Instant
-import java.util.Date
-import java.util.Locale
 
 /**
  * Cloud sync status, plus - for signed-in users - the list of unresolved sync [conflicts] with
@@ -189,7 +186,8 @@ fun SyncStatusDialog(
                         )
                     }
 
-                    if (syncState.errorMessage != null) {
+                    // Not syncState.errorMessage: that is raw, untranslated exception/server text.
+                    if (syncState.status == SyncStatusType.ERROR) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Card(
                             shape = RoundedCornerShape(24.dp),
@@ -199,7 +197,7 @@ fun SyncStatusDialog(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                text = syncState.errorMessage,
+                                text = stringResource(R.string.sync_dialog_error_hint),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onErrorContainer,
                                 modifier = Modifier.padding(10.dp)
@@ -256,6 +254,5 @@ fun SyncStatusDialog(
 /** The stored ISO-8601 sync time in the app's language and the device's time zone; unparseable values as stored. */
 private fun formatSyncTime(iso: String): String {
     val millis = runCatching { Instant.parse(iso).toEpochMilli() }.getOrNull() ?: return iso
-    val locale = Locale.getDefault()
-    return SimpleDateFormat(DateFormat.getBestDateTimePattern(locale, "yMMMdjmm"), locale).format(Date(millis))
+    return formatDateTime(millis)
 }

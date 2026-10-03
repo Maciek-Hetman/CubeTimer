@@ -47,6 +47,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.maciekhetman.cubetimer.R
 import com.maciekhetman.cubetimer.model.AuthState
+import com.maciekhetman.cubetimer.model.currentUser
 import com.maciekhetman.cubetimer.viewmodel.AuthViewModel
 
 @Composable
@@ -706,26 +707,20 @@ private fun UserProfileDialog(
                     Spacer(modifier = Modifier.height(12.dp))
                 }
 
-                when (authState) {
-                    is AuthState.Authenticated -> {
+                val user = authState.currentUser
+                when {
+                    user != null -> {
                         ProfileInfoCard(
-                            email = authState.user.email,
-                            isVerified = authState.user.isEmailVerified
+                            email = user.email,
+                            isVerified = user.emailVerified
                         )
                     }
-                    is AuthState.Admin -> {
-                        ProfileInfoCard(
-                            email = authState.user.email,
-                            isVerified = authState.user.isEmailVerified
-                        )
-                    }
-                    is AuthState.Guest -> {
+                    authState is AuthState.Guest -> {
                         Text(
                             text = stringResource(R.string.auth_guest_mode),
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
-                    else -> Unit
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -738,7 +733,7 @@ private fun UserProfileDialog(
                     Text(stringResource(R.string.auth_import_local_solves))
                 }
 
-                if (authState is AuthState.Authenticated || authState is AuthState.Admin) {
+                if (user != null) {
                     Spacer(modifier = Modifier.height(8.dp))
 
                     OutlinedButton(

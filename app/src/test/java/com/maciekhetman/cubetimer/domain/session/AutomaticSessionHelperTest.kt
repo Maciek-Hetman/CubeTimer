@@ -1,7 +1,5 @@
 package com.maciekhetman.cubetimer.domain.session
 
-import com.maciekhetman.cubetimer.data.local.entity.SessionEntity
-import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
 import com.maciekhetman.cubetimer.model.DayPart
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Session
@@ -22,26 +20,26 @@ class AutomaticSessionHelperTest {
     @Test
     fun testDayPartBoundaries() {
         // Morning: 05:00:00 to 11:59:59 (hours 5..11)
-        assertEquals(DayPart.MORNING, AutomaticSessionHelper.dayPartFromHour(5))
-        assertEquals(DayPart.MORNING, AutomaticSessionHelper.dayPartFromHour(8))
-        assertEquals(DayPart.MORNING, AutomaticSessionHelper.dayPartFromHour(11))
+        assertEquals(DayPart.MORNING, DayPart.fromHour(5))
+        assertEquals(DayPart.MORNING, DayPart.fromHour(8))
+        assertEquals(DayPart.MORNING, DayPart.fromHour(11))
 
         // Afternoon: 12:00:00 to 16:59:59 (hours 12..16)
-        assertEquals(DayPart.AFTERNOON, AutomaticSessionHelper.dayPartFromHour(12))
-        assertEquals(DayPart.AFTERNOON, AutomaticSessionHelper.dayPartFromHour(14))
-        assertEquals(DayPart.AFTERNOON, AutomaticSessionHelper.dayPartFromHour(16))
+        assertEquals(DayPart.AFTERNOON, DayPart.fromHour(12))
+        assertEquals(DayPart.AFTERNOON, DayPart.fromHour(14))
+        assertEquals(DayPart.AFTERNOON, DayPart.fromHour(16))
 
         // Evening: 17:00:00 to 21:59:59 (hours 17..21)
-        assertEquals(DayPart.EVENING, AutomaticSessionHelper.dayPartFromHour(17))
-        assertEquals(DayPart.EVENING, AutomaticSessionHelper.dayPartFromHour(19))
-        assertEquals(DayPart.EVENING, AutomaticSessionHelper.dayPartFromHour(21))
+        assertEquals(DayPart.EVENING, DayPart.fromHour(17))
+        assertEquals(DayPart.EVENING, DayPart.fromHour(19))
+        assertEquals(DayPart.EVENING, DayPart.fromHour(21))
 
         // Night: 22:00:00 to 04:59:59 (hours 22..23 and 0..4)
-        assertEquals(DayPart.NIGHT, AutomaticSessionHelper.dayPartFromHour(22))
-        assertEquals(DayPart.NIGHT, AutomaticSessionHelper.dayPartFromHour(23))
-        assertEquals(DayPart.NIGHT, AutomaticSessionHelper.dayPartFromHour(0))
-        assertEquals(DayPart.NIGHT, AutomaticSessionHelper.dayPartFromHour(3))
-        assertEquals(DayPart.NIGHT, AutomaticSessionHelper.dayPartFromHour(4))
+        assertEquals(DayPart.NIGHT, DayPart.fromHour(22))
+        assertEquals(DayPart.NIGHT, DayPart.fromHour(23))
+        assertEquals(DayPart.NIGHT, DayPart.fromHour(0))
+        assertEquals(DayPart.NIGHT, DayPart.fromHour(3))
+        assertEquals(DayPart.NIGHT, DayPart.fromHour(4))
     }
 
     @Test
@@ -220,35 +218,27 @@ class AutomaticSessionHelperTest {
     }
 
     @Test
-    fun testEntityOverloadForReuseCheck() {
+    fun testReuseCheckMeasuresGapFromLastSolveTimestamp() {
         val baseIso = "2026-08-30T10:00:00Z"
         val baseMs = Instant.parse(baseIso).toEpochMilli()
 
-        val entity = SessionEntity(
-            id = "entity-1",
+        val session = Session(
+            id = "session-1",
             ownerId = "user-1",
             name = "30 aug 2026 morning",
-            event = "3x3",
-            kind = "automatic",
+            event = Mode.CUBE_3x3,
+            kind = SessionKind.AUTOMATIC,
             startedAt = baseIso
         )
 
-        val solveEntity = SolveEntity(
-            id = "solve-1",
-            ownerId = "user-1",
-            sessionId = "entity-1",
-            event = "3x3",
-            durationMs = 12000L,
-            penalty = "none",
-            solvedAt = "2026-08-30T10:15:00Z"
-        )
+        val lastSolveMs = Instant.parse("2026-08-30T10:15:00Z").toEpochMilli()
 
         // 20 min after solve -> true
         val now20m = Instant.parse("2026-08-30T10:35:00Z").toEpochMilli()
-        assertTrue(AutomaticSessionHelper.shouldReuseAutomaticSession(entity, solveEntity, now20m, event = "3x3"))
+        assertTrue(AutomaticSessionHelper.shouldReuseAutomaticSession(session, lastSolveMs, now20m, mode = Mode.CUBE_3x3))
 
         // 65 min after solve -> false
         val now65m = Instant.parse("2026-08-30T11:20:00Z").toEpochMilli()
-        assertFalse(AutomaticSessionHelper.shouldReuseAutomaticSession(entity, solveEntity, now65m, event = "3x3"))
+        assertFalse(AutomaticSessionHelper.shouldReuseAutomaticSession(session, lastSolveMs, now65m, mode = Mode.CUBE_3x3))
     }
 }

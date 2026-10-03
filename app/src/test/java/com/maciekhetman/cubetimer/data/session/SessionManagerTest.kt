@@ -5,20 +5,12 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.test.core.app.ApplicationProvider
 import app.cash.turbine.test
-import com.maciekhetman.cubetimer.data.auth.AuthManager
-import com.maciekhetman.cubetimer.data.auth.AuthResult
 import com.maciekhetman.cubetimer.data.local.CubeDatabase
 import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
 import com.maciekhetman.cubetimer.data.settingsDataStore
-import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Session
 import com.maciekhetman.cubetimer.model.SessionKind
-import com.maciekhetman.cubetimer.model.User
-import com.maciekhetman.cubetimer.model.currentUser
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -41,7 +33,6 @@ class SessionManagerTest {
     private lateinit var context: Context
     private lateinit var database: CubeDatabase
     private lateinit var sessionRepository: SessionRepositoryImpl
-    private lateinit var fakeAuthManager: FakeAuthManager
     private lateinit var sessionManager: SessionManagerImpl
 
     @Before
@@ -54,11 +45,9 @@ class SessionManagerTest {
             sessionDao = database.sessionDao(),
             syncOutboxDao = database.syncOutboxDao()
         )
-        fakeAuthManager = FakeAuthManager()
         sessionManager = SessionManagerImpl(
             sessionRepository = sessionRepository,
-            solveDao = database.solveDao(),
-            authManager = fakeAuthManager
+            solveDao = database.solveDao()
         )
     }
 
@@ -157,7 +146,7 @@ class SessionManagerTest {
 
     @Test
     fun testReactiveActiveSessionFlowFollowsAutomaticRollover() = runTest {
-        sessionManager.getActiveSessionFlow(Mode.CUBE_3x3).test {
+        sessionManager.getActiveSessionFlow("guest", Mode.CUBE_3x3).test {
             // Initially null (no sessions created yet)
             assertNull(awaitItem())
 
@@ -172,7 +161,7 @@ class SessionManagerTest {
 
         // A solve, then a request past the inactivity gap: the next session becomes the active one.
         val t0 = LocalDateTime.of(2026, 8, 30, 18, 0).toInstant(ZoneOffset.UTC).toEpochMilli()
-        val first = sessionManager.getActiveSessionFlow(Mode.CUBE_3x3).first()!!
+        val first = sessionManager.getActiveSessionFlow("guest", Mode.CUBE_3x3).first()!!
         database.solveDao().insert(
             SolveEntity(
                 id = "solve-rollover",
@@ -185,7 +174,7 @@ class SessionManagerTest {
         )
         val next = sessionManager.getOrCreateActiveSession("guest", Mode.CUBE_3x3, t0 + 90 * 60 * 1000L)
         assertNotEquals(first.id, next.id)
-        assertEquals(next.id, sessionManager.getActiveSessionFlow(Mode.CUBE_3x3).first()?.id)
+        assertEquals(next.id, sessionManager.getActiveSessionFlow("guest", Mode.CUBE_3x3).first()?.id)
     }
 
     @Test
@@ -207,37 +196,13 @@ class SessionManagerTest {
             prefs[stringPreferencesKey("active_manual_session_guest_CUBE_3x3")] = manual.id
         }
 
-        assertNull(sessionManager.getActiveSessionFlow(Mode.CUBE_3x3).first())
+        assertNull(sessionManager.getActiveSessionFlow("guest", Mode.CUBE_3x3).first())
 
         val active = sessionManager.getOrCreateActiveSession("guest", Mode.CUBE_3x3, System.currentTimeMillis())
         assertEquals(SessionKind.AUTOMATIC, active.kind)
         assertNotEquals(manual.id, active.id)
-        assertEquals(active.id, sessionManager.getActiveSessionFlow(Mode.CUBE_3x3).first()?.id)
+        assertEquals(active.id, sessionManager.getActiveSessionFlow("guest", Mode.CUBE_3x3).first()?.id)
         // The manual session itself is left untouched (still open, not deleted).
         assertNull(sessionRepository.getSessionById(manual.id)?.endedAt)
-    }
-
-    private class FakeAuthManager(
-        initialState: AuthState = AuthState.Guest
-    ) : AuthManager {
-        private val _authState = MutableStateFlow(initialState)
-        override val authState: StateFlow<AuthState> = _authState.asStateFlow()
-        override val currentUser: User? get() = _authState.value.currentUser
-
-        fun setAuthState(state: AuthState) {
-            _authState.value = state
-        }
-
-        override suspend fun initialize() {}
-        override suspend fun register(email: String, password: String) = AuthResult.Success(Unit)
-        override suspend fun login(email: String, password: String) = AuthResult.Success(User("user-1", email, "User", true))
-        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String) = AuthResult.Success(User("user-1", "user@test.com", "User", true))
-        override suspend fun verifyEmail(token: String) = AuthResult.Success(User("user-1", "user@test.com", "User", true))
-        override suspend fun resendVerificationEmail(email: String) = AuthResult.Success(Unit)
-        override suspend fun requestPasswordReset(email: String) = AuthResult.Success(Unit)
-        override suspend fun resetPassword(token: String, newPassword: String) = AuthResult.Success(User("user-1", "user@test.com", "User", true))
-        override suspend fun refreshSession() = AuthResult.Success(User("user-1", "user@test.com", "User", true))
-        override suspend fun logout() = AuthResult.Success(Unit)
-        override suspend fun adoptGuestData(userId: String) {}
     }
 }

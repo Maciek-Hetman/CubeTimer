@@ -179,7 +179,7 @@ class SolvesRepositoryOutboxTest {
         repository.saveSolve(solve2, ownerId = "user-xyz")
         assertEquals(2, database.syncOutboxDao().countPending("user-xyz"))
 
-        repository.clearAllSolves(ownerId = "user-xyz")
+        repository.clearAllSolvesInScope(null, "user-xyz")
         val pending = database.syncOutboxDao().getPendingMutations("user-xyz")
         assertEquals(4, pending.size) // 2 inserts + 2 deletes
 

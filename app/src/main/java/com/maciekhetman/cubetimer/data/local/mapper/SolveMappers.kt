@@ -7,6 +7,7 @@ import com.maciekhetman.cubetimer.model.Penalty
 import com.maciekhetman.cubetimer.model.SolveTime
 import com.maciekhetman.cubetimer.model.TimingDevice
 
+import com.maciekhetman.cubetimer.data.remote.dto.SolveSnapshotDto
 import com.maciekhetman.cubetimer.data.remote.dto.SolveSyncPayload
 
 fun SolveEntity.toSolveTime(): SolveTime {
@@ -57,18 +58,25 @@ fun SolveEntity.toSyncPayload(): SolveSyncPayload = SolveSyncPayload(
     timingDevice = this.timingDevice
 )
 
-fun SolveTime.toSyncPayload(): SolveSyncPayload = SolveSyncPayload(
+/**
+ * The local row for a solve the server sent. [version] and [updatedAt] are passed in rather than
+ * read from the DTO because each source settles them differently (a sync change, a snapshot page, a
+ * conflict's server copy).
+ */
+fun SolveSnapshotDto.toEntity(ownerId: String, version: Long, updatedAt: String): SolveEntity = SolveEntity(
     id = this.id,
+    ownerId = ownerId,
     sessionId = this.sessionId,
-    durationMs = this.timeInMillis,
-    penalty = CubeTypeConverters.fromPenalty(this.penalty),
-    solvedAt = CubeTypeConverters.epochMillisToIso(this.timestamp),
+    event = this.event,
+    durationMs = this.durationMs,
+    penalty = this.penalty,
+    solvedAt = this.solvedAt,
     scramble = this.scramble,
-    event = CubeTypeConverters.fromMode(this.mode),
-    timingDevice = this.timingDevice.value
+    version = version,
+    updatedAt = updatedAt,
+    deletedAt = this.deletedAt,
+    timingDevice = this.timingDevice
 )
 
 fun Mode.toEventString(): String = CubeTypeConverters.fromMode(this)
-fun String.toMode(): Mode = CubeTypeConverters.toMode(this)
 fun Penalty.toDbString(): String = CubeTypeConverters.fromPenalty(this)
-fun String.toPenalty(): Penalty = CubeTypeConverters.toPenalty(this)

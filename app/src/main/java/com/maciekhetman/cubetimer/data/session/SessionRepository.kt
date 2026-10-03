@@ -26,16 +26,6 @@ interface SessionRepository {
     fun observeActiveSessions(ownerId: String, mode: Mode): Flow<List<Session>>
 
     /**
-     * Observe all (including archived, non-deleted) sessions for a given owner and mode.
-     */
-    fun observeAllSessions(ownerId: String, mode: Mode): Flow<List<Session>>
-
-    /**
-     * Observe a specific session by ID.
-     */
-    fun observeSessionById(id: String): Flow<Session?>
-
-    /**
      * One-shot fetch for a session by ID.
      */
     suspend fun getSessionById(id: String): Session?
@@ -44,11 +34,6 @@ interface SessionRepository {
      * Fetch open automatic session for (ownerId, mode).
      */
     suspend fun getOpenAutomaticSession(ownerId: String, mode: Mode): Session?
-
-    /**
-     * Get all active (non-archived, non-deleted) sessions for owner and mode.
-     */
-    suspend fun getActiveSessions(ownerId: String, mode: Mode): List<Session>
 
     /**
      * Get session names matching a prefix for duplicate disambiguation.
@@ -64,11 +49,6 @@ interface SessionRepository {
      * Close an open session by setting ended_at.
      */
     suspend fun closeSession(id: String, ownerId: String = "guest"): Session?
-
-    /**
-     * Soft delete a session and enqueue delete mutation in outbox if authenticated.
-     */
-    suspend fun deleteSession(id: String, ownerId: String = "guest"): Boolean
 
     /**
      * Soft delete a session along with all its active solves in a single database transaction.

@@ -97,18 +97,6 @@ class CsvFormatTest {
     // --- UTF-8 BOM Handling Tests ---
 
     @Test
-    fun stripBom_removesLeadingBom() {
-        val withBom = "\uFEFF# Source: CubeTimer"
-        assertEquals("# Source: CubeTimer", CsvFormat.stripBom(withBom))
-    }
-
-    @Test
-    fun stripBom_withoutBom_returnsOriginal() {
-        val withoutBom = "# Source: CubeTimer"
-        assertEquals("# Source: CubeTimer", CsvFormat.stripBom(withoutBom))
-    }
-
-    @Test
     fun createBomStrippingReader_stripsBomAtStreamStart() {
         val input = "\uFEFF# Source: CubeTimer\r\nsolve_id,..."
         val reader = CsvFormat.createBomStrippingReader(StringReader(input))

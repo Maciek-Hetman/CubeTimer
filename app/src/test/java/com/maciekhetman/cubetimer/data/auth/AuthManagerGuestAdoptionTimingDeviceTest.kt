@@ -9,7 +9,6 @@ import com.maciekhetman.cubetimer.data.local.entity.SyncOutboxEntity
 import com.maciekhetman.cubetimer.data.remote.CubeSyncApiClient
 import com.maciekhetman.cubetimer.data.remote.dto.AuthResponse
 import com.maciekhetman.cubetimer.data.remote.dto.ChangePasswordRequest
-import com.maciekhetman.cubetimer.data.remote.dto.GoogleAuthRequest
 import com.maciekhetman.cubetimer.data.remote.dto.LoginRequest
 import com.maciekhetman.cubetimer.data.remote.dto.RegisterRequest
 import com.maciekhetman.cubetimer.data.remote.dto.SessionSyncPayload
@@ -356,14 +355,10 @@ class AuthManagerGuestAdoptionTimingDeviceTest {
         override suspend fun requestPasswordReset(email: String): StatusResponse = StatusResponse("accepted")
         override suspend fun confirmPasswordReset(token: String, newPassword: String): AuthResponse =
             throw AuthException.InvalidToken()
-        override suspend fun loginWithGoogle(request: GoogleAuthRequest): AuthResponse =
-            throw AuthException.InvalidSocialToken()
-        override suspend fun linkGoogle(request: GoogleAuthRequest, authToken: String?) {}
-        override suspend fun getCurrentUser(authToken: String?): UserDto = UserDto("u", "e@t.com")
-        override suspend fun changePassword(request: ChangePasswordRequest, authToken: String?) {}
-        override suspend fun deleteAccount(authToken: String?) {}
-        override suspend fun sync(request: SyncRequest, authToken: String?): SyncResponse = SyncResponse()
-        override suspend fun snapshot(request: SnapshotRequest, authToken: String?): SnapshotResponse = SnapshotResponse()
+        override suspend fun changePassword(request: ChangePasswordRequest) {}
+        override suspend fun deleteAccount() {}
+        override suspend fun sync(request: SyncRequest): SyncResponse = SyncResponse()
+        override suspend fun snapshot(request: SnapshotRequest): SnapshotResponse = SnapshotResponse()
     }
 
     private class FakeTokenStorage : TokenStorage {
@@ -380,7 +375,6 @@ class AuthManagerGuestAdoptionTimingDeviceTest {
             _flow.value = token
         }
         override fun getRefreshToken(): String? = refreshToken
-        override fun setRefreshToken(token: String?) { refreshToken = token }
         override fun getUserId(): String? = cachedUser?.id
         override fun getUserEmail(): String? = cachedUser?.email
         override fun getUserRole(): String? = cachedUser?.userRole?.name?.lowercase()
@@ -406,7 +400,6 @@ class AuthManagerGuestAdoptionTimingDeviceTest {
                 userRole = UserRole.fromString(userRole)
             )
         }
-        override fun saveUser(user: User) { cachedUser = user }
         override fun getDeviceId(): String = "test-device-id"
         override fun clearAuthData() {
             setAccessToken(null)

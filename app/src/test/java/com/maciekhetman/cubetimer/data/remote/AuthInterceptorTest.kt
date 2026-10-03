@@ -110,7 +110,6 @@ class AuthInterceptorTest {
             _flow.value = token
         }
         override fun getRefreshToken(): String? = storedRefreshToken
-        override fun setRefreshToken(token: String?) { storedRefreshToken = token }
         override fun getUserId(): String? = null
         override fun getUserEmail(): String? = null
         override fun getUserRole(): String? = null
@@ -129,7 +128,6 @@ class AuthInterceptorTest {
             setAccessToken(accessToken)
             this.storedRefreshToken = refreshToken
         }
-        override fun saveUser(user: User) {}
         override fun getDeviceId(): String = storedDeviceId
         override fun clearAuthData() {
             setAccessToken(null)

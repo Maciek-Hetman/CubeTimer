@@ -72,25 +72,12 @@ interface SyncOutboxDao {
     suspend fun countPending(ownerId: String): Int
 
     /**
-     * Filters on all three columns of `idx_outbox_owner_entity_entity_id` so this is an index
-     * lookup; without `entity_type` SQLite can only use the `owner_id` prefix and scans every
-     * outbox row for the owner, once per incoming change during sync.
-     *
-     * Dead rows are not counted. This count is what shields an entity's local edit from incoming
-     * remote changes, and a dead mutation's edit is never going to reach the server: keeping it
-     * "protected" would freeze the entity against every other device's changes forever. So once a
-     * mutation is dead, the server's copy wins over it.
-     */
-    @Query("""
-        SELECT COUNT(*) FROM sync_outbox
-        WHERE owner_id = :ownerId AND entity_type = :entityType AND entity_id = :entityId
-          AND status != 'dead'
-    """)
-    suspend fun countPendingForEntity(ownerId: String, entityType: String, entityId: String): Int
-
-    /**
      * Every live outbox entity for [ownerId], so a sync page can test "is this entity protected?"
      * in memory instead of one indexed lookup per incoming change.
+     *
+     * Dead rows are left out. A dead mutation's edit is never going to reach the server: keeping
+     * its entity "protected" would freeze it against every other device's changes forever. So once
+     * a mutation is dead, the server's copy wins over it.
      */
     @Query("""
         SELECT entity_type, entity_id FROM sync_outbox
@@ -130,7 +117,7 @@ interface SyncOutboxDao {
     /**
      * Dead-letters a mutation the server permanently rejected on its own (a request-level 4xx that
      * retrying can never fix). A `dead` row is kept for diagnostics (`last_error`) but is excluded
-     * from [getPendingMutations], [countPending], [observePendingCount], [countPendingForEntity]
+     * from [getPendingMutations], [countPending], [observePendingCount], [getLiveEntityKeys]
      * and [getPendingMutationForEntity], so it is never sent again and blocks nothing.
      */
     @Query("""

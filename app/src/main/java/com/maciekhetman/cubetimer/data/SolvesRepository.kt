@@ -11,6 +11,7 @@ import com.maciekhetman.cubetimer.data.local.dao.SolveDao
 import com.maciekhetman.cubetimer.data.local.dao.SyncOutboxDao
 import com.maciekhetman.cubetimer.data.local.dao.getSolvesByIdsChunked
 import com.maciekhetman.cubetimer.data.local.dao.softDeleteAllChunked
+import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
 import com.maciekhetman.cubetimer.data.local.mapper.toDbString
 import com.maciekhetman.cubetimer.data.local.mapper.toDeleteMutation
 import com.maciekhetman.cubetimer.data.local.mapper.toEventString
@@ -89,6 +90,29 @@ class SolvesRepository(
     }
 
     /**
+     * [existing] overwritten with [solve]'s content and revived (`deleted_at` cleared) at [updatedAt].
+     * Its id, server version and timing device are kept, and so is the stored event string when it
+     * names an event this app has no [Mode] for (see [CubeTypeConverters.eventForRewrite]).
+     */
+    private fun rewriteExisting(
+        existing: SolveEntity,
+        solve: SolveTime,
+        ownerId: String,
+        sessionId: String?,
+        updatedAt: String
+    ): SolveEntity = existing.copy(
+        ownerId = ownerId,
+        sessionId = sessionId,
+        event = CubeTypeConverters.eventForRewrite(existing.event, solve.mode),
+        durationMs = solve.timeInMillis,
+        penalty = CubeTypeConverters.fromPenalty(solve.penalty),
+        solvedAt = CubeTypeConverters.epochMillisToIso(solve.timestamp),
+        scramble = solve.scramble,
+        deletedAt = null,
+        updatedAt = updatedAt
+    )
+
+    /**
      * Observe all active solves for a specific owner.
      */
     fun getAllSolvesFlow(ownerId: String = "guest"): Flow<List<SolveTime>> {
@@ -96,115 +120,7 @@ class SolvesRepository(
             .map { entities -> entities.map { it.toSolveTime() } }
     }
 
-    /**
-     * One-shot fetch of all active solves for a specific owner.
-     */
-    suspend fun getAllActiveSolves(ownerId: String = "guest"): List<SolveTime> = withContext(ioDispatcher) {
-        solveDao.getAllActiveSolvesForOwner(ownerId).map { it.toSolveTime() }
-    }
-
-    /**
-     * Observe active solves associated with a specific session and owner.
-     */
-    fun getSolvesBySessionFlow(sessionId: String, ownerId: String = "guest"): Flow<List<SolveTime>> {
-        return solveDao.observeSolvesBySession(ownerId = ownerId, sessionId = sessionId)
-            .map { entities -> entities.map { it.toSolveTime() } }
-    }
-
-    // --- Chunked Paged Queries (Returning Domain Models) ---
-
-    suspend fun getSolvesPagedByEvent(
-        mode: Mode,
-        ownerId: String = "guest",
-        limit: Int = 50,
-        offset: Int = 0
-    ): List<SolveTime> = withContext(ioDispatcher) {
-        solveDao.getSolvesPagedByEvent(
-            ownerId = ownerId,
-            event = mode.toEventString(),
-            limit = limit,
-            offset = offset
-        ).map { it.toSolveTime() }
-    }
-
-    suspend fun getSolvesPagedBySession(
-        sessionId: String,
-        ownerId: String = "guest",
-        limit: Int = 50,
-        offset: Int = 0
-    ): List<SolveTime> = withContext(ioDispatcher) {
-        solveDao.getSolvesPagedBySession(
-            ownerId = ownerId,
-            sessionId = sessionId,
-            limit = limit,
-            offset = offset
-        ).map { it.toSolveTime() }
-    }
-
-    suspend fun getAllSolvesPaged(
-        ownerId: String = "guest",
-        limit: Int = 50,
-        offset: Int = 0
-    ): List<SolveTime> = withContext(ioDispatcher) {
-        solveDao.getAllSolvesPaged(
-            ownerId = ownerId,
-            limit = limit,
-            offset = offset
-        ).map { it.toSolveTime() }
-    }
-
-    // --- Reactive Count Flows & Suspend Counts ---
-
-    fun observeSolveCountByEvent(
-        mode: Mode,
-        ownerId: String = "guest"
-    ): Flow<Int> = solveDao.observeSolveCountByEvent(
-        ownerId = ownerId,
-        event = mode.toEventString()
-    ).distinctUntilChanged()
-
-    fun observeSolveCountBySession(
-        sessionId: String,
-        ownerId: String = "guest"
-    ): Flow<Int> = solveDao.observeSolveCountBySession(
-        ownerId = ownerId,
-        sessionId = sessionId
-    ).distinctUntilChanged()
-
-    fun observeAllSolvesCount(
-        ownerId: String = "guest"
-    ): Flow<Int> = solveDao.observeAllSolvesCount(ownerId = ownerId).distinctUntilChanged()
-
-    suspend fun getSolveCountByEvent(
-        mode: Mode,
-        ownerId: String = "guest"
-    ): Int = withContext(ioDispatcher) {
-        solveDao.getSolveCountByEvent(ownerId, mode.toEventString())
-    }
-
-    suspend fun getSolveCountBySession(
-        sessionId: String,
-        ownerId: String = "guest"
-    ): Int = withContext(ioDispatcher) {
-        solveDao.getSolveCountBySession(ownerId, sessionId)
-    }
-
     // --- Historical PB Lookup ---
-
-    suspend fun getPriorBestSolveDuration(
-        mode: Mode,
-        solvedAtEpochMillis: Long,
-        ownerId: String = "guest",
-        excludeSolveId: String? = null
-    ): Long? = withContext(ioDispatcher) {
-        val solvedAtIso = CubeTypeConverters.epochMillisToIso(solvedAtEpochMillis)
-        solveDao.getPriorBestSolveDuration(
-            ownerId = ownerId,
-            event = mode.toEventString(),
-            solvedAt = solvedAtIso,
-            excludeSolveId = excludeSolveId
-        )
-    }
 
     suspend fun getPriorBestSolveDuration(
         mode: Mode,
@@ -236,17 +152,7 @@ class SolvesRepository(
         runInTransaction {
             val existing = solveDao.getSolveById(solve.id)
             val entity = if (existing != null) {
-                existing.copy(
-                    ownerId = ownerId,
-                    sessionId = sessionId ?: solve.sessionId,
-                    event = CubeTypeConverters.eventForRewrite(existing.event, solve.mode),
-                    durationMs = solve.timeInMillis,
-                    penalty = CubeTypeConverters.fromPenalty(solve.penalty),
-                    solvedAt = CubeTypeConverters.epochMillisToIso(solve.timestamp),
-                    scramble = solve.scramble,
-                    deletedAt = null,
-                    updatedAt = nowIso
-                )
+                rewriteExisting(existing, solve, ownerId, sessionId = sessionId ?: solve.sessionId, updatedAt = nowIso)
             } else {
                 solve.toSolveEntity(ownerId = ownerId, sessionId = sessionId ?: solve.sessionId)
             }
@@ -371,13 +277,6 @@ class SolvesRepository(
     }
 
     /**
-     * Clear all solves for owner.
-     */
-    suspend fun clearAllSolves(ownerId: String = "guest"): List<SolveTime> {
-        return clearAllSolvesInScope(mode = null, ownerId = ownerId)
-    }
-
-    /**
      * Restore previously deleted solves (e.g. Snackbar Undo action). If a row with a given id
      * still exists (soft-deleted), its server [SolveEntity.version] is preserved and only
      * `deleted_at`/`updated_at`/content fields are refreshed, instead of resetting version to 0
@@ -396,17 +295,7 @@ class SolvesRepository(
             val entities = solves.map { solve ->
                 val existing = existingById[solve.id]
                 if (existing != null) {
-                    existing.copy(
-                        ownerId = ownerId,
-                        sessionId = solve.sessionId,
-                        event = CubeTypeConverters.eventForRewrite(existing.event, solve.mode),
-                        durationMs = solve.timeInMillis,
-                        penalty = CubeTypeConverters.fromPenalty(solve.penalty),
-                        solvedAt = CubeTypeConverters.epochMillisToIso(solve.timestamp),
-                        scramble = solve.scramble,
-                        deletedAt = null,
-                        updatedAt = nowIso
-                    )
+                    rewriteExisting(existing, solve, ownerId, sessionId = solve.sessionId, updatedAt = nowIso)
                 } else {
                     solve.toSolveEntity(ownerId = ownerId, deletedAt = null)
                 }

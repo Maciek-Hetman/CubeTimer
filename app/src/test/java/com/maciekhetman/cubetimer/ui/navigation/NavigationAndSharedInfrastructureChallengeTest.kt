@@ -25,7 +25,7 @@ import org.robolectric.annotation.Config
  * Verifies:
  * 1. FloatingNavigationBar container geometry, pill indicator coordinates, and destination mapping.
  * 2. Predictive Back navigation state machine routing and loop prevention across all destinations.
- * 3. SessionFilterBar composable rendering, empty lists, long session names, and chip selections.
+ * 3. SessionFilterBar composable rendering, empty lists, and chip selections.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -261,43 +261,19 @@ class NavigationAndSharedInfrastructureChallengeTest {
     }
 
     @Test
-    fun `session filter bar handles extremely long session names and unicode characters`() {
-        val longSessionName = "Session ".repeat(50) + "🎲🔥 100% (Sub-10) [PB] \u0627\u0644\u0639\u0631\u0628\u064a\u0629 \u4e2d\u6587"
-
-        val specificFilter = StatsFilter.SpecificSession(
-            sessionId = "sess_12345_uuid",
-            sessionName = longSessionName
-        )
-
-        assertEquals("sess_12345_uuid", specificFilter.sessionId)
-        assertEquals(longSessionName, specificFilter.sessionName)
-        assertTrue(specificFilter.sessionName.contains("🎲🔥"))
-        assertTrue(specificFilter.sessionName.contains("\u0627\u0644\u0639\u0631\u0628\u064a\u0629"))
-    }
-
-    @Test
     fun `session filter bar correctly distinguishes filter types and selections`() {
         val filters: List<StatsFilter> = listOf(
             StatsFilter.ActiveSession,
-            StatsFilter.AllSessions,
-            StatsFilter.SpecificSession("uuid_1", "Session 1")
+            StatsFilter.AllSessions
         )
 
         // ActiveSession
         assertTrue(filters[0] is StatsFilter.ActiveSession)
         assertFalse(filters[0] is StatsFilter.AllSessions)
-        assertFalse(filters[0] is StatsFilter.SpecificSession)
 
         // AllSessions
         assertFalse(filters[1] is StatsFilter.ActiveSession)
         assertTrue(filters[1] is StatsFilter.AllSessions)
-        assertFalse(filters[1] is StatsFilter.SpecificSession)
-
-        // SpecificSession
-        assertFalse(filters[2] is StatsFilter.ActiveSession)
-        assertFalse(filters[2] is StatsFilter.AllSessions)
-        assertTrue(filters[2] is StatsFilter.SpecificSession)
-        assertEquals("Session 1", (filters[2] as StatsFilter.SpecificSession).sessionName)
     }
 
     // =============================================================================================

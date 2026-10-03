@@ -564,7 +564,6 @@ class TokenAuthenticatorStressTest {
             _flow.value = token
         }
         override fun getRefreshToken(): String? = synchronized(this) { refreshToken }
-        override fun setRefreshToken(token: String?) = synchronized(this) { refreshToken = token }
         override fun getUserId(): String? = synchronized(this) { userId }
         override fun getUserEmail(): String? = synchronized(this) { userEmail }
         override fun getUserRole(): String? = synchronized(this) { userRole }
@@ -591,13 +590,6 @@ class TokenAuthenticatorStressTest {
             this.userRole = userRole
             this.emailVerified = emailVerified
             this.displayName = displayName
-        }
-        override fun saveUser(user: User) = synchronized(this) {
-            this.userId = user.id
-            this.userEmail = user.email
-            this.userRole = user.userRole.name.lowercase()
-            this.emailVerified = user.emailVerified
-            this.displayName = user.displayName
         }
         override fun getDeviceId(): String = synchronized(this) { deviceId }
         override fun clearAuthData() = synchronized(this) {

@@ -13,7 +13,6 @@ import com.maciekhetman.cubetimer.data.local.CubeDatabase
 import com.maciekhetman.cubetimer.data.local.converter.CubeTypeConverters
 import com.maciekhetman.cubetimer.data.local.entity.SessionEntity
 import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
-import com.maciekhetman.cubetimer.data.session.SessionManagerImpl
 import com.maciekhetman.cubetimer.data.session.SessionRepositoryImpl
 import com.maciekhetman.cubetimer.data.local.mapper.toDomain
 import com.maciekhetman.cubetimer.domain.csv.CsvFormat
@@ -62,7 +61,7 @@ import java.util.UUID
  * Vector 3: Inverted Time Ranges, Pathological Boundaries & DNF/Penalty Display Time Semantics
  * Vector 4: Date Range Boundary Transitions, Midnight Offsets & Local Timezones
  * Vector 5: CSV SAF Operations (Empty sessions, Scoped/Selected export, SAF ContentResolver error handling, Corrupt/Empty Import)
- * Vector 6: resetAllFilters(), resetSessionFilters(), and resetSolveFilters() Default Restoration
+ * Vector 6: resetAllFilters() Default Restoration and independent Session / Solve filter counters
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -73,7 +72,6 @@ class HistoryFilterAndCsvStressChallengeTest {
     private lateinit var database: CubeDatabase
     private lateinit var solvesRepository: SolvesRepository
     private lateinit var sessionRepository: SessionRepositoryImpl
-    private lateinit var sessionManager: SessionManagerImpl
     private lateinit var fakeAuthManager: FakeAuthManager
     private lateinit var viewModel: HistoryViewModel
 
@@ -103,11 +101,6 @@ class HistoryFilterAndCsvStressChallengeTest {
             syncOutboxDao = database.syncOutboxDao()
         )
         fakeAuthManager = FakeAuthManager()
-        sessionManager = SessionManagerImpl(
-            sessionRepository = sessionRepository,
-            solveDao = database.solveDao(),
-            authManager = fakeAuthManager
-        )
     }
 
     @After
@@ -120,7 +113,6 @@ class HistoryFilterAndCsvStressChallengeTest {
         return keepUiStateActive(HistoryViewModel(
             application = application,
             solvesRepository = solvesRepository,
-            sessionManager = sessionManager,
             sessionRepository = sessionRepository,
             authManager = fakeAuthManager,
             database = database,
@@ -314,7 +306,7 @@ class HistoryFilterAndCsvStressChallengeTest {
 
         viewModel = createViewModel()
         advanceUntilIdle()
-        viewModel.expandSession(s.id)
+        viewModel.toggleSessionExpanded(s.id)
         advanceUntilIdle()
 
         val sorts = listOf(SolveSortOrder.MOST_RECENT, SolveSortOrder.OLDEST, SolveSortOrder.LOWEST_TIME, SolveSortOrder.HIGHEST_TIME)
@@ -433,7 +425,7 @@ class HistoryFilterAndCsvStressChallengeTest {
 
         viewModel = createViewModel()
         advanceUntilIdle()
-        viewModel.expandSession(s.id)
+        viewModel.toggleSessionExpanded(s.id)
         advanceUntilIdle()
 
         // Inverted range: min 20s > max 10s
@@ -454,7 +446,7 @@ class HistoryFilterAndCsvStressChallengeTest {
 
         viewModel = createViewModel()
         advanceUntilIdle()
-        viewModel.expandSession(s.id)
+        viewModel.toggleSessionExpanded(s.id)
         advanceUntilIdle()
 
         // 1. Equal bounds: min == max (12000L .. 12000L)
@@ -499,7 +491,7 @@ class HistoryFilterAndCsvStressChallengeTest {
 
         viewModel = createViewModel()
         advanceUntilIdle()
-        viewModel.expandSession(s.id)
+        viewModel.toggleSessionExpanded(s.id)
         advanceUntilIdle()
 
         // Time range [10000L, 12000L]:
@@ -548,7 +540,7 @@ class HistoryFilterAndCsvStressChallengeTest {
 
         viewModel = createViewModel()
         advanceUntilIdle()
-        viewModel.expandSession(s.id)
+        viewModel.toggleSessionExpanded(s.id)
         advanceUntilIdle()
 
         // 1. Preset TODAY
@@ -652,7 +644,7 @@ class HistoryFilterAndCsvStressChallengeTest {
 
         viewModel = createViewModel()
         advanceUntilIdle()
-        viewModel.expandSession(s.id)
+        viewModel.toggleSessionExpanded(s.id)
         advanceUntilIdle()
 
         // 1. Export All Solves to real file URI
@@ -803,7 +795,7 @@ class HistoryFilterAndCsvStressChallengeTest {
     }
 
     // =========================================================================
-    // Vector 6: resetAllFilters(), resetSessionFilters() and resetSolveFilters()
+    // Vector 6: resetAllFilters() and independent Session / Solve filter counters
     // =========================================================================
     @Test
     fun testResetAllFiltersRestoresDefaultsAcrossAllDimensionsSimultaneously() = runTest(testDispatcher) {
@@ -864,8 +856,9 @@ class HistoryFilterAndCsvStressChallengeTest {
         assertEquals(2, viewModel.uiState.value.activeSolveFilterCount)
         assertEquals(4, viewModel.uiState.value.totalActiveFilterCount)
 
-        // Reset ONLY Session filters
-        viewModel.resetSessionFilters()
+        // Restore ONLY the Session filters to their defaults
+        viewModel.setSessionSort(SessionSortOrder.MOST_RECENT)
+        viewModel.setPuzzleScope(PuzzleScope.ACTIVE_PUZZLE)
         advanceUntilIdle()
 
         var state = viewModel.uiState.value
@@ -878,8 +871,11 @@ class HistoryFilterAndCsvStressChallengeTest {
         assertEquals(SolveSortOrder.HIGHEST_TIME, state.solveSort)
         assertEquals(PenaltyFilter.PLUS_TWO_ONLY, state.penaltyFilter)
 
-        // Reset ONLY Solve filters
-        viewModel.resetSolveFilters()
+        // Restore ONLY the Solve filters to their defaults
+        viewModel.setSolveSort(SolveSortOrder.MOST_RECENT)
+        viewModel.setPenaltyFilter(PenaltyFilter.ALL)
+        viewModel.setTimeRangeFilter(TimeRangeFilter())
+        viewModel.setDateRangeFilter(DateRangeFilter())
         advanceUntilIdle()
 
         state = viewModel.uiState.value
@@ -902,12 +898,10 @@ class HistoryFilterAndCsvStressChallengeTest {
         override suspend fun initialize() = Unit
         override suspend fun register(email: String, password: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun login(email: String, password: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
-        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun verifyEmail(token: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun resendVerificationEmail(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun requestPasswordReset(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun resetPassword(token: String, newPassword: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
-        override suspend fun refreshSession(): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun logout(): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun adoptGuestData(userId: String) = Unit
     }

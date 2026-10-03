@@ -38,7 +38,6 @@ class AuthViewModel(
                 emailError = null,
                 passwordError = null,
                 confirmPasswordError = null,
-                tokenError = null,
                 currentPasswordError = null
             )
         }
@@ -80,10 +79,6 @@ class AuthViewModel(
 
     fun onCurrentPasswordChanged(value: String) {
         _formState.update { it.copy(currentPassword = value, currentPasswordError = null, errorMessage = null) }
-    }
-
-    fun onTokenChanged(value: String) {
-        _formState.update { it.copy(token = value, tokenError = null, errorMessage = null) }
     }
 
     fun togglePasswordVisibility() {
@@ -189,10 +184,7 @@ class AuthViewModel(
     fun submitVerifyEmail() {
         val state = _formState.value
         if (state.isLoading) return
-        if (state.token.isBlank()) {
-            _formState.update { it.copy(tokenError = text(R.string.auth_msg_verification_token_required)) }
-            return
-        }
+        if (state.token.isBlank()) return
 
         viewModelScope.launch {
             _formState.update { it.copy(isLoading = true, errorMessage = null) }
@@ -428,31 +420,14 @@ class AuthViewModel(
             _formState.update { it.copy(emailError = text(R.string.auth_msg_email_required)) }
             valid = false
         }
-        if (state.password.length < 10) {
-            _formState.update { it.copy(passwordError = text(R.string.auth_msg_password_too_short)) }
-            valid = false
-        }
-        if (state.password != state.confirmPassword) {
-            _formState.update { it.copy(confirmPasswordError = text(R.string.auth_msg_passwords_mismatch)) }
-            valid = false
-        }
+        if (!validateNewPassword(state)) valid = false
         return valid
     }
 
     private fun validateResetPasswordForm(state: AuthFormState): Boolean {
         var valid = true
-        if (state.token.isBlank()) {
-            _formState.update { it.copy(tokenError = text(R.string.auth_msg_token_required)) }
-            valid = false
-        }
-        if (state.password.length < 10) {
-            _formState.update { it.copy(passwordError = text(R.string.auth_msg_password_too_short)) }
-            valid = false
-        }
-        if (state.password != state.confirmPassword) {
-            _formState.update { it.copy(confirmPasswordError = text(R.string.auth_msg_passwords_mismatch)) }
-            valid = false
-        }
+        if (state.token.isBlank()) valid = false
+        if (!validateNewPassword(state)) valid = false
         return valid
     }
 
@@ -462,10 +437,20 @@ class AuthViewModel(
             _formState.update { it.copy(currentPasswordError = text(R.string.auth_msg_current_password_required)) }
             valid = false
         }
-        if (state.password.length < 10) {
+        if (!validateNewPassword(state)) valid = false
+        return valid
+    }
+
+    /**
+     * Checks the new password in [state] the way the server does (10 to 128 characters, see
+     * [AuthException.InvalidPassword]) and that its confirmation matches, flagging the field at fault.
+     */
+    private fun validateNewPassword(state: AuthFormState): Boolean {
+        var valid = true
+        if (state.password.length < MIN_PASSWORD_LENGTH) {
             _formState.update { it.copy(passwordError = text(R.string.auth_msg_password_too_short)) }
             valid = false
-        } else if (state.password.length > 128) {
+        } else if (state.password.length > MAX_PASSWORD_LENGTH) {
             _formState.update { it.copy(passwordError = text(R.string.auth_msg_password_too_long)) }
             valid = false
         }
@@ -491,9 +476,6 @@ class AuthViewModel(
             is AuthException.InvalidToken -> R.string.auth_error_invalid_token
             is AuthException.InvalidRefreshToken -> R.string.auth_error_session_expired
             is AuthException.RefreshTokenReused -> R.string.auth_error_session_revoked
-            is AuthException.AccountLinkRequired -> R.string.auth_error_account_link_required
-            is AuthException.InvalidSocialToken -> R.string.auth_error_google_failed
-            is AuthException.IdentityAlreadyLinked -> R.string.auth_error_google_linked
             is AuthException.RateLimited -> R.string.auth_error_rate_limited
             is AuthException.InvalidPassword -> R.string.auth_error_invalid_password
             is AuthException.InvalidEmail -> R.string.auth_error_invalid_email_sentence
@@ -513,5 +495,7 @@ class AuthViewModel(
 
     private companion object {
         const val TAG = "AuthViewModel"
+        const val MIN_PASSWORD_LENGTH = 10
+        const val MAX_PASSWORD_LENGTH = 128
     }
 }

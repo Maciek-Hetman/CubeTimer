@@ -15,10 +15,9 @@ import com.maciekhetman.cubetimer.data.local.dao.markAllFailedChunked
 import com.maciekhetman.cubetimer.data.local.dao.markInFlightChunked
 import com.maciekhetman.cubetimer.data.local.dao.resetInFlightChunked
 import com.maciekhetman.cubetimer.data.local.entity.ConflictEntity
-import com.maciekhetman.cubetimer.data.local.entity.SessionEntity
-import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
 import com.maciekhetman.cubetimer.data.local.entity.SyncMetadataEntity
 import com.maciekhetman.cubetimer.data.local.entity.SyncOutboxEntity
+import com.maciekhetman.cubetimer.data.local.mapper.toEntity
 import com.maciekhetman.cubetimer.data.remote.CubeSyncApiClient
 import com.maciekhetman.cubetimer.data.remote.NetworkModule
 import com.maciekhetman.cubetimer.data.remote.dto.DeviceDto
@@ -58,7 +57,6 @@ class SyncEngineImpl(
     private val conflictDao: ConflictDao = database.conflictDao(),
     private val json: Json = NetworkModule.json,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-    private val defaultConflictPolicy: ConflictPolicy = ConflictPolicy.MANUAL_PROMPT,
     /** Upper bound on waiting for [AuthManager.awaitInitialized] before a sync gives up (retryably). */
     private val authInitTimeoutMillis: Long = DEFAULT_AUTH_INIT_TIMEOUT_MILLIS,
     /**
@@ -78,12 +76,7 @@ class SyncEngineImpl(
     private val syncMutex = Mutex()
 
     override val syncStatus: StateFlow<SyncStatus> = stateManager.syncStatus
-    override val lastSyncedAt: StateFlow<Long?> = stateManager.lastSyncedAt
     override val isSyncing: StateFlow<Boolean> = stateManager.isSyncing
-
-    override fun observePendingMutationsCount(ownerId: String): Flow<Int> {
-        return syncOutboxDao.observePendingCount(ownerId)
-    }
 
     override fun observeUnresolvedConflicts(ownerId: String): Flow<List<ConflictEntity>> {
         return conflictResolver.observeUnresolvedConflicts(ownerId)
@@ -203,12 +196,15 @@ class SyncEngineImpl(
                 setSyncError(resolvedOwnerId, e.message)
                 SyncResult.AuthError(e.message)
             } catch (e: AuthException.NetworkError) {
+                // Not a sync error: nothing is wrong that a later attempt can't fix, and a persisted
+                // last_error would show ERROR (and the badge) until some sync succeeds. Only the
+                // syncing flag is cleared, which setSyncError would otherwise have done.
                 stateManager.setOffline()
-                setSyncError(resolvedOwnerId, e.message)
+                setSyncing(resolvedOwnerId, false)
                 SyncResult.Offline(e.message)
             } catch (e: IOException) {
                 stateManager.setOffline()
-                setSyncError(resolvedOwnerId, e.message ?: "Network error")
+                setSyncing(resolvedOwnerId, false)
                 SyncResult.Offline(e.message ?: "Network unreachable")
             } catch (e: Exception) {
                 stateManager.setError(e.message)
@@ -622,7 +618,7 @@ class SyncEngineImpl(
                     val serverVersion = outcome.version ?: (mutation.baseVersion + 1L)
                     val serverPayloadJson = outcome.current?.toString()
 
-                    val conflict = conflictResolver.recordConflict(
+                    conflictResolver.recordConflict(
                         ownerId = ownerId,
                         mutationId = outcome.mutationId,
                         entityType = mutation.entityType,
@@ -633,10 +629,6 @@ class SyncEngineImpl(
                         serverPayloadJson = serverPayloadJson,
                         errorMessage = outcome.message ?: "Conflict detected: server version mismatch"
                     )
-
-                    if (defaultConflictPolicy != ConflictPolicy.MANUAL_PROMPT) {
-                        conflictResolver.resolveConflict(conflict.conflictId, defaultConflictPolicy)
-                    }
 
                     conflictsRecorded++
                     mutationsSynced++
@@ -685,18 +677,10 @@ class SyncEngineImpl(
                     }
                 }
                 if (dto != null) {
-                    val entity = SessionEntity(
-                        id = dto.id,
+                    val entity = dto.toEntity(
                         ownerId = ownerId,
-                        name = dto.name,
-                        event = dto.event,
-                        kind = dto.kind,
-                        startedAt = dto.startedAt,
-                        endedAt = dto.endedAt,
-                        archived = dto.archived,
                         version = change.version.coerceAtLeast(dto.version),
-                        updatedAt = dto.updatedAt ?: change.changedAt ?: dto.startedAt,
-                        deletedAt = dto.deletedAt
+                        updatedAt = dto.updatedAt ?: change.changedAt ?: dto.startedAt
                     )
                     sessionDao.upsert(entity)
                     changesApplied++
@@ -748,19 +732,10 @@ class SyncEngineImpl(
                         Log.w(TAG, "Skipping remote solve ${dto.id}: its session ${dto.sessionId} is not available locally")
                         continue
                     }
-                    val entity = SolveEntity(
-                        id = dto.id,
+                    val entity = dto.toEntity(
                         ownerId = ownerId,
-                        sessionId = dto.sessionId,
-                        durationMs = dto.durationMs,
-                        penalty = dto.penalty,
-                        solvedAt = dto.solvedAt,
-                        scramble = dto.scramble,
-                        event = dto.event,
                         version = change.version.coerceAtLeast(dto.version),
-                        updatedAt = dto.updatedAt ?: change.changedAt ?: dto.solvedAt,
-                        deletedAt = dto.deletedAt,
-                        timingDevice = dto.timingDevice
+                        updatedAt = dto.updatedAt ?: change.changedAt ?: dto.solvedAt
                     )
                     solveDao.upsert(entity)
                     changesApplied++
@@ -838,19 +813,7 @@ class SyncEngineImpl(
                         if ("session" to dto.id in protectedEntities) {
                             return@mapNotNull null
                         }
-                        SessionEntity(
-                            id = dto.id,
-                            ownerId = ownerId,
-                            name = dto.name,
-                            event = dto.event,
-                            kind = dto.kind,
-                            startedAt = dto.startedAt,
-                            endedAt = dto.endedAt,
-                            archived = dto.archived,
-                            version = dto.version,
-                            updatedAt = dto.updatedAt ?: dto.startedAt,
-                            deletedAt = dto.deletedAt
-                        )
+                        dto.toEntity(ownerId = ownerId, version = dto.version, updatedAt = dto.updatedAt ?: dto.startedAt)
                     }
                     if (entities.isNotEmpty()) {
                         sessionDao.upsertAll(entities)
@@ -867,20 +830,7 @@ class SyncEngineImpl(
                             Log.w(TAG, "Skipping snapshot solve ${dto.id}: its session ${dto.sessionId} is not available locally")
                             return@mapNotNull null
                         }
-                        SolveEntity(
-                            id = dto.id,
-                            ownerId = ownerId,
-                            sessionId = dto.sessionId,
-                            durationMs = dto.durationMs,
-                            penalty = dto.penalty,
-                            solvedAt = dto.solvedAt,
-                            scramble = dto.scramble,
-                            event = dto.event,
-                            version = dto.version,
-                            updatedAt = dto.updatedAt ?: dto.solvedAt,
-                            deletedAt = dto.deletedAt,
-                            timingDevice = dto.timingDevice
-                        )
+                        dto.toEntity(ownerId = ownerId, version = dto.version, updatedAt = dto.updatedAt ?: dto.solvedAt)
                     }
                     if (entities.isNotEmpty()) {
                         solveDao.upsertAll(entities)

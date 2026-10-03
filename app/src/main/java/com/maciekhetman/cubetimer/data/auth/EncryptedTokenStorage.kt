@@ -65,16 +65,6 @@ class EncryptedTokenStorage(
 
     override fun getRefreshToken(): String? = secure { it.getString(KEY_REFRESH_TOKEN, null) }
 
-    override fun setRefreshToken(token: String?): Unit = secure {
-        it.edit {
-            if (token != null) {
-                putString(KEY_REFRESH_TOKEN, token)
-            } else {
-                remove(KEY_REFRESH_TOKEN)
-            }
-        }
-    }
-
     override fun getUserId(): String? = secure { it.getString(KEY_USER_ID, null) }
 
     override fun getUserEmail(): String? = secure { it.getString(KEY_USER_EMAIL, null) }
@@ -119,22 +109,6 @@ class EncryptedTokenStorage(
                 putBoolean(KEY_USER_EMAIL_VERIFIED, emailVerified)
                 if (displayName != null) {
                     putString(KEY_USER_DISPLAY_NAME, displayName)
-                } else {
-                    remove(KEY_USER_DISPLAY_NAME)
-                }
-            }
-        }
-    }
-
-    override fun saveUser(user: User) {
-        secure {
-            it.edit {
-                putString(KEY_USER_ID, user.id)
-                putString(KEY_USER_EMAIL, user.email)
-                putString(KEY_USER_ROLE, user.userRole.name.lowercase())
-                putBoolean(KEY_USER_EMAIL_VERIFIED, user.emailVerified)
-                if (user.displayName != null) {
-                    putString(KEY_USER_DISPLAY_NAME, user.displayName)
                 } else {
                     remove(KEY_USER_DISPLAY_NAME)
                 }

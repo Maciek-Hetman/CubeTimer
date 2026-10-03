@@ -22,9 +22,7 @@ import com.maciekhetman.cubetimer.data.local.dto.SessionWithStats
 import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
 import com.maciekhetman.cubetimer.data.local.mapper.*
 import com.maciekhetman.cubetimer.data.session.DeletedSessionSnapshot
-import com.maciekhetman.cubetimer.data.session.SessionManager
 import com.maciekhetman.cubetimer.data.session.SessionRepository
-import com.maciekhetman.cubetimer.data.session.SessionRepositoryImpl
 import com.maciekhetman.cubetimer.domain.HistoricalPbCalculator
 import com.maciekhetman.cubetimer.domain.csv.CsvExporter
 import com.maciekhetman.cubetimer.domain.csv.CsvImportStatus
@@ -84,13 +82,6 @@ private data class SolveFilterQuad(
     val dateRangeFilter: DateRangeFilter
 )
 
-private data class ContextChunk(
-    val currentMode: Mode,
-    val activeSession: Session?,
-    val sessions: List<Session>,
-    val selectedSolve: SolveDetailState?
-)
-
 private data class FilterStateChunk(
     val sessionSort: SessionSortOrder,
     val puzzleScope: PuzzleScope,
@@ -106,7 +97,6 @@ private data class FilterStateChunk(
 class HistoryViewModel(
     application: Application,
     private val solvesRepository: SolvesRepository,
-    private val sessionManager: SessionManager,
     private val sessionRepository: SessionRepository,
     private val authManager: AuthManager,
     database: CubeDatabase? = null,
@@ -119,41 +109,12 @@ class HistoryViewModel(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : AndroidViewModel(application) {
 
-    constructor(
-        application: Application,
-        repository: SolvesRepository,
-        sessionManager: SessionManager,
-        sessionRepository: SessionRepository,
-        authManager: AuthManager
-    ) : this(
-        application = application,
-        solvesRepository = repository,
-        sessionManager = sessionManager,
-        sessionRepository = sessionRepository,
-        authManager = authManager,
-        defaultDispatcher = Dispatchers.Default
-    )
-
-    constructor(
-        application: Application,
-        repository: SolvesRepository,
-        sessionManager: SessionManager,
-        authManager: AuthManager
-    ) : this(
-        application = application,
-        solvesRepository = repository,
-        sessionManager = sessionManager,
-        sessionRepository = (application as? CubeTimerApplication)?.sessionRepository
-            ?: SessionRepositoryImpl(CubeDatabase.getInstance(application)),
-        authManager = authManager
-    )
-
     constructor(application: Application) : this(
         application = application,
         solvesRepository = (application as CubeTimerApplication).solvesRepository,
-        sessionManager = application.sessionManager,
         sessionRepository = application.sessionRepository,
-        authManager = application.authManager
+        authManager = application.authManager,
+        csvImporter = application.csvImporter
     )
 
     private val effectiveDatabase: CubeDatabase = database
@@ -228,33 +189,8 @@ class HistoryViewModel(
 
     private val currentOwnerId: String get() = authManager.currentOwnerId
 
-    // Undo caches
     private var solveDetailJob: Job? = null
     private var solveDetailGeneration = 0
-    private var lastDeletedSolve: SolveTime? = null
-    private var lastBatchDeletedSolves: List<SolveTime>? = null
-    private var lastDeletedSessionSnapshot: DeletedSessionSnapshot? = null
-    private var lastClearedAllSolves: List<SolveTime>? = null
-
-    val activeSession: StateFlow<Session?> = combine(
-        _currentMode,
-        authManager.authState
-    ) { mode: Mode, authState: AuthState ->
-        Pair(authState.ownerId, mode)
-    }.flatMapLatest { pair ->
-        val (ownerId, mode) = pair
-        sessionManager.getActiveSessionFlow(ownerId, mode)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
-
-    val sessions: StateFlow<List<Session>> = combine(
-        _currentMode,
-        authManager.authState
-    ) { mode: Mode, authState: AuthState ->
-        Pair(authState.ownerId, mode)
-    }.flatMapLatest { pair ->
-        val (ownerId, mode) = pair
-        sessionRepository.observeActiveSessions(ownerId, mode)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // --- Reactive Session Groups Flow ---
     private val rawSessionsWithStats: Flow<List<SessionWithStats>> = combine(
@@ -317,10 +253,8 @@ class HistoryViewModel(
                 activeFilterSheetTab = tab
             )
         },
-        combine(_currentMode, activeSession, sessions, _selectedSolveDetail) { mode, asess, sessList, selSolve ->
-            ContextChunk(mode, asess, sessList, selSolve)
-        }
-    ) { groups: GroupStateChunk, filters: FilterStateChunk, context: ContextChunk ->
+        _selectedSolveDetail
+    ) { groups: GroupStateChunk, filters: FilterStateChunk, selectedSolve: SolveDetailState? ->
         HistoryUiState(
             sessionGroups = groups.sessionGroups,
             expandedSessionIds = groups.expandedSessionIds,
@@ -335,10 +269,7 @@ class HistoryViewModel(
             activeFilterSheetTab = filters.activeFilterSheetTab,
             // The combine only emits once the session list has been read, so loading is over.
             isLoading = false,
-            currentMode = context.currentMode,
-            activeSession = context.activeSession,
-            sessions = context.sessions,
-            selectedSolve = context.selectedSolve
+            selectedSolve = selectedSolve
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HistoryUiState())
 
@@ -526,14 +457,6 @@ class HistoryViewModel(
         }
     }
 
-    fun expandSession(sessionId: String) {
-        _expandedSessionIds.update { it + sessionId }
-    }
-
-    fun collapseSession(sessionId: String) {
-        _expandedSessionIds.update { it - sessionId }
-    }
-
     // --- Multi-Selection Actions ---
     fun startSelection(solveId: String) {
         _selectedSolveDetail.value = null
@@ -569,12 +492,6 @@ class HistoryViewModel(
         _selectedSolveIds.value = emptySet()
     }
 
-    fun getSelectedSolves(): List<SolveTime> {
-        val ids = _selectedSolveIds.value
-        if (ids.isEmpty()) return emptyList()
-        return _sessionSolvesCache.value.values.flatten().filter { it.id in ids }.distinctBy { it.id }
-    }
-
     // --- Batch Solve Deletion & Undo ---
     fun deleteSelectedSolves() {
         val selectedIds = _selectedSolveIds.value.toList()
@@ -592,7 +509,6 @@ class HistoryViewModel(
                 val ownerId = currentOwnerId
                 val deleted = solvesRepository.deleteSolvesByIds(selectedIds, ownerId)
                 if (deleted.isNotEmpty()) {
-                    lastBatchDeletedSolves = deleted
                     _sessionSolvesCache.update { cache ->
                         cache.mapValues { (_, sList) -> sList.filter { it.id !in selectedIds } }
                     }
@@ -611,18 +527,16 @@ class HistoryViewModel(
         }
     }
 
-    fun undoDeleteBatch(deletedSolves: List<SolveTime>? = null) {
-        val toRestore = deletedSolves ?: lastBatchDeletedSolves ?: return
-        if (toRestore.isEmpty()) return
-        lastBatchDeletedSolves = null
+    fun undoDeleteBatch(deletedSolves: List<SolveTime>) {
+        if (deletedSolves.isEmpty()) return
 
         viewModelScope.launch {
             try {
                 val ownerId = currentOwnerId
-                solvesRepository.restoreSolves(toRestore, ownerId)
+                solvesRepository.restoreSolves(deletedSolves, ownerId)
                 _sessionSolvesCache.update { cache ->
                     var newCache = cache
-                    val grouped = toRestore.filter { it.sessionId != null }.groupBy { it.sessionId!! }
+                    val grouped = deletedSolves.filter { it.sessionId != null }.groupBy { it.sessionId!! }
                     for ((sId, solvesForSession) in grouped) {
                         val existing = newCache[sId] ?: continue
                         val existingIds = existing.map { it.id }.toSet()
@@ -633,7 +547,7 @@ class HistoryViewModel(
                     }
                     newCache
                 }
-                _effectsChannel.send(HistoryUiEffect.ShowMessage(quantityText(R.plurals.history_restored_solves, toRestore.size)))
+                _effectsChannel.send(HistoryUiEffect.ShowMessage(quantityText(R.plurals.history_restored_solves, deletedSolves.size)))
             } catch (e: Exception) {
                 reportFailure(R.string.history_error_restore_solves, e)
             }
@@ -660,7 +574,6 @@ class HistoryViewModel(
                     val deletedSolveIds = snapshot.solves.map { it.id }.toSet()
                     _selectedSolveIds.update { it - deletedSolveIds }
 
-                    lastDeletedSessionSnapshot = snapshot
                     _effectsChannel.send(
                         HistoryUiEffect.ShowUndoSessionDelete(
                             snapshot = snapshot,
@@ -682,19 +595,11 @@ class HistoryViewModel(
             try {
                 val ownerId = currentOwnerId
                 sessionRepository.restoreSessionWithSolves(snapshot, ownerId)
-                if (lastDeletedSessionSnapshot?.session?.id == snapshot.session.id) {
-                    lastDeletedSessionSnapshot = null
-                }
                 _effectsChannel.send(HistoryUiEffect.ShowMessage(text(R.string.history_session_restored, sessionName(snapshot.session.name))))
             } catch (e: Exception) {
                 reportFailure(R.string.history_error_restore_session, e)
             }
         }
-    }
-
-    fun undoDeleteSession() {
-        val snapshot = lastDeletedSessionSnapshot ?: return
-        restoreSession(snapshot)
     }
 
     // --- Delete All Solves & Undo ---
@@ -714,7 +619,6 @@ class HistoryViewModel(
             try {
                 val deleted = solvesRepository.clearAllSolvesInScope(targetMode, currentOwner)
                 if (deleted.isNotEmpty()) {
-                    lastClearedAllSolves = deleted
                     _effectsChannel.send(
                         HistoryUiEffect.ShowUndoClearAll(
                             deletedSolves = deleted,
@@ -733,25 +637,19 @@ class HistoryViewModel(
         }
     }
 
-    fun undoDeleteAllSolves(deletedSolves: List<SolveTime>? = null) {
-        val toRestore = deletedSolves ?: lastClearedAllSolves ?: return
-        if (toRestore.isEmpty()) return
-        lastClearedAllSolves = null
+    fun undoDeleteAllSolves(deletedSolves: List<SolveTime>) {
+        if (deletedSolves.isEmpty()) return
 
         viewModelScope.launch {
             try {
                 val ownerId = currentOwnerId
-                solvesRepository.restoreSolves(toRestore, ownerId)
-                _effectsChannel.send(HistoryUiEffect.ShowMessage(quantityText(R.plurals.history_restored_solves, toRestore.size)))
+                solvesRepository.restoreSolves(deletedSolves, ownerId)
+                _effectsChannel.send(HistoryUiEffect.ShowMessage(quantityText(R.plurals.history_restored_solves, deletedSolves.size)))
             } catch (e: Exception) {
                 reportFailure(R.string.history_error_restore_solves, e)
             }
         }
     }
-
-    // Legacy clear history delegations
-    fun clearHistory() = deleteAllSolves()
-    fun undoClearHistory() = undoDeleteAllSolves()
 
     // --- CSV SAF Operations ---
     private suspend fun buildSessionNameLookup(ownerId: String): (String?) -> String {
@@ -786,25 +684,59 @@ class HistoryViewModel(
         solves.size
     }
 
-    fun exportAllSolves(context: Context, uri: Uri) {
+    /**
+     * What the CSV exports to [uri] have in common. On [ioDispatcher] the stream behind [uri] is opened
+     * and filled by [write], which returns how many solves it wrote; [message] then turns that count into
+     * what the user is told. [precheck] may return a message instead, which ends the export before anything
+     * is opened, and [onWritten] runs once the stream is written and closed. A failure is logged and
+     * shown as the fixed [failureRes] message.
+     */
+    private fun launchExport(
+        context: Context,
+        uri: Uri,
+        @StringRes failureRes: Int,
+        precheck: () -> String? = { null },
+        write: suspend (OutputStream) -> Int,
+        onWritten: () -> Unit = {},
+        message: (count: Int) -> String
+    ) {
         viewModelScope.launch {
             try {
+                val refusal = precheck()
+                if (refusal != null) {
+                    _effectsChannel.send(HistoryUiEffect.ShowMessage(refusal))
+                    return@launch
+                }
+
                 val count = withContext(ioDispatcher) {
                     val outputStream = context.contentResolver.openOutputStream(uri)
                         ?: throw IllegalStateException("Unable to open output stream for URI: $uri")
                     outputStream.use { stream ->
-                        exportAllSolvesToStream(stream)
+                        write(stream)
                     }
                 }
-                if (count > 0) {
-                    _effectsChannel.send(HistoryUiEffect.ShowMessage(quantityText(R.plurals.history_exported_solves, count)))
-                } else {
-                    _effectsChannel.send(HistoryUiEffect.ShowMessage(text(R.string.history_nothing_to_export)))
-                }
+                onWritten()
+                _effectsChannel.send(HistoryUiEffect.ShowMessage(message(count)))
             } catch (e: Exception) {
-                reportFailure(R.string.history_error_export, e)
+                reportFailure(failureRes, e)
             }
         }
+    }
+
+    fun exportAllSolves(context: Context, uri: Uri) {
+        launchExport(
+            context = context,
+            uri = uri,
+            failureRes = R.string.history_error_export,
+            write = { exportAllSolvesToStream(it) },
+            message = { count ->
+                if (count > 0) {
+                    quantityText(R.plurals.history_exported_solves, count)
+                } else {
+                    text(R.string.history_nothing_to_export)
+                }
+            }
+        )
     }
 
     suspend fun exportSessionToStream(session: Session, outputStream: OutputStream): Int = withContext(ioDispatcher) {
@@ -825,28 +757,19 @@ class HistoryViewModel(
     }
 
     fun exportSession(context: Context, session: Session, uri: Uri) {
-        viewModelScope.launch {
-            try {
-                val count = withContext(ioDispatcher) {
-                    val outputStream = context.contentResolver.openOutputStream(uri)
-                        ?: throw IllegalStateException("Unable to open output stream for URI: $uri")
-                    outputStream.use { stream ->
-                        exportSessionToStream(session, stream)
-                    }
-                }
+        launchExport(
+            context = context,
+            uri = uri,
+            failureRes = R.string.history_error_export_session,
+            write = { exportSessionToStream(session, it) },
+            message = { count ->
                 if (count > 0) {
-                    _effectsChannel.send(
-                        HistoryUiEffect.ShowMessage(quantityText(R.plurals.history_exported_session, count, sessionName(session.name)))
-                    )
+                    quantityText(R.plurals.history_exported_session, count, sessionName(session.name))
                 } else {
-                    _effectsChannel.send(
-                        HistoryUiEffect.ShowMessage(text(R.string.history_nothing_to_export_session, sessionName(session.name)))
-                    )
+                    text(R.string.history_nothing_to_export_session, sessionName(session.name))
                 }
-            } catch (e: Exception) {
-                reportFailure(R.string.history_error_export_session, e)
             }
-        }
+        )
     }
 
     suspend fun exportSelectedSolvesToStream(outputStream: OutputStream): Int = withContext(ioDispatcher) {
@@ -866,32 +789,23 @@ class HistoryViewModel(
     }
 
     fun exportSelectedSolves(context: Context, uri: Uri) {
-        viewModelScope.launch {
-            try {
-                val selectedCount = _selectedSolveIds.value.size
-                if (selectedCount == 0) {
-                    _effectsChannel.send(HistoryUiEffect.ShowMessage(text(R.string.history_nothing_selected_to_export)))
-                    return@launch
-                }
-
-                val count = withContext(ioDispatcher) {
-                    val outputStream = context.contentResolver.openOutputStream(uri)
-                        ?: throw IllegalStateException("Unable to open output stream for URI: $uri")
-                    outputStream.use { stream ->
-                        exportSelectedSolvesToStream(stream)
-                    }
-                }
-
-                _selectedSolveIds.value = emptySet()
+        launchExport(
+            context = context,
+            uri = uri,
+            failureRes = R.string.history_error_export_selected,
+            precheck = {
+                if (_selectedSolveIds.value.isEmpty()) text(R.string.history_nothing_selected_to_export) else null
+            },
+            write = { exportSelectedSolvesToStream(it) },
+            onWritten = { _selectedSolveIds.value = emptySet() },
+            message = { count ->
                 if (count > 0) {
-                    _effectsChannel.send(HistoryUiEffect.ShowMessage(quantityText(R.plurals.history_exported_selected, count)))
+                    quantityText(R.plurals.history_exported_selected, count)
                 } else {
-                    _effectsChannel.send(HistoryUiEffect.ShowMessage(text(R.string.history_selected_not_found)))
+                    text(R.string.history_selected_not_found)
                 }
-            } catch (e: Exception) {
-                reportFailure(R.string.history_error_export_selected, e)
             }
-        }
+        )
     }
 
     suspend fun importSolvesFromStream(inputStream: InputStream): CsvImportStatus = withContext(ioDispatcher) {
@@ -998,18 +912,6 @@ class HistoryViewModel(
         _dateRangeFilter.value = DateRangeFilter()
     }
 
-    fun resetSessionFilters() {
-        _sessionSort.value = SessionSortOrder.MOST_RECENT
-        _puzzleScope.value = PuzzleScope.ACTIVE_PUZZLE
-    }
-
-    fun resetSolveFilters() {
-        _solveSort.value = SolveSortOrder.MOST_RECENT
-        _penaltyFilter.value = PenaltyFilter.ALL
-        _timeRangeFilter.value = TimeRangeFilter()
-        _dateRangeFilter.value = DateRangeFilter()
-    }
-
     fun setMode(mode: Mode) {
         if (_currentMode.value != mode) {
             _currentMode.value = mode
@@ -1031,14 +933,8 @@ class HistoryViewModel(
 
         if (_selectedSolveDetail.value?.solve?.id == solve.id) {
             val currentDetail = _selectedSolveDetail.value!!
-            val newPbResult = HistoricalPbCalculator.calculate(updatedSolve, currentDetail.priorBestTime)
-            _selectedSolveDetail.value = currentDetail.copy(
-                solve = updatedSolve,
-                isPb = newPbResult.isPb,
-                pbDelta = newPbResult.deltaMs,
-                formattedPbDelta = newPbResult.formattedDelta,
-                pbResult = newPbResult
-            )
+            _selectedSolveDetail.value =
+                solveDetailState(updatedSolve, currentDetail.solveNumber, currentDetail.priorBestTime)
         }
 
         viewModelScope.launch {
@@ -1054,14 +950,8 @@ class HistoryViewModel(
                 if (_selectedSolveDetail.value?.solve?.id == solve.id) {
                     val currentDetail = _selectedSolveDetail.value!!
                     val revertedSolve = solve.copy(penalty = previousPenalty)
-                    val revertedPbResult = HistoricalPbCalculator.calculate(revertedSolve, currentDetail.priorBestTime)
-                    _selectedSolveDetail.value = currentDetail.copy(
-                        solve = revertedSolve,
-                        isPb = revertedPbResult.isPb,
-                        pbDelta = revertedPbResult.deltaMs,
-                        formattedPbDelta = revertedPbResult.formattedDelta,
-                        pbResult = revertedPbResult
-                    )
+                    _selectedSolveDetail.value =
+                        solveDetailState(revertedSolve, currentDetail.solveNumber, currentDetail.priorBestTime)
                 }
                 reportFailure(R.string.history_error_update_penalty, e)
             }
@@ -1069,15 +959,11 @@ class HistoryViewModel(
     }
 
     fun deleteSolve(solve: SolveTime) {
-        val sessionSolves = _sessionSolvesCache.value.values.firstOrNull { list -> list.any { it.id == solve.id } }
-            ?: return
-        val originalIndex = sessionSolves.indexOfFirst { it.id == solve.id }
+        if (_sessionSolvesCache.value.values.none { list -> list.any { it.id == solve.id } }) return
 
         if (_selectedSolveDetail.value?.solve?.id == solve.id) {
             _selectedSolveDetail.value = null
         }
-
-        lastDeletedSolve = solve
 
         _sessionSolvesCache.update { cache ->
             cache.mapValues { (_, sList) -> sList.filter { it.id != solve.id } }
@@ -1091,8 +977,7 @@ class HistoryViewModel(
                 _effectsChannel.send(
                     HistoryUiEffect.ShowUndoSnackbar(
                         message = text(R.string.history_solve_deleted),
-                        solve = solve,
-                        originalIndex = originalIndex
+                        solve = solve
                     )
                 )
             } catch (e: Exception) {
@@ -1120,7 +1005,6 @@ class HistoryViewModel(
                 } else cache
             }
         }
-        lastDeletedSolve = null
 
         viewModelScope.launch {
             try {
@@ -1136,11 +1020,6 @@ class HistoryViewModel(
                 reportFailure(R.string.history_error_restore_solve, e)
             }
         }
-    }
-
-    fun undoDelete() {
-        val solveToRestore = lastDeletedSolve ?: return
-        restoreSolve(solveToRestore)
     }
 
     /** Opens the solve detail card; [solveNumber] is the solve's position within its session. */
@@ -1159,20 +1038,7 @@ class HistoryViewModel(
             // A newer tap, or a dismiss, happened while the lookup was in flight.
             if (generation != solveDetailGeneration) return@launch
 
-            val pbResult = HistoricalPbCalculator.calculate(
-                solve = solve,
-                priorBestDurationMs = priorBestTime
-            )
-
-            _selectedSolveDetail.value = SolveDetailState(
-                solve = solve,
-                solveNumber = solveNumber,
-                priorBestTime = priorBestTime,
-                isPb = pbResult.isPb,
-                pbDelta = pbResult.deltaMs,
-                formattedPbDelta = pbResult.formattedDelta,
-                pbResult = pbResult
-            )
+            _selectedSolveDetail.value = solveDetailState(solve, solveNumber, priorBestTime)
         }
     }
 
@@ -1180,6 +1046,18 @@ class HistoryViewModel(
         solveDetailGeneration++
         solveDetailJob?.cancel()
         _selectedSolveDetail.value = null
+    }
+
+    /** The detail card of [solve]; its PB status is judged against [priorBestTime], the best time before it. */
+    private fun solveDetailState(solve: SolveTime, solveNumber: Int, priorBestTime: Long?): SolveDetailState {
+        val pbResult = HistoricalPbCalculator.calculate(solve, priorBestTime)
+        return SolveDetailState(
+            solve = solve,
+            solveNumber = solveNumber,
+            priorBestTime = priorBestTime,
+            isPb = pbResult.isPb,
+            pbDelta = pbResult.deltaMs
+        )
     }
 
     /** Shows a fixed, human-readable [message] and keeps the technical detail in the log. */

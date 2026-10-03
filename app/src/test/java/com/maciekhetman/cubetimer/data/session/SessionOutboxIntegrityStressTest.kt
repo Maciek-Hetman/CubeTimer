@@ -15,13 +15,11 @@ import com.maciekhetman.cubetimer.data.remote.CubeSyncApiClient
 import com.maciekhetman.cubetimer.data.remote.NetworkModule
 import com.maciekhetman.cubetimer.data.remote.dto.AuthResponse
 import com.maciekhetman.cubetimer.data.remote.dto.ChangePasswordRequest
-import com.maciekhetman.cubetimer.data.remote.dto.GoogleAuthRequest
 import com.maciekhetman.cubetimer.data.remote.dto.LoginRequest
 import com.maciekhetman.cubetimer.data.remote.dto.RegisterRequest
 import com.maciekhetman.cubetimer.data.remote.dto.SessionSyncPayload
 import com.maciekhetman.cubetimer.data.remote.dto.SolveSyncPayload
 import com.maciekhetman.cubetimer.data.remote.dto.StatusResponse
-import com.maciekhetman.cubetimer.data.remote.dto.UserDto
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Penalty
 import com.maciekhetman.cubetimer.model.Session
@@ -85,7 +83,7 @@ class SessionOutboxIntegrityStressTest {
         // 1. Guest Session Lifecycle
         val guestSession = sessionRepository.insertSession("Guest Session 1", Mode.CUBE_3x3, ownerId = "guest")
         sessionRepository.closeSession(guestSession.id, ownerId = "guest")
-        sessionRepository.deleteSession(guestSession.id, ownerId = "guest")
+        sessionRepository.deleteSessionWithSolves(guestSession.id, ownerId = "guest")
 
         // 2. Guest Solve Lifecycle
         val guestSolve = SolveTime(
@@ -101,7 +99,7 @@ class SessionOutboxIntegrityStressTest {
         solvesRepository.updateSolvePenalty(guestSolve, Penalty.PLUS_TWO, ownerId = "guest")
         solvesRepository.deleteSolve(guestSolve, ownerId = "guest")
         solvesRepository.restoreSolves(listOf(guestSolve), ownerId = "guest")
-        solvesRepository.clearAllSolves(ownerId = "guest")
+        solvesRepository.clearAllSolvesInScope(null, "guest")
 
         // Verify outbox remains completely empty for guest
         val guestOutbox = database.syncOutboxDao().getPendingMutations("guest")
@@ -144,7 +142,7 @@ class SessionOutboxIntegrityStressTest {
         assertEquals(2, database.syncOutboxDao().getPendingMutations(userId).size)
 
         // 3. Delete Session
-        sessionRepository.deleteSession(created.id, ownerId = userId)
+        sessionRepository.deleteSessionWithSolves(created.id, ownerId = userId)
         pending = database.syncOutboxDao().getPendingMutations(userId)
         assertEquals(3, pending.size)
         val m3 = pending[2]
@@ -231,8 +229,6 @@ class SessionOutboxIntegrityStressTest {
         assertEquals("session-target-99", entity1.sessionId)
         val domain1 = entity1.toSolveTime()
         assertEquals("session-target-99", domain1.sessionId)
-        val syncPayload1 = solveWithSession.toSyncPayload()
-        assertEquals("session-target-99", syncPayload1.sessionId)
         val entityPayload1 = entity1.toSyncPayload()
         assertEquals("session-target-99", entityPayload1.sessionId)
 
@@ -250,8 +246,6 @@ class SessionOutboxIntegrityStressTest {
         assertNull(entity2.sessionId)
         val domain2 = entity2.toSolveTime()
         assertNull(domain2.sessionId)
-        val syncPayload2 = solveWithoutSession.toSyncPayload()
-        assertNull(syncPayload2.sessionId)
         val entityPayload2 = entity2.toSyncPayload()
         assertNull(entityPayload2.sessionId)
 
@@ -408,24 +402,19 @@ class SessionOutboxIntegrityStressTest {
     private class DummyApiClient : CubeSyncApiClient {
         override suspend fun register(request: RegisterRequest): StatusResponse = throw NotImplementedError()
         override suspend fun login(request: LoginRequest): AuthResponse = throw NotImplementedError()
-        override suspend fun loginWithGoogle(request: GoogleAuthRequest): AuthResponse = throw NotImplementedError()
         override suspend fun refreshToken(refreshToken: String): AuthResponse = throw NotImplementedError()
         override suspend fun verifyEmail(token: String): AuthResponse = throw NotImplementedError()
         override suspend fun resendVerificationEmail(email: String): StatusResponse = throw NotImplementedError()
         override suspend fun requestPasswordReset(email: String): StatusResponse = throw NotImplementedError()
         override suspend fun confirmPasswordReset(token: String, newPassword: String): AuthResponse = throw NotImplementedError()
         override suspend fun logout(refreshToken: String) = Unit
-        override suspend fun linkGoogle(request: com.maciekhetman.cubetimer.data.remote.dto.GoogleAuthRequest, authToken: String?) = Unit
-        override suspend fun getCurrentUser(authToken: String?): UserDto = throw NotImplementedError()
-        override suspend fun changePassword(request: ChangePasswordRequest, authToken: String?) = Unit
-        override suspend fun deleteAccount(authToken: String?) = Unit
+        override suspend fun changePassword(request: ChangePasswordRequest) = Unit
+        override suspend fun deleteAccount() = Unit
         override suspend fun sync(
-            request: com.maciekhetman.cubetimer.data.remote.dto.SyncRequest,
-            authToken: String?
+            request: com.maciekhetman.cubetimer.data.remote.dto.SyncRequest
         ): com.maciekhetman.cubetimer.data.remote.dto.SyncResponse = throw NotImplementedError()
         override suspend fun snapshot(
-            request: com.maciekhetman.cubetimer.data.remote.dto.SnapshotRequest,
-            authToken: String?
+            request: com.maciekhetman.cubetimer.data.remote.dto.SnapshotRequest
         ): com.maciekhetman.cubetimer.data.remote.dto.SnapshotResponse = throw NotImplementedError()
     }
 
@@ -436,7 +425,6 @@ class SessionOutboxIntegrityStressTest {
         override fun getAccessToken(): String? = null
         override fun setAccessToken(token: String?) { _flow.value = token }
         override fun getRefreshToken(): String? = null
-        override fun setRefreshToken(token: String?) = Unit
         override fun getUserId(): String? = null
         override fun getUserEmail(): String? = null
         override fun getUserRole(): String? = null
@@ -452,7 +440,6 @@ class SessionOutboxIntegrityStressTest {
             emailVerified: Boolean,
             displayName: String?
         ) = Unit
-        override fun saveUser(user: User) = Unit
         override fun getDeviceId(): String = "test-device"
         override fun clearAuthData() = Unit
         override fun clearAll() = Unit

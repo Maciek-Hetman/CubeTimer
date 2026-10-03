@@ -1,6 +1,5 @@
 package com.maciekhetman.cubetimer.ui.screens
 
-import android.text.format.DateFormat
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -101,14 +100,12 @@ import com.maciekhetman.cubetimer.ui.components.SessionCardEmptyOrLoadingMessage
 import com.maciekhetman.cubetimer.ui.components.SessionCardHeader
 import com.maciekhetman.cubetimer.ui.components.SessionCardSolveRow
 import com.maciekhetman.cubetimer.ui.components.displaySessionName
+import com.maciekhetman.cubetimer.ui.components.formatDateTime
 import com.maciekhetman.cubetimer.ui.dialogs.HistoryFilterSortBottomSheet
 import com.maciekhetman.cubetimer.ui.dialogs.ShareableSolveCardDialog
 import com.maciekhetman.cubetimer.viewmodel.HistoryUiEffect
 import com.maciekhetman.cubetimer.viewmodel.HistoryViewModel
 import kotlinx.coroutines.flow.collectLatest
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 /** Export target of an in-flight CreateDocument request, saveable across configuration changes. */
 private const val EXPORT_ALL = "all"
@@ -622,7 +619,7 @@ internal fun HistorySolveCard(
                     }
                 }
                 Text(
-                    text = "#$solveNumber · ${formatTimestamp(solve.timestamp)}",
+                    text = "#$solveNumber · ${formatDateTime(solve.timestamp)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -704,10 +701,4 @@ private fun PenaltyToggle(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
         )
     }
-}
-
-// Not cached: the app's language can change while it runs (system per-app language setting).
-private fun formatTimestamp(timestamp: Long): String {
-    val locale = Locale.getDefault()
-    return SimpleDateFormat(DateFormat.getBestDateTimePattern(locale, "yMMMdjm"), locale).format(Date(timestamp))
 }

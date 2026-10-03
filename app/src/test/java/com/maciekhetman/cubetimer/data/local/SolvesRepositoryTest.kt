@@ -96,7 +96,7 @@ class SolvesRepositoryTest {
         val solve2 = SolveTime(id = "s-res-2", timeInMillis = 11000L, mode = Mode.CUBE_3x3)
 
         saveAll(listOf(solve1, solve2))
-        repository.clearAllSolves()
+        repository.clearAllSolvesInScope(null)
         assertEquals(0, repository.getAllSolvesFlow().first().size)
 
         repository.restoreSolves(listOf(solve1, solve2))
@@ -160,14 +160,14 @@ class SolvesRepositoryTest {
         assertEquals(2, cleared3x3.size)
 
         // Verify 2x2 remains intact
-        val remaining = repository.getAllActiveSolves("guest")
+        val remaining = database.solveDao().getAllActiveSolvesForOwner("guest")
         assertEquals(1, remaining.size)
         assertEquals("s-2x2-1", remaining[0].id)
 
         // Clear all remaining (mode = null)
         val clearedAll = repository.clearAllSolvesInScope(null, "guest")
         assertEquals(1, clearedAll.size)
-        assertEquals(0, repository.getAllActiveSolves("guest").size)
+        assertEquals(0, database.solveDao().getAllActiveSolvesForOwner("guest").size)
     }
 
     @Test

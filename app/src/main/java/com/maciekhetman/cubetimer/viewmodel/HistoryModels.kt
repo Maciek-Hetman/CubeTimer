@@ -3,7 +3,6 @@ package com.maciekhetman.cubetimer.viewmodel
 import androidx.annotation.StringRes
 import com.maciekhetman.cubetimer.R
 import com.maciekhetman.cubetimer.data.session.DeletedSessionSnapshot
-import com.maciekhetman.cubetimer.domain.HistoricalPbResult
 import com.maciekhetman.cubetimer.domain.TimeFormatter
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Session
@@ -37,12 +36,7 @@ enum class SolveSortOrder(@StringRes val labelRes: Int) {
     MOST_RECENT(R.string.sort_most_recent),
     OLDEST(R.string.sort_oldest),
     LOWEST_TIME(R.string.sort_fastest),
-    HIGHEST_TIME(R.string.sort_slowest);
-
-    companion object {
-        val FASTEST = LOWEST_TIME
-        val SLOWEST = HIGHEST_TIME
-    }
+    HIGHEST_TIME(R.string.sort_slowest)
 }
 
 /**
@@ -52,13 +46,7 @@ enum class PenaltyFilter(@StringRes val labelRes: Int) {
     ALL(R.string.penalty_filter_all),
     CLEAN_ONLY(R.string.penalty_filter_clean),
     PLUS_TWO_ONLY(R.string.penalty_plus_two),
-    DNF_ONLY(R.string.penalty_dnf);
-
-    companion object {
-        val CLEAN = CLEAN_ONLY
-        val PLUS_TWO = PLUS_TWO_ONLY
-        val DNF = DNF_ONLY
-    }
+    DNF_ONLY(R.string.penalty_dnf)
 }
 
 /**
@@ -150,9 +138,6 @@ data class HistoryUiState(
 
     // True until the session list has been read for the first time.
     val isLoading: Boolean = true,
-    val currentMode: Mode = Mode.CUBE_3x3,
-    val activeSession: Session? = null,
-    val sessions: List<Session> = emptyList(),
     val selectedSolve: SolveDetailState? = null
 ) {
     val activeSessionFilterCount: Int
@@ -167,8 +152,6 @@ data class HistoryUiState(
 
     val totalActiveFilterCount: Int
         get() = activeSessionFilterCount + activeSolveFilterCount
-
-    val isInitialLoading: Boolean get() = isLoading
 }
 
 /**
@@ -177,8 +160,7 @@ data class HistoryUiState(
 interface HistoryUiEffect {
     data class ShowUndoSnackbar(
         val message: String,
-        val solve: SolveTime,
-        val originalIndex: Int
+        val solve: SolveTime
     ) : HistoryUiEffect
 
     data class ShowUndoSessionDelete(
@@ -208,7 +190,5 @@ data class SolveDetailState(
     val solveNumber: Int,
     val priorBestTime: Long?,
     val isPb: Boolean,
-    val pbDelta: Long?,
-    val formattedPbDelta: String? = null,
-    val pbResult: HistoricalPbResult? = null
+    val pbDelta: Long?
 )

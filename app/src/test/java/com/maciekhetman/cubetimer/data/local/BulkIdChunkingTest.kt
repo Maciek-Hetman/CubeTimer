@@ -90,12 +90,12 @@ class BulkIdChunkingTest {
         val deleted = solvesRepository.clearAllSolvesInScope(Mode.CUBE_3x3, ownerId)
 
         assertEquals(solveCount, deleted.size)
-        assertEquals(0, database.solveDao().getSolveCountByEvent(ownerId, "3x3"))
+        assertEquals(0, database.solveDao().getSolvesByScope(ownerId, event = "3x3").size)
         assertEquals(solveCount, database.syncOutboxDao().countPending(ownerId))
 
         solvesRepository.restoreSolves(deleted, ownerId)
 
-        assertEquals(solveCount, database.solveDao().getSolveCountByEvent(ownerId, "3x3"))
+        assertEquals(solveCount, database.solveDao().getSolvesByScope(ownerId, event = "3x3").size)
         assertTrue(solveDao.maxIdsPerCall in 1..999)
     }
 
@@ -106,7 +106,7 @@ class BulkIdChunkingTest {
         val deleted = solvesRepository.deleteSolvesByIds(solves.map { it.id }, ownerId)
 
         assertEquals(solveCount, deleted.size)
-        assertEquals(0, database.solveDao().getSolveCountByEvent(ownerId, "3x3"))
+        assertEquals(0, database.solveDao().getSolvesByScope(ownerId, event = "3x3").size)
         assertTrue(solveDao.maxIdsPerCall in 1..999)
     }
 
@@ -118,21 +118,21 @@ class BulkIdChunkingTest {
 
         assertNotNull(snapshot)
         assertEquals(solveCount, snapshot!!.solves.size)
-        assertEquals(0, database.solveDao().getSolveCountBySession(ownerId, "big-session"))
+        assertEquals(0, database.solveDao().getSolvesByScope(ownerId, sessionId = "big-session").size)
 
         sessionRepository.restoreSessionWithSolves(snapshot, ownerId)
 
-        assertEquals(solveCount, database.solveDao().getSolveCountBySession(ownerId, "big-session"))
+        assertEquals(solveCount, database.solveDao().getSolvesByScope(ownerId, sessionId = "big-session").size)
         assertTrue(solveDao.maxIdsPerCall in 1..999)
     }
 
     @Test
-    fun deleteSession_handlesMoreThan999Solves() = runTest {
+    fun deleteSessionWithSolves_handlesMoreThan999Solves() = runTest {
         seedSessionWithSolves("plain-delete")
 
-        assertTrue(sessionRepository.deleteSession("plain-delete", ownerId))
+        assertNotNull(sessionRepository.deleteSessionWithSolves("plain-delete", ownerId))
 
-        assertEquals(0, database.solveDao().getSolveCountBySession(ownerId, "plain-delete"))
+        assertEquals(0, database.solveDao().getSolvesByScope(ownerId, sessionId = "plain-delete").size)
         assertTrue(solveDao.maxIdsPerCall in 1..999)
     }
 

@@ -8,6 +8,7 @@ import com.maciekhetman.cubetimer.model.AuthException
 import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.User
 import com.maciekhetman.cubetimer.ui.auth.AuthDialogType
+import com.maciekhetman.cubetimer.ui.auth.AuthLink
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -129,6 +130,22 @@ class AuthViewModelTest {
 
         assertEquals("Password must be at least 10 characters", viewModel.formState.value.passwordError)
         assertEquals("Passwords do not match", viewModel.formState.value.confirmPasswordError)
+        assertEquals(0, fakeAuthManager.registerCallCount)
+    }
+
+    @Test
+    fun testRegisterValidationRejectsPasswordLongerThanTheServerAccepts() = testScope.runTest {
+        viewModel.openDialog(AuthDialogType.REGISTER)
+        viewModel.onEmailChanged("newuser@example.com")
+        val tooLong = "a".repeat(129)
+        viewModel.onPasswordChanged(tooLong)
+        viewModel.onConfirmPasswordChanged(tooLong)
+
+        viewModel.submitRegister()
+        advanceUntilIdle()
+
+        assertEquals("Password must be at most 128 characters", viewModel.formState.value.passwordError)
+        assertNull(viewModel.formState.value.confirmPasswordError)
         assertEquals(0, fakeAuthManager.registerCallCount)
     }
 
@@ -261,8 +278,7 @@ class AuthViewModelTest {
 
     @Test
     fun testResetPasswordSuccessClosesDialog() = testScope.runTest {
-        viewModel.openDialog(AuthDialogType.RESET_PASSWORD)
-        viewModel.onTokenChanged("valid-reset-token")
+        viewModel.openEmailLink(AuthLink.ResetPassword("valid-reset-token"))
         viewModel.onPasswordChanged("NewSecurePassword123!")
         viewModel.onConfirmPasswordChanged("NewSecurePassword123!")
 
@@ -275,6 +291,20 @@ class AuthViewModelTest {
 
         assertEquals(1, fakeAuthManager.resetPasswordCallCount)
         assertEquals(AuthDialogType.NONE, viewModel.formState.value.dialogType)
+    }
+
+    @Test
+    fun testResetPasswordValidationRejectsPasswordLongerThanTheServerAccepts() = testScope.runTest {
+        viewModel.openEmailLink(AuthLink.ResetPassword("valid-reset-token"))
+        val tooLong = "a".repeat(129)
+        viewModel.onPasswordChanged(tooLong)
+        viewModel.onConfirmPasswordChanged(tooLong)
+
+        viewModel.submitResetPassword()
+        advanceUntilIdle()
+
+        assertEquals("Password must be at most 128 characters", viewModel.formState.value.passwordError)
+        assertEquals(0, fakeAuthManager.resetPasswordCallCount)
     }
 
     @Test
@@ -335,9 +365,6 @@ class AuthViewModelTest {
             AuthException.InvalidToken(raw),
             AuthException.InvalidRefreshToken(raw),
             AuthException.RefreshTokenReused(raw),
-            AuthException.AccountLinkRequired(raw),
-            AuthException.InvalidSocialToken(raw),
-            AuthException.IdentityAlreadyLinked(raw),
             AuthException.RateLimited(raw),
             AuthException.InvalidPassword(raw),
             AuthException.InvalidEmail(raw),
@@ -468,8 +495,6 @@ class AuthViewModelTest {
             return loginResult
         }
 
-        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String): AuthResult<User> = loginResult
-
         override suspend fun verifyEmail(token: String): AuthResult<User> {
             verifyEmailCallCount++
             return verifyEmailResult
@@ -495,8 +520,6 @@ class AuthViewModelTest {
             resetPasswordCallCount++
             return resetPasswordResult
         }
-
-        override suspend fun refreshSession(): AuthResult<User> = loginResult
 
         override suspend fun logout(): AuthResult<Unit> {
             logoutCallCount++

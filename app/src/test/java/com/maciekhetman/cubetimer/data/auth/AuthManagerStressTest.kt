@@ -10,7 +10,6 @@ import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
 import com.maciekhetman.cubetimer.data.remote.CubeSyncApiClient
 import com.maciekhetman.cubetimer.data.remote.dto.AuthResponse
 import com.maciekhetman.cubetimer.data.remote.dto.ChangePasswordRequest
-import com.maciekhetman.cubetimer.data.remote.dto.GoogleAuthRequest
 import com.maciekhetman.cubetimer.data.remote.dto.LoginRequest
 import com.maciekhetman.cubetimer.data.remote.dto.RegisterRequest
 import com.maciekhetman.cubetimer.data.remote.dto.SessionSyncPayload
@@ -22,8 +21,6 @@ import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.User
 import com.maciekhetman.cubetimer.model.UserRole
 import com.maciekhetman.cubetimer.model.currentUser
-import com.maciekhetman.cubetimer.model.isAuthenticated
-import com.maciekhetman.cubetimer.model.isGuest
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -222,7 +219,7 @@ class AuthManagerStressTest {
 
         // Phase 1: Fresh startup as Guest
         authManager.initialize()
-        assertTrue(authManager.authState.value.isGuest)
+        assertTrue(authManager.authState.value is AuthState.Guest)
         assertNull(authManager.currentUser)
 
         // Guest creates 3 sessions and 30 solves
@@ -258,7 +255,7 @@ class AuthManagerStressTest {
 
         val loginAResult = authManager.login("user.a@test.com", "PasswordA123!")
         assertTrue(loginAResult is AuthResult.Success)
-        assertTrue(authManager.authState.value.isAuthenticated)
+        assertTrue(authManager.authState.value.let { it is AuthState.Authenticated || it is AuthState.Admin })
         assertEquals("user-a", authManager.currentUser?.id)
         assertEquals(1, syncTriggerCount)
 
@@ -299,7 +296,7 @@ class AuthManagerStressTest {
         // Phase 4: User A Logs Out
         val logoutAResult = authManager.logout()
         assertTrue(logoutAResult is AuthResult.Success)
-        assertTrue(authManager.authState.value.isGuest)
+        assertTrue(authManager.authState.value is AuthState.Guest)
         assertNull(authManager.currentUser)
         assertNull(fakeTokenStorage.storedAccessToken)
         assertNull(fakeTokenStorage.storedRefreshToken)
@@ -352,7 +349,7 @@ class AuthManagerStressTest {
 
         val loginBResult = authManager.login("user.b@test.com", "PasswordB123!")
         assertTrue(loginBResult is AuthResult.Success)
-        assertTrue(authManager.authState.value.isAuthenticated)
+        assertTrue(authManager.authState.value.let { it is AuthState.Authenticated || it is AuthState.Admin })
         assertEquals("user-b", authManager.currentUser?.id)
         assertEquals(2, syncTriggerCount)
 
@@ -379,7 +376,7 @@ class AuthManagerStressTest {
 
         // Phase 7: User B Logs Out, Guest creates 5 solves
         authManager.logout()
-        assertTrue(authManager.authState.value.isGuest)
+        assertTrue(authManager.authState.value is AuthState.Guest)
 
         val guestSolves3 = (200..204).map { i ->
             SolveEntity(
@@ -442,7 +439,7 @@ class AuthManagerStressTest {
 
         authManager.initialize()
 
-        assertTrue(authManager.authState.value.isAuthenticated)
+        assertTrue(authManager.authState.value.let { it is AuthState.Authenticated || it is AuthState.Admin })
         assertFalse(authManager.authState.value is AuthState.Admin)
         val user = authManager.currentUser
         assertNotNull(user)
@@ -466,7 +463,7 @@ class AuthManagerStressTest {
         authManager.initialize()
 
         assertTrue(authManager.authState.value is AuthState.Admin)
-        assertTrue(authManager.authState.value.isAuthenticated)
+        assertTrue(authManager.authState.value.let { it is AuthState.Authenticated || it is AuthState.Admin })
         val admin = authManager.currentUser
         assertNotNull(admin)
         assertEquals("admin-root-user", admin?.id)
@@ -485,7 +482,7 @@ class AuthManagerStressTest {
 
         authManager.initialize()
 
-        assertTrue(authManager.authState.value.isGuest)
+        assertTrue(authManager.authState.value is AuthState.Guest)
         assertNull(authManager.currentUser)
         assertNull(fakeTokenStorage.storedRefreshToken)
         assertNull(fakeTokenStorage.storedCachedUser)
@@ -558,9 +555,6 @@ class AuthManagerStressTest {
         var resetPasswordResponse: AuthResponse? = null
         var resetPasswordError: AuthException? = null
 
-        var googleLoginResponse: AuthResponse? = null
-        var googleLoginError: AuthException? = null
-
         override suspend fun register(request: RegisterRequest): StatusResponse {
             registerError?.let { throw it }
             return registerResponse
@@ -592,23 +586,14 @@ class AuthManagerStressTest {
             return resetPasswordResponse ?: throw AuthException.InvalidToken()
         }
 
-        override suspend fun loginWithGoogle(request: GoogleAuthRequest): AuthResponse {
-            googleLoginError?.let { throw it }
-            return googleLoginResponse ?: throw AuthException.InvalidSocialToken()
-        }
-
-        override suspend fun linkGoogle(request: com.maciekhetman.cubetimer.data.remote.dto.GoogleAuthRequest, authToken: String?) {}
-        override suspend fun getCurrentUser(authToken: String?): UserDto = UserDto("u", "e@t.com")
-        override suspend fun changePassword(request: ChangePasswordRequest, authToken: String?) {}
-        override suspend fun deleteAccount(authToken: String?) {}
+        override suspend fun changePassword(request: ChangePasswordRequest) {}
+        override suspend fun deleteAccount() {}
         override suspend fun sync(
-            request: com.maciekhetman.cubetimer.data.remote.dto.SyncRequest,
-            authToken: String?
+            request: com.maciekhetman.cubetimer.data.remote.dto.SyncRequest
         ): com.maciekhetman.cubetimer.data.remote.dto.SyncResponse =
             com.maciekhetman.cubetimer.data.remote.dto.SyncResponse()
         override suspend fun snapshot(
-            request: com.maciekhetman.cubetimer.data.remote.dto.SnapshotRequest,
-            authToken: String?
+            request: com.maciekhetman.cubetimer.data.remote.dto.SnapshotRequest
         ): com.maciekhetman.cubetimer.data.remote.dto.SnapshotResponse =
             com.maciekhetman.cubetimer.data.remote.dto.SnapshotResponse()
     }
@@ -635,7 +620,6 @@ class AuthManagerStressTest {
             _flow.value = token
         }
         override fun getRefreshToken(): String? = storedRefreshToken
-        override fun setRefreshToken(token: String?) { storedRefreshToken = token }
         override fun getUserId(): String? = storedUserId
         override fun getUserEmail(): String? = storedUserEmail
         override fun getUserRole(): String? = storedUserRole
@@ -665,9 +649,6 @@ class AuthManagerStressTest {
                 emailVerified = emailVerified,
                 userRole = UserRole.fromString(userRole)
             )
-        }
-        override fun saveUser(user: User) {
-            this.storedCachedUser = user
         }
         override fun getDeviceId(): String = storedDeviceId
         override fun clearAuthData() {

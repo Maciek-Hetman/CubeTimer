@@ -22,6 +22,7 @@ import com.maciekhetman.cubetimer.model.Penalty
 import com.maciekhetman.cubetimer.model.Session
 import com.maciekhetman.cubetimer.model.TimerState
 import com.maciekhetman.cubetimer.model.User
+import com.maciekhetman.cubetimer.testutil.awaitCondition
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -33,13 +34,11 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.resetMain
-import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -123,16 +122,6 @@ class TimerViewModelWriteFailureTest {
         return viewModel
     }
 
-    /** Room and DataStore run on real threads, so poll while letting the test dispatcher run. */
-    private fun TestScope.awaitCondition(description: String, condition: () -> Boolean) {
-        repeat(300) {
-            runCurrent()
-            if (condition()) return
-            Thread.sleep(10)
-        }
-        throw AssertionError("timed out waiting for: $description")
-    }
-
     private fun TimerViewModel.finishBluetoothSolve(timeMs: Long) {
         onSmartTimerEvent(SmartTimerEvent.Running)
         onSmartTimerEvent(SmartTimerEvent.Stopped(timeMs))
@@ -170,38 +159,11 @@ class TimerViewModelWriteFailureTest {
     }
 
     @Test
-    fun failedDelete_putsTheSolveBackOnScreen() = runTest(testDispatcher) {
-        createViewModel()
-        solveDao.failWrites = true
-        val solve = viewModel.allSolves.value.single()
-
-        viewModel.deleteSolve(solve)
-        assertTrue("delete is shown optimistically", viewModel.allSolves.value.isEmpty())
-
-        awaitCondition("write error reported") { viewModel.writeError.value != null }
-        assertEquals("Couldn't delete the solve", viewModel.writeError.value)
-        assertEquals(listOf(existingSolve.id), viewModel.allSolves.value.map { it.id })
-    }
-
-    @Test
-    fun failedPenaltyUpdate_revertsThePenalty() = runTest(testDispatcher) {
-        createViewModel()
-        solveDao.failWrites = true
-        val solve = viewModel.allSolves.value.single()
-
-        viewModel.updateSolvePenalty(solve, Penalty.DNF)
-        assertEquals(Penalty.DNF, viewModel.allSolves.value.single().penalty)
-
-        awaitCondition("write error reported") { viewModel.writeError.value != null }
-        assertEquals("Couldn't update the solve", viewModel.writeError.value)
-        assertEquals(Penalty.NONE, viewModel.allSolves.value.single().penalty)
-    }
-
-    @Test
     fun clearWriteError_resetsTheError() = runTest(testDispatcher) {
         createViewModel()
         solveDao.failWrites = true
-        viewModel.deleteSolve(viewModel.allSolves.value.single())
+        viewModel.finishBluetoothSolve(12_345L)
+        viewModel.saveSolveWithPenalty(Penalty.NONE)
         awaitCondition("write error reported") { viewModel.writeError.value != null }
 
         viewModel.clearWriteError()
@@ -230,17 +192,10 @@ private class FailingSolveDao(private val delegate: SolveDao) : SolveDao by dele
         if (failWrites) throw SQLiteFullException("database or disk is full")
         return delegate.upsert(solve)
     }
-
-    override suspend fun softDeleteAll(ids: List<String>, deletedAt: String, updatedAt: String): Int {
-        if (failWrites) throw SQLiteFullException("database or disk is full")
-        return delegate.softDeleteAll(ids, deletedAt, updatedAt)
-    }
 }
 
 private class FakeSessionManager(private val session: Session) : SessionManager {
     @Volatile var fail = false
-
-    override fun getActiveSessionFlow(mode: Mode): Flow<Session?> = MutableStateFlow(session)
 
     override fun getActiveSessionFlow(ownerId: String, mode: Mode): Flow<Session?> = MutableStateFlow(session)
 
@@ -257,13 +212,10 @@ private class GuestAuthManager : AuthManager {
     override suspend fun initialize() = Unit
     override suspend fun register(email: String, password: String): AuthResult<Unit> = AuthResult.Success(Unit)
     override suspend fun login(email: String, password: String): AuthResult<User> = AuthResult.Success(user)
-    override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String): AuthResult<User> =
-        AuthResult.Success(user)
     override suspend fun verifyEmail(token: String): AuthResult<User> = AuthResult.Success(user)
     override suspend fun resendVerificationEmail(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
     override suspend fun requestPasswordReset(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
     override suspend fun resetPassword(token: String, newPassword: String): AuthResult<User> = AuthResult.Success(user)
-    override suspend fun refreshSession(): AuthResult<User> = AuthResult.Success(user)
     override suspend fun logout(): AuthResult<Unit> = AuthResult.Success(Unit)
     override suspend fun adoptGuestData(userId: String) = Unit
 }

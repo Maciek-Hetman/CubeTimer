@@ -21,12 +21,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.maciekhetman.cubetimer.R
-import com.maciekhetman.cubetimer.model.Session
 import com.maciekhetman.cubetimer.model.StatsFilter
 
 /**
- * Reusable horizontal filter chips bar for switching between Active Session,
- * All Solves, and a Specific historical Session.
+ * Reusable horizontal filter chips bar for switching between Active Session
+ * and All Solves.
  *
  * Adheres to Material 3 Expressive chip specifications (16dp rounded corners,
  * labelMedium typography, 16dp checkmark icons).
@@ -37,10 +36,8 @@ fun SessionFilterBar(
     currentFilter: StatsFilter,
     onFilterSelected: (StatsFilter) -> Unit,
     modifier: Modifier = Modifier,
-    activeSession: Session? = null,
     activeSessionSolvesCount: Int = 0,
-    allSolvesCount: Int = 0,
-    sessions: List<Session> = emptyList()
+    allSolvesCount: Int = 0
 ) {
     Row(
         modifier = modifier
@@ -91,26 +88,5 @@ fun SessionFilterBar(
                 }
             } else null
         )
-
-        if (currentFilter is StatsFilter.SpecificSession) {
-            FilterChip(
-                selected = true,
-                onClick = {},
-                shape = RoundedCornerShape(16.dp),
-                label = {
-                    Text(
-                        text = displaySessionName(currentFilter.sessionName),
-                        style = MaterialTheme.typography.labelMedium
-                    )
-                },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-            )
-        }
     }
 }

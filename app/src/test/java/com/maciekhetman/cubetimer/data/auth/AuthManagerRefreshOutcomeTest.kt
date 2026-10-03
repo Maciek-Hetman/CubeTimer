@@ -7,7 +7,6 @@ import com.maciekhetman.cubetimer.data.remote.CubeSyncApiClient
 import com.maciekhetman.cubetimer.data.remote.TokenRefresher
 import com.maciekhetman.cubetimer.data.remote.dto.AuthResponse
 import com.maciekhetman.cubetimer.data.remote.dto.ChangePasswordRequest
-import com.maciekhetman.cubetimer.data.remote.dto.GoogleAuthRequest
 import com.maciekhetman.cubetimer.data.remote.dto.LoginRequest
 import com.maciekhetman.cubetimer.data.remote.dto.RegisterRequest
 import com.maciekhetman.cubetimer.data.remote.dto.SnapshotRequest
@@ -36,7 +35,6 @@ import okhttp3.mockwebserver.SocketPolicy
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -45,9 +43,9 @@ import org.robolectric.RobolectricTestRunner
 import java.io.IOException
 
 /**
- * What a failed refresh means for the session, for [AuthManagerImpl.refreshSession] and the
- * startup restore: only a definitive rejection of the refresh token ends the session; going
- * offline or hitting a server hiccup must keep the user logged in.
+ * What a failed refresh means for the session at startup restore: only a definitive rejection of
+ * the refresh token ends the session; going offline or hitting a server hiccup must keep the user
+ * logged in.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -86,15 +84,9 @@ class AuthManagerRefreshOutcomeTest {
         autoInitialize = false
     )
 
-    /** A logged-in manager whose startup refresh has succeeded ("refresh-1" is the stored token). */
-    private suspend fun TestScope.loggedInAuthManager(): AuthManagerImpl {
-        storage.seed(accessToken = null, refreshToken = "refresh-0", user = user)
-        apiClient.onRefresh = { authResponse("access-1", "refresh-1") }
-        val authManager = newAuthManager()
-        authManager.initialize()
-        assertTrue(authManager.authState.value is AuthState.Authenticated)
-        assertEquals("refresh-1", storage.getRefreshToken())
-        return authManager
+    /** A stored session as an earlier successful refresh leaves it: "access-1" and "refresh-1" for the cached user. */
+    private fun seedLoggedInSession() {
+        storage.seed(accessToken = "access-1", refreshToken = "refresh-1", user = user)
     }
 
     private fun assertSessionKept(authManager: AuthManagerImpl) {
@@ -104,12 +96,10 @@ class AuthManagerRefreshOutcomeTest {
         assertEquals(0, storage.clearAuthDataCalls.get())
     }
 
-    // --- refreshSession() through CubeSyncApiClient (no shared refresher) ---
+    // --- Startup restore through CubeSyncApiClient (no shared refresher) ---
 
     @Test
-    fun refreshSession_onNetworkFailures_returnsTheErrorAndKeepsTheSession() = runTest {
-        val authManager = loggedInAuthManager()
-
+    fun initialize_onNetworkFailures_keepsTheSession() = runTest {
         val transientFailures = listOf<Throwable>(
             AuthException.NetworkError("offline"),
             IOException("timeout"),
@@ -118,28 +108,18 @@ class AuthManagerRefreshOutcomeTest {
             AuthException.SerializationError()
         )
         for (failure in transientFailures) {
+            seedLoggedInSession()
             apiClient.onRefresh = { throw failure }
+            val authManager = newAuthManager()
 
-            val result = authManager.refreshSession()
+            authManager.initialize()
 
-            assertTrue("$failure should produce an error result", result is AuthResult.Error)
             assertSessionKept(authManager)
         }
     }
 
     @Test
-    fun refreshSession_onNetworkError_reportsItAsNetworkError() = runTest {
-        val authManager = loggedInAuthManager()
-        val offline = AuthException.NetworkError("offline")
-        apiClient.onRefresh = { throw offline }
-
-        val result = authManager.refreshSession()
-
-        assertSame(offline, (result as AuthResult.Error).exception)
-    }
-
-    @Test
-    fun refreshSession_onDefinitiveRejection_clearsTheSession() = runTest {
+    fun initialize_onDefinitiveRejection_clearsTheSession() = runTest {
         val rejections = listOf<AuthException>(
             AuthException.InvalidRefreshToken(),
             AuthException.RefreshTokenReused(),
@@ -149,12 +129,12 @@ class AuthManagerRefreshOutcomeTest {
             AuthException.ApiError(errorCode = "unknown_error", message = "conflict", httpStatusCode = 409)
         )
         for (rejection in rejections) {
-            val authManager = loggedInAuthManager()
+            seedLoggedInSession()
             apiClient.onRefresh = { throw rejection }
+            val authManager = newAuthManager()
 
-            val result = authManager.refreshSession()
+            authManager.initialize()
 
-            assertSame(rejection, (result as AuthResult.Error).exception)
             assertEquals(AuthState.Guest, authManager.authState.value)
             assertNull("$rejection must clear the refresh token", storage.getRefreshToken())
             assertNull(storage.getAccessToken())
@@ -162,30 +142,17 @@ class AuthManagerRefreshOutcomeTest {
     }
 
     @Test
-    fun refreshSession_success_publishesTheRefreshedUser() = runTest {
-        val authManager = loggedInAuthManager()
+    fun initialize_success_publishesTheRefreshedUser() = runTest {
+        // No cached identity: the published user can only have come from the refresh response.
+        storage.seed(accessToken = null, refreshToken = "refresh-1", user = null)
         apiClient.onRefresh = { authResponse("access-2", "refresh-2") }
+        val authManager = newAuthManager()
 
-        val result = authManager.refreshSession()
+        authManager.initialize()
 
-        assertEquals(user.id, (result as AuthResult.Success).data.id)
         assertEquals("refresh-2", storage.getRefreshToken())
         assertEquals(user.id, authManager.authState.value.currentUser?.id)
     }
-
-    @Test
-    fun refreshSession_withoutRefreshToken_failsWithoutTouchingTheSession() = runTest {
-        val authManager = newAuthManager()
-
-        val result = authManager.refreshSession()
-
-        assertTrue(result is AuthResult.Error)
-        assertEquals(AuthState.Loading, authManager.authState.value)
-        assertEquals(0, apiClient.refreshCalls)
-        assertEquals(0, storage.clearAuthDataCalls.get())
-    }
-
-    // --- Startup restore ---
 
     @Test
     fun initialize_onServerErrorOrRateLimit_keepsTheCachedSession() = runTest {
@@ -251,7 +218,7 @@ class AuthManagerRefreshOutcomeTest {
     """.trimIndent()
 
     @Test
-    fun refresher_refreshSession_onServerErrorRateLimitOrDroppedConnection_keepsTheSession() {
+    fun refresher_initialize_onServerErrorRateLimitOrDroppedConnection_keepsTheSession() {
         val outages = listOf(
             MockResponse().setResponseCode(500).setBody("""{"error":{"code":"internal_error"}}"""),
             MockResponse().setResponseCode(429).setBody("""{"error":{"code":"rate_limited"}}"""),
@@ -262,9 +229,9 @@ class AuthManagerRefreshOutcomeTest {
             val server = refresherServer(outage)
             try {
                 withRefresherAgainst(server) { authManager ->
-                    val result = authManager.refreshSession()
+                    authManager.initialize()
 
-                    assertTrue(result is AuthResult.Error)
+                    assertTrue(authManager.authState.value is AuthState.Authenticated)
                     assertEquals("refresh-1", storage.getRefreshToken())
                     assertEquals(0, storage.clearAuthDataCalls.get())
                 }
@@ -275,7 +242,7 @@ class AuthManagerRefreshOutcomeTest {
     }
 
     @Test
-    fun refresher_refreshSession_whenTheRefreshTokenIsRejected_clearsTheSession() {
+    fun refresher_initialize_whenTheRefreshTokenIsRejected_clearsTheSession() {
         val rejections = listOf(
             MockResponse().setResponseCode(401).setBody("""{"error":{"code":"invalid_refresh_token"}}"""),
             MockResponse().setResponseCode(409).setBody("""{"error":{"code":"refresh_token_reused"}}"""),
@@ -287,9 +254,8 @@ class AuthManagerRefreshOutcomeTest {
             val server = refresherServer(rejection)
             try {
                 withRefresherAgainst(server) { authManager ->
-                    val result = authManager.refreshSession()
+                    authManager.initialize()
 
-                    assertTrue(result is AuthResult.Error)
                     assertEquals(AuthState.Guest, authManager.authState.value)
                     assertNull(storage.getRefreshToken())
                     assertNull(storage.getAccessToken())
@@ -301,14 +267,14 @@ class AuthManagerRefreshOutcomeTest {
     }
 
     @Test
-    fun refresher_refreshSession_success_storesRotatedTokensAndPublishesTheUser() {
+    fun refresher_initialize_success_storesRotatedTokensAndPublishesTheUser() {
         storage.seed(accessToken = "access-1", refreshToken = "refresh-1", user = user)
         val server = refresherServer(MockResponse().setResponseCode(200).setBody(refreshSuccessBody))
         try {
             withRefresherAgainst(server) { authManager ->
-                val result = authManager.refreshSession()
+                authManager.initialize()
 
-                assertEquals(user.id, (result as AuthResult.Success).data.id)
+                assertEquals(user.id, authManager.authState.value.currentUser?.id)
                 assertEquals("access-2", storage.getAccessToken())
                 assertEquals("refresh-2", storage.getRefreshToken())
                 assertTrue(authManager.authState.value is AuthState.Authenticated)
@@ -361,8 +327,8 @@ class AuthManagerRefreshOutcomeTest {
             return onRefresh()
         }
 
-        override suspend fun sync(request: SyncRequest, authToken: String?): SyncResponse = SyncResponse()
-        override suspend fun snapshot(request: SnapshotRequest, authToken: String?) = SnapshotResponse()
+        override suspend fun sync(request: SyncRequest): SyncResponse = SyncResponse()
+        override suspend fun snapshot(request: SnapshotRequest) = SnapshotResponse()
         override suspend fun register(request: RegisterRequest): StatusResponse = throw NotImplementedError()
         override suspend fun resendVerificationEmail(email: String): StatusResponse = throw NotImplementedError()
         override suspend fun verifyEmail(token: String): AuthResponse = throw NotImplementedError()
@@ -370,10 +336,7 @@ class AuthManagerRefreshOutcomeTest {
         override suspend fun logout(refreshToken: String) = Unit
         override suspend fun requestPasswordReset(email: String): StatusResponse = throw NotImplementedError()
         override suspend fun confirmPasswordReset(token: String, newPassword: String): AuthResponse = throw NotImplementedError()
-        override suspend fun loginWithGoogle(request: GoogleAuthRequest): AuthResponse = throw NotImplementedError()
-        override suspend fun linkGoogle(request: GoogleAuthRequest, authToken: String?) = Unit
-        override suspend fun getCurrentUser(authToken: String?): UserDto = throw NotImplementedError()
-        override suspend fun changePassword(request: ChangePasswordRequest, authToken: String?) = Unit
-        override suspend fun deleteAccount(authToken: String?) = Unit
+        override suspend fun changePassword(request: ChangePasswordRequest) = Unit
+        override suspend fun deleteAccount() = Unit
     }
 }

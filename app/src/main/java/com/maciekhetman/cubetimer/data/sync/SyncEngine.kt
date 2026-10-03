@@ -12,17 +12,11 @@ interface SyncEngine {
     /** Current sync state flow (SYNCED, SYNCING, OFFLINE, ERROR, UNAUTHENTICATED). */
     val syncStatus: StateFlow<SyncStatus>
 
-    /** Epoch millis timestamp of last successful sync. */
-    val lastSyncedAt: StateFlow<Long?>
-
     /** Whether sync is currently running. */
     val isSyncing: StateFlow<Boolean>
 
     /** State manager reference for observing or updating state. */
     val stateManager: SyncStateManager
-
-    /** Observe count of pending mutations in outbox for given owner. */
-    fun observePendingMutationsCount(ownerId: String): Flow<Int>
 
     /** Observe unresolved OCC conflicts for given owner. */
     fun observeUnresolvedConflicts(ownerId: String): Flow<List<ConflictEntity>>

@@ -208,11 +208,8 @@ class AuthDialogEmailLinkFlowTest {
         override suspend fun login(email: String, password: String): AuthResult<User> = loginResult
 
         override suspend fun initialize() = Unit
-        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String): AuthResult<User> =
-            throw NotImplementedError()
         override suspend fun verifyEmail(token: String): AuthResult<User> = throw NotImplementedError()
         override suspend fun resetPassword(token: String, newPassword: String): AuthResult<User> = throw NotImplementedError()
-        override suspend fun refreshSession(): AuthResult<User> = throw NotImplementedError()
         override suspend fun logout(): AuthResult<Unit> = throw NotImplementedError()
         override suspend fun deleteAccount(): AuthResult<Unit> = throw NotImplementedError()
         override suspend fun adoptGuestData(userId: String) = Unit

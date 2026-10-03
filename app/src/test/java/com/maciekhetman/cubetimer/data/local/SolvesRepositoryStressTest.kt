@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.test.core.app.ApplicationProvider
 import com.maciekhetman.cubetimer.data.SolvesRepository
 import com.maciekhetman.cubetimer.data.local.entity.SessionEntity
+import com.maciekhetman.cubetimer.data.local.mapper.toEventString
 import com.maciekhetman.cubetimer.data.solvesDataStore
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Penalty
@@ -172,7 +173,7 @@ class SolvesRepositoryStressTest {
         assertEquals(5, repository.getAllSolvesFlow().first().size)
 
         // User clears solves (e.g. bulk clear)
-        repository.clearAllSolves("guest")
+        repository.clearAllSolvesInScope(null, "guest")
         assertEquals(0, repository.getAllSolvesFlow().first().size)
 
         // Verify they are marked soft-deleted
@@ -213,14 +214,15 @@ class SolvesRepositoryStressTest {
         repository.saveSolve(sPyra_1, ownerId = "guest", sessionId = "sess-a")
 
         // Mode filtered queries
-        assertEquals(2, repository.getSolvesPagedByEvent(Mode.CUBE_3x3).size)
-        assertEquals(1, repository.getSolvesPagedByEvent(Mode.CUBE_2x2).size)
-        assertEquals(1, repository.getSolvesPagedByEvent(Mode.PYRAMINX).size)
-        assertEquals(0, repository.getSolvesPagedByEvent(Mode.CUBE_4x4).size)
+        val solveDao = database.solveDao()
+        assertEquals(2, solveDao.getSolvesByEvent("guest", Mode.CUBE_3x3.toEventString()).size)
+        assertEquals(1, solveDao.getSolvesByEvent("guest", Mode.CUBE_2x2.toEventString()).size)
+        assertEquals(1, solveDao.getSolvesByEvent("guest", Mode.PYRAMINX.toEventString()).size)
+        assertEquals(0, solveDao.getSolvesByEvent("guest", Mode.CUBE_4x4.toEventString()).size)
 
         // Session filtered queries
-        assertEquals(3, repository.getSolvesBySessionFlow("sess-a").first().size)
-        assertEquals(1, repository.getSolvesBySessionFlow("sess-b").first().size)
+        assertEquals(3, solveDao.observeSolvesBySessionDesc("guest", "sess-a").first().size)
+        assertEquals(1, solveDao.observeSolvesBySessionDesc("guest", "sess-b").first().size)
     }
 
     @Test

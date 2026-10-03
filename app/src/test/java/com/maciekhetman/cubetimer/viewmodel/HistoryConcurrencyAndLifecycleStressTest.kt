@@ -11,7 +11,6 @@ import com.maciekhetman.cubetimer.data.local.CubeDatabase
 import com.maciekhetman.cubetimer.data.local.converter.CubeTypeConverters
 import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
 import com.maciekhetman.cubetimer.data.local.mapper.toSolveTime
-import com.maciekhetman.cubetimer.data.session.SessionManagerImpl
 import com.maciekhetman.cubetimer.data.session.SessionRepositoryImpl
 import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.Mode
@@ -43,6 +42,7 @@ import org.robolectric.RobolectricTestRunner
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import com.maciekhetman.cubetimer.testutil.insertSession
+import com.maciekhetman.cubetimer.testutil.selectedSolves
 
 /**
  * Adversarial Concurrency and Coroutine Lifecycle Stress Harness for Reworked History Module.
@@ -63,7 +63,6 @@ class HistoryConcurrencyAndLifecycleStressTest {
     private lateinit var database: CubeDatabase
     private lateinit var solvesRepository: SolvesRepository
     private lateinit var sessionRepository: SessionRepositoryImpl
-    private lateinit var sessionManager: SessionManagerImpl
     private lateinit var fakeAuthManager: FakeAuthManager
     private lateinit var viewModel: HistoryViewModel
 
@@ -96,11 +95,6 @@ class HistoryConcurrencyAndLifecycleStressTest {
             ioDispatcher = testDispatcher
         )
         fakeAuthManager = FakeAuthManager()
-        sessionManager = SessionManagerImpl(
-            sessionRepository = sessionRepository,
-            solveDao = database.solveDao(),
-            authManager = fakeAuthManager
-        )
     }
 
     @After
@@ -113,7 +107,6 @@ class HistoryConcurrencyAndLifecycleStressTest {
         return keepUiStateActive(HistoryViewModel(
             application = application,
             solvesRepository = solvesRepository,
-            sessionManager = sessionManager,
             sessionRepository = sessionRepository,
             authManager = fakeAuthManager,
             database = database,
@@ -240,7 +233,7 @@ class HistoryConcurrencyAndLifecycleStressTest {
         viewModel = createViewModel()
         advanceUntilIdle()
 
-        viewModel.expandSession(session.id)
+        viewModel.toggleSessionExpanded(session.id)
         advanceUntilIdle()
 
         // User selects solves 0, 1, 2, 3, 4
@@ -256,7 +249,7 @@ class HistoryConcurrencyAndLifecycleStressTest {
         // Simultaneously:
         // 1. Background sync marks solves 1 and 2 as soft-deleted in Room (as if deleted on another device)
         // 2. User toggles selection of solve 5 and solve 6
-        // 3. User queries getSelectedSolves()
+        // 3. User reads the selected solves that are on screen
         val syncRemoteDeleteJob = launch {
             val nowIso = Instant.now().toString()
             database.solveDao().softDelete(solves[1].id, deletedAt = nowIso, updatedAt = nowIso)
@@ -271,8 +264,8 @@ class HistoryConcurrencyAndLifecycleStressTest {
         listOf(syncRemoteDeleteJob, userSelectJob).forEach { it.join() }
         advanceUntilIdle()
 
-        // Verify getSelectedSolves() filters out remote-deleted solves without throwing ConcurrentModificationException
-        val selectedActiveSolves = viewModel.getSelectedSolves()
+        // Verify the selected solves on screen filter out remote-deleted solves without throwing ConcurrentModificationException
+        val selectedActiveSolves = viewModel.uiState.value.selectedSolves()
         val selectedActiveIds = selectedActiveSolves.map { it.id }.toSet()
 
         // Remote-deleted solves 1 and 2 must NOT be returned among active selected solves!
@@ -310,7 +303,7 @@ class HistoryConcurrencyAndLifecycleStressTest {
         viewModel = createViewModel()
         advanceUntilIdle()
 
-        viewModel.expandSession(session.id)
+        viewModel.toggleSessionExpanded(session.id)
         advanceUntilIdle()
 
         // Select solve 0
@@ -359,34 +352,35 @@ class HistoryConcurrencyAndLifecycleStressTest {
         viewModel = createViewModel()
         advanceUntilIdle()
 
-        viewModel.expandSession(session.id)
+        viewModel.toggleSessionExpanded(session.id)
         advanceUntilIdle()
 
         val initialGroup = viewModel.uiState.value.sessionGroups.first { it.id == session.id }
         assertEquals(2, initialGroup.solves.size)
 
         // Delete solve 0
-        viewModel.deleteSolve(solves[0].toSolveTime())
+        val deletedSolve = solves[0].toSolveTime()
+        viewModel.deleteSolve(deletedSolve)
         advanceUntilIdle()
 
         val afterDeleteGroup = viewModel.uiState.value.sessionGroups.first { it.id == session.id }
         assertEquals(1, afterDeleteGroup.solves.size)
 
         // Restore solve 0 via undo
-        viewModel.undoDelete()
+        viewModel.restoreSolve(deletedSolve)
         advanceUntilIdle()
 
         val afterUndoGroup = viewModel.uiState.value.sessionGroups.first { it.id == session.id }
 
         // EMPIRICAL BUG CHECK:
-        // Does restoreSolve / undoDelete update _sessionSolvesCache so the expanded card shows the restored solve?
+        // Does restoreSolve update _sessionSolvesCache so the expanded card shows the restored solve?
         val hasCacheDesyncBug = afterUndoGroup.solves.size != 2
         if (hasCacheDesyncBug) {
             println("[VULNERABILITY REPRODUCED] Cache desynchronization on undo: expected 2 solves in expanded group, found ${afterUndoGroup.solves.size}")
         }
 
         assertEquals(
-            "Expanded session group must contain the restored solve after undoDelete",
+            "Expanded session group must contain the restored solve after restoreSolve",
             2,
             afterUndoGroup.solves.size
         )
@@ -405,7 +399,7 @@ class HistoryConcurrencyAndLifecycleStressTest {
         viewModel = createViewModel()
         advanceUntilIdle()
 
-        viewModel.expandSession(session.id)
+        viewModel.toggleSessionExpanded(session.id)
         advanceUntilIdle()
 
         val initialGroup = viewModel.uiState.value.sessionGroups.first { it.id == session.id }
@@ -426,7 +420,8 @@ class HistoryConcurrencyAndLifecycleStressTest {
         assertEquals(0, database.solveDao().getSolvesBySession("guest", session.id).size)
 
         // Undo session deletion
-        viewModel.undoDeleteSession()
+        val deleteEffect = viewModel.effects.first { it is HistoryUiEffect.ShowUndoSessionDelete } as HistoryUiEffect.ShowUndoSessionDelete
+        viewModel.restoreSession(deleteEffect.snapshot)
         advanceUntilIdle()
 
         // Session must be restored
@@ -452,12 +447,10 @@ class HistoryConcurrencyAndLifecycleStressTest {
         override suspend fun initialize() = Unit
         override suspend fun register(email: String, password: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun login(email: String, password: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
-        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun verifyEmail(token: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun resendVerificationEmail(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun requestPasswordReset(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun resetPassword(token: String, newPassword: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
-        override suspend fun refreshSession(): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun logout(): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun adoptGuestData(userId: String) = Unit
     }

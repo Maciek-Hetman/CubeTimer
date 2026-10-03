@@ -5,11 +5,13 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.util.Log
 import com.maciekhetman.cubetimer.data.auth.AuthManager
 import com.maciekhetman.cubetimer.data.local.CubeDatabase
 import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.SyncStatusType
 import com.maciekhetman.cubetimer.model.SyncUiState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -38,7 +40,8 @@ class SyncStateManager(
     private val authManager: AuthManager? = null,
     private val onTriggerSync: (suspend () -> Unit)? = null,
     coroutineScope: CoroutineScope? = null,
-    private val ioDispatcher: kotlinx.coroutines.CoroutineDispatcher = Dispatchers.IO
+    private val ioDispatcher: kotlinx.coroutines.CoroutineDispatcher = Dispatchers.IO,
+    clearStaleSyncingFlags: Boolean = false
 ) {
     private val scope = coroutineScope ?: CoroutineScope(SupervisorJob() + ioDispatcher)
 
@@ -46,13 +49,11 @@ class SyncStateManager(
     val syncStatus: StateFlow<SyncStatus> = _syncStatus.asStateFlow()
 
     private val _lastSyncedAt = MutableStateFlow<Long?>(initialLastSyncedAt)
-    val lastSyncedAt: StateFlow<Long?> = _lastSyncedAt.asStateFlow()
 
     private val _isSyncing = MutableStateFlow(initialStatus == SyncStatus.SYNCING)
     val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
 
     private val _lastErrorMessage = MutableStateFlow<String?>(null)
-    val lastErrorMessage: StateFlow<String?> = _lastErrorMessage.asStateFlow()
 
     // Every network currently satisfying the callback's request. The callback fires per network,
     // so a single onLost (e.g. Wi-Fi dropping while mobile data is still up) doesn't mean offline.
@@ -63,6 +64,21 @@ class SyncStateManager(
 
     init {
         registerNetworkCallback()
+        if (clearStaleSyncingFlags && database != null) {
+            // The manager is created once per process, before the SyncEngine that uses it, so no sync
+            // of this process can be running yet: a persisted is_syncing flag was left behind by one
+            // that died with an earlier process. A sync that starts right after still shows SYNCING
+            // through the in-memory flag.
+            scope.launch {
+                try {
+                    database.syncMetadataDao().clearStaleSyncingFlags()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "Could not clear stale syncing flags", e)
+                }
+            }
+        }
     }
 
     private data class LocalSyncState(
@@ -88,7 +104,6 @@ class SyncStateManager(
                     SyncUiState(
                         status = SyncStatusType.SYNCED,
                         lastSyncTime = null,
-                        lastSyncedAtMillis = null,
                         pendingCount = 0,
                         errorMessage = null,
                         isGuest = true
@@ -108,48 +123,25 @@ class SyncStateManager(
                     conflictCountFlow,
                     localSyncStateFlow
                 ) { metadata, pendingCount, conflictCount, local ->
-                    when {
-                        metadata?.lastError != null -> SyncUiState(
-                            status = SyncStatusType.ERROR,
-                            lastSyncTime = metadata.lastSyncTime,
-                            pendingCount = pendingCount,
-                            errorMessage = metadata.lastError,
-                            isGuest = false,
-                            conflictCount = conflictCount
-                        )
-                        metadata?.isSyncing == true || local.isSyncing -> SyncUiState(
-                            status = SyncStatusType.SYNCING,
-                            lastSyncTime = metadata?.lastSyncTime,
-                            pendingCount = pendingCount,
-                            errorMessage = null,
-                            isGuest = false,
-                            conflictCount = conflictCount
-                        )
-                        !local.isOnline -> SyncUiState(
-                            status = SyncStatusType.OFFLINE,
-                            lastSyncTime = metadata?.lastSyncTime,
-                            pendingCount = pendingCount,
-                            errorMessage = null,
-                            isGuest = false,
-                            conflictCount = conflictCount
-                        )
-                        local.syncStatus == SyncStatus.ERROR -> SyncUiState(
-                            status = SyncStatusType.ERROR,
-                            lastSyncTime = metadata?.lastSyncTime,
-                            pendingCount = pendingCount,
-                            errorMessage = local.lastErrorMessage ?: "Sync failed",
-                            isGuest = false,
-                            conflictCount = conflictCount
-                        )
-                        else -> SyncUiState(
-                            status = SyncStatusType.SYNCED,
-                            lastSyncTime = metadata?.lastSyncTime,
-                            pendingCount = pendingCount,
-                            errorMessage = null,
-                            isGuest = false,
-                            conflictCount = conflictCount
-                        )
+                    val (status, errorMessage) = when {
+                        metadata?.lastError != null -> SyncStatusType.ERROR to metadata.lastError
+                        metadata?.isSyncing == true || local.isSyncing -> SyncStatusType.SYNCING to null
+                        !local.isOnline -> SyncStatusType.OFFLINE to null
+                        // The last attempt couldn't reach the server (unreachable, DNS, timeout) although
+                        // the device reports a network. Not persisted, so it isn't a sticky error.
+                        local.syncStatus == SyncStatus.OFFLINE -> SyncStatusType.OFFLINE to null
+                        local.syncStatus == SyncStatus.ERROR ->
+                            SyncStatusType.ERROR to (local.lastErrorMessage ?: "Sync failed")
+                        else -> SyncStatusType.SYNCED to null
                     }
+                    SyncUiState(
+                        status = status,
+                        lastSyncTime = metadata?.lastSyncTime,
+                        pendingCount = pendingCount,
+                        errorMessage = errorMessage,
+                        isGuest = false,
+                        conflictCount = conflictCount
+                    )
                 }
             }
         }.stateIn(scope, SharingStarted.Eagerly, SyncUiState(isGuest = true))
@@ -166,7 +158,6 @@ class SyncStateManager(
             SyncUiState(
                 status = uiStatus,
                 lastSyncTime = lastSynced?.toString(),
-                lastSyncedAtMillis = lastSynced,
                 pendingCount = 0,
                 errorMessage = errMsg,
                 isGuest = (status == SyncStatus.UNAUTHENTICATED)
@@ -249,5 +240,9 @@ class SyncStateManager(
         } catch (_: Exception) {
             // In unit test environments without network service mock, ignore
         }
+    }
+
+    private companion object {
+        const val TAG = "SyncStateManager"
     }
 }

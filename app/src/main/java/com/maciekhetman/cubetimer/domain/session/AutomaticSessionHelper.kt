@@ -1,8 +1,6 @@
 package com.maciekhetman.cubetimer.domain.session
 
 import com.maciekhetman.cubetimer.data.local.converter.CubeTypeConverters
-import com.maciekhetman.cubetimer.data.local.entity.SessionEntity
-import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
 import com.maciekhetman.cubetimer.model.DayPart
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Session
@@ -25,22 +23,6 @@ object AutomaticSessionHelper {
 
     // Formatter matching 3-letter lowercase English abbreviation
     private val MONTH_FORMATTER = DateTimeFormatter.ofPattern("MMM", Locale.ENGLISH)
-
-    /**
-     * Determines the DayPart for a given Instant and ZoneId.
-     */
-    fun dayPartFromInstant(
-        instant: Instant = Instant.now(),
-        zoneId: ZoneId = ZoneId.systemDefault()
-    ): DayPart {
-        val zdt = ZonedDateTime.ofInstant(instant, zoneId)
-        return DayPart.fromHour(zdt.hour)
-    }
-
-    /**
-     * Determines the DayPart from a 24-hour integer (0..23).
-     */
-    fun dayPartFromHour(hour: Int): DayPart = DayPart.fromHour(hour)
 
     /**
      * Generates base automatic session name: "${day} ${month} ${year} ${dayPart}".
@@ -107,33 +89,6 @@ object AutomaticSessionHelper {
         }
 
         val lastActivityMs = lastSolveTimestampMs ?: CubeTypeConverters.isoToEpochMillis(session.startedAt)
-        val elapsed = nowMs - lastActivityMs
-        return elapsed in 0..gapMs
-    }
-
-    /**
-     * Evaluates whether an open automatic session (Entity model) should be reused.
-     */
-    fun shouldReuseAutomaticSession(
-        session: SessionEntity?,
-        lastSolve: SolveEntity?,
-        nowMs: Long = System.currentTimeMillis(),
-        gapMs: Long = DEFAULT_INACTIVITY_GAP_MILLIS,
-        event: String = "3x3"
-    ): Boolean {
-        if (session == null || session.deletedAt != null || session.archived || session.endedAt != null) {
-            return false
-        }
-        if (session.kind != "automatic" || session.event != event) {
-            return false
-        }
-
-        val lastActivityMs = if (lastSolve != null) {
-            CubeTypeConverters.isoToEpochMillis(lastSolve.solvedAt)
-        } else {
-            CubeTypeConverters.isoToEpochMillis(session.startedAt)
-        }
-
         val elapsed = nowMs - lastActivityMs
         return elapsed in 0..gapMs
     }

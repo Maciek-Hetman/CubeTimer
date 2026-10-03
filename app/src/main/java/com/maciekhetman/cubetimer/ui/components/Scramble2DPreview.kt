@@ -38,10 +38,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.maciekhetman.cubetimer.R
 import com.maciekhetman.cubetimer.domain.AndroidSha1PrngProvider
+import com.maciekhetman.cubetimer.domain.puzzleRegistry
 import com.maciekhetman.cubetimer.model.Mode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.worldcubeassociation.tnoodle.scrambles.PuzzleRegistry
 import org.worldcubeassociation.tnoodle.svglite.Element
 import org.worldcubeassociation.tnoodle.svglite.Group
 import org.worldcubeassociation.tnoodle.svglite.Rectangle
@@ -127,15 +127,6 @@ sealed interface ScramblePreviewResult {
 object ScramblePreviewParser {
     private val modelCache = LruCache<String, PuzzleImageModel>(64)
 
-    private val scramblersByMode = mapOf(
-        Mode.CUBE_2x2 to PuzzleRegistry.TWO,
-        Mode.CUBE_3x3 to PuzzleRegistry.THREE,
-        Mode.CUBE_4x4 to PuzzleRegistry.FOUR,
-        Mode.CUBE_5x5 to PuzzleRegistry.FIVE,
-        Mode.MEGAMINX to PuzzleRegistry.MEGA,
-        Mode.PYRAMINX to PuzzleRegistry.PYRA
-    )
-
     fun clearCache() {
         modelCache.evictAll()
     }
@@ -151,9 +142,7 @@ object ScramblePreviewParser {
 
         return try {
             AndroidSha1PrngProvider.install()
-            val registry = scramblersByMode[mode]
-                ?: return ScramblePreviewResult.Error("Unsupported mode: $mode")
-            val puzzle = registry.getScrambler()
+            val puzzle = mode.puzzleRegistry.getScrambler()
 
             // TNoodle drawScramble validates the scramble, applies moves to solved state,
             // and returns an in-memory SVG AST.

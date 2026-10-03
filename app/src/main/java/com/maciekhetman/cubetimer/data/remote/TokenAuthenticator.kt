@@ -101,8 +101,7 @@ class TokenAuthenticator(
                path.endsWith("/v1/auth/password/forgot") ||
                path.endsWith("/v1/auth/password/reset") ||
                path.endsWith("/v1/auth/email/verify") ||
-               path.endsWith("/v1/auth/email/resend") ||
-               path.endsWith("/v1/auth/federated/google")
+               path.endsWith("/v1/auth/email/resend")
     }
 
     private fun isWrongPassword(response: Response): Boolean {

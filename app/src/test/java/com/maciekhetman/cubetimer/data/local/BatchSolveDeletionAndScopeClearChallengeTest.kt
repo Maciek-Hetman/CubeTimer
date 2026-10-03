@@ -9,6 +9,7 @@ import com.maciekhetman.cubetimer.data.local.dao.SolveDao
 import com.maciekhetman.cubetimer.data.local.dao.SyncOutboxDao
 import com.maciekhetman.cubetimer.data.local.entity.SessionEntity
 import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
+import com.maciekhetman.cubetimer.data.local.mapper.toSolveTime
 import com.maciekhetman.cubetimer.data.solvesDataStore
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Penalty
@@ -29,7 +30,7 @@ import org.robolectric.RobolectricTestRunner
  * Adversarial empirical challenge tests targeting:
  * 1. Batch solve deletion (`deleteSolvesByIds`) with empty lists, non-existent IDs, duplicate IDs, already soft-deleted IDs, and owner isolation.
  * 2. Scope clearing (`clearAllSolvesInScope`) across modes, all-mode clearing, and roundtrip fidelity via `restoreSolves`.
- * 3. Deduplication (`getExistingSolveIds`) with active, soft-deleted, and uninserted IDs.
+ * 3. Deduplication (`getSolvesByIds`) with active, soft-deleted, and uninserted IDs.
  */
 @RunWith(RobolectricTestRunner::class)
 class BatchSolveDeletionAndScopeClearChallengeTest {
@@ -64,6 +65,9 @@ class BatchSolveDeletionAndScopeClearChallengeTest {
         database.close()
     }
 
+    private suspend fun activeSolves(ownerId: String): List<SolveTime> =
+        solveDao.getAllActiveSolvesForOwner(ownerId).map { it.toSolveTime() }
+
     // =========================================================================
     // 1. deleteSolvesByIds CHALLENGES
     // =========================================================================
@@ -79,7 +83,7 @@ class BatchSolveDeletionAndScopeClearChallengeTest {
         assertTrue("Empty list input must return empty deleted list", deleted.isEmpty())
 
         // Verify solve remains untouched
-        val active = repository.getAllActiveSolves("user-empty-test")
+        val active = activeSolves("user-empty-test")
         assertEquals(1, active.size)
         assertEquals("s-existing", active[0].id)
 
@@ -101,7 +105,7 @@ class BatchSolveDeletionAndScopeClearChallengeTest {
         assertTrue("Purely non-existent IDs must return empty list", deleted.isEmpty())
 
         // Existing solve unaffected
-        val active = repository.getAllActiveSolves("user-nonexist")
+        val active = activeSolves("user-nonexist")
         assertEquals(1, active.size)
         assertEquals("s-existing", active[0].id)
 
@@ -131,7 +135,7 @@ class BatchSolveDeletionAndScopeClearChallengeTest {
         assertEquals(setOf("s-dup-1", "s-dup-2"), deletedIds)
 
         // Verify DB state: both are soft-deleted
-        val active = repository.getAllActiveSolves("user-dup")
+        val active = activeSolves("user-dup")
         assertTrue(active.isEmpty())
 
         // Verify outbox: exactly 2 delete mutations (one per unique solve, not duplicated)
@@ -235,7 +239,7 @@ class BatchSolveDeletionAndScopeClearChallengeTest {
         assertEquals("s-user-a", deleted[0].id)
 
         // User B's solve remains completely active
-        val activeB = repository.getAllActiveSolves("user-b")
+        val activeB = activeSolves("user-b")
         assertEquals(1, activeB.size)
         assertEquals("s-user-b", activeB[0].id)
 
@@ -287,7 +291,7 @@ class BatchSolveDeletionAndScopeClearChallengeTest {
         assertTrue(deleted3x3.all { it.mode == Mode.CUBE_3x3 })
 
         // Verify remaining active solves in DB: 2x2, 4x4, 5x5, Pyraminx, Megaminx must remain intact
-        val remaining = repository.getAllActiveSolves(ownerId)
+        val remaining = activeSolves(ownerId)
         assertEquals(7, remaining.size)
         assertFalse(remaining.any { it.mode == Mode.CUBE_3x3 })
         assertTrue(remaining.any { it.id == "s-2x2-a" })
@@ -309,7 +313,7 @@ class BatchSolveDeletionAndScopeClearChallengeTest {
         assertEquals(1, deletedPyra.size)
         assertEquals("s-pyra-a", deletedPyra[0].id)
 
-        val remainingAfterPyra = repository.getAllActiveSolves(ownerId)
+        val remainingAfterPyra = activeSolves(ownerId)
         assertEquals(6, remainingAfterPyra.size)
         assertFalse(remainingAfterPyra.any { it.mode == Mode.PYRAMINX })
     }
@@ -338,11 +342,11 @@ class BatchSolveDeletionAndScopeClearChallengeTest {
         assertEquals(setOf("s-all-1", "s-all-2", "s-all-3"), cleared.map { it.id }.toSet())
 
         // Verify ownerUser has 0 active solves
-        val activeOwner = repository.getAllActiveSolves(ownerUser)
+        val activeOwner = activeSolves(ownerUser)
         assertTrue(activeOwner.isEmpty())
 
         // Verify otherUser's solve remains completely active and untouched
-        val activeOther = repository.getAllActiveSolves(otherUser)
+        val activeOther = activeSolves(otherUser)
         assertEquals(1, activeOther.size)
         assertEquals("s-other-1", activeOther[0].id)
 
@@ -434,12 +438,12 @@ class BatchSolveDeletionAndScopeClearChallengeTest {
         }
 
         // Verify all 4 are saved and active
-        assertEquals(4, repository.getAllActiveSolves(ownerId).size)
+        assertEquals(4, activeSolves(ownerId).size)
 
         // Clear all solves in scope
         val deletedSolves = repository.clearAllSolvesInScope(mode = null, ownerId = ownerId)
         assertEquals(4, deletedSolves.size)
-        assertTrue("Active solves must be 0 after clear", repository.getAllActiveSolves(ownerId).isEmpty())
+        assertTrue("Active solves must be 0 after clear", activeSolves(ownerId).isEmpty())
 
         // Clear outbox before restore to isolate mutations generated specifically by restoreSolves
         syncOutboxDao.clearOutbox(ownerId)
@@ -447,7 +451,7 @@ class BatchSolveDeletionAndScopeClearChallengeTest {
         // Execute Roundtrip: restore all deleted solves
         repository.restoreSolves(deletedSolves, ownerId = ownerId)
 
-        val restoredSolves = repository.getAllActiveSolves(ownerId).associateBy { it.id }
+        val restoredSolves = activeSolves(ownerId).associateBy { it.id }
         assertEquals(4, restoredSolves.size)
 
         // Verify exact fidelity for every solve and field
@@ -472,11 +476,11 @@ class BatchSolveDeletionAndScopeClearChallengeTest {
     }
 
     // =========================================================================
-    // 3. getExistingSolveIds CHALLENGES
+    // 3. getSolvesByIds CHALLENGES
     // =========================================================================
 
     @Test
-    fun getExistingSolveIds_activeSoftDeletedAndUninserted() = runTest {
+    fun getSolvesByIds_activeSoftDeletedAndUninserted() = runTest {
         val sActive = SolveEntity(
             id = "solve-active-1",
             ownerId = "guest",
@@ -497,7 +501,7 @@ class BatchSolveDeletionAndScopeClearChallengeTest {
 
         // 1. Query with active, soft-deleted, and uninserted IDs
         val queryIds = listOf("solve-active-1", "solve-deleted-1", "solve-uninserted-1", "solve-uninserted-2")
-        val existing = solveDao.getExistingSolveIds(queryIds)
+        val existing = solveDao.getSolvesByIds(queryIds).map { it.id }
 
         // Both active and soft-deleted must be returned (critical for CSV deduplication)
         assertEquals(2, existing.size)
@@ -507,26 +511,26 @@ class BatchSolveDeletionAndScopeClearChallengeTest {
         assertFalse(existing.contains("solve-uninserted-2"))
 
         // 2. Query only soft-deleted
-        val onlyDeleted = solveDao.getExistingSolveIds(listOf("solve-deleted-1"))
+        val onlyDeleted = solveDao.getSolvesByIds(listOf("solve-deleted-1")).map { it.id }
         assertEquals(1, onlyDeleted.size)
         assertEquals("solve-deleted-1", onlyDeleted[0])
 
         // 3. Query only uninserted
-        val onlyUninserted = solveDao.getExistingSolveIds(listOf("solve-uninserted-1"))
+        val onlyUninserted = solveDao.getSolvesByIds(listOf("solve-uninserted-1")).map { it.id }
         assertTrue(onlyUninserted.isEmpty())
 
         // 4. Query empty list
-        val emptyResult = solveDao.getExistingSolveIds(emptyList())
+        val emptyResult = solveDao.getSolvesByIds(emptyList()).map { it.id }
         assertTrue(emptyResult.isEmpty())
 
         // 5. Query with duplicate entries of existing ID
-        val dupsResult = solveDao.getExistingSolveIds(listOf("solve-active-1", "solve-active-1", "solve-active-1"))
+        val dupsResult = solveDao.getSolvesByIds(listOf("solve-active-1", "solve-active-1", "solve-active-1")).map { it.id }
         assertEquals(1, dupsResult.size)
         assertEquals("solve-active-1", dupsResult[0])
     }
 
     @Test
-    fun getExistingSolveIds_handlesLargeBatchOfIdsWithoutSqliteError() = runTest {
+    fun getSolvesByIds_handlesLargeBatchOfIdsWithoutSqliteError() = runTest {
         // Test chunked / multi-item queries
         val entities = (1..50).map { i ->
             SolveEntity(
@@ -542,7 +546,7 @@ class BatchSolveDeletionAndScopeClearChallengeTest {
 
         // Query all 50 + 20 uninserted
         val candidateIds = (1..70).map { "solve-batch-$it" }
-        val found = solveDao.getExistingSolveIds(candidateIds)
+        val found = solveDao.getSolvesByIds(candidateIds).map { it.id }
 
         assertEquals(50, found.size)
         assertEquals(entities.map { it.id }.toSet(), found.toSet())

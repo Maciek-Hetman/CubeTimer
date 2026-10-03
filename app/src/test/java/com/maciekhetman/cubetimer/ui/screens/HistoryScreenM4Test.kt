@@ -1,5 +1,6 @@
 package com.maciekhetman.cubetimer.ui.screens
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -20,7 +21,9 @@ import com.maciekhetman.cubetimer.model.Session
 import com.maciekhetman.cubetimer.model.SessionKind
 import com.maciekhetman.cubetimer.model.SolveTime
 import com.maciekhetman.cubetimer.ui.components.HistoryContextualTopAppBar
-import com.maciekhetman.cubetimer.ui.components.SessionExpandableCard
+import com.maciekhetman.cubetimer.ui.components.SessionCardActions
+import com.maciekhetman.cubetimer.ui.components.SessionCardHeader
+import com.maciekhetman.cubetimer.ui.components.SessionCardSolveRow
 import com.maciekhetman.cubetimer.ui.dialogs.HistoryFilterSortBottomSheet
 import com.maciekhetman.cubetimer.viewmodel.DatePreset
 import com.maciekhetman.cubetimer.viewmodel.DateRangeFilter
@@ -138,10 +141,10 @@ class HistoryScreenM4Test {
         composeTestRule.onNodeWithContentDescription("Deselect All").assertIsDisplayed()
     }
 
-    // --- 2. SessionExpandableCard Tests ---
+    // --- 2. Session card pieces (header, solve rows, actions) ---
 
     @Test
-    fun testSessionExpandableCard_rendersHeaderInfo_andInvokesActions() {
+    fun testSessionCardHeader_rendersHeaderInfo_andTogglesExpansion() {
         val session = createSession(name = "Main Practice 3x3", event = Mode.CUBE_3x3, kind = SessionKind.MANUAL)
         val group = SessionGroupUiModel(
             session = session,
@@ -152,24 +155,13 @@ class HistoryScreenM4Test {
         )
 
         var expanded by mutableStateOf(false)
-        var exportSessionClicked = false
-        var deleteSessionClicked = false
 
         composeTestRule.setContent {
             MaterialTheme {
-                SessionExpandableCard(
+                SessionCardHeader(
                     sessionGroup = group.copy(isExpanded = expanded),
-                    isSelectionMode = false,
-                    selectedSolveIds = emptySet(),
-                    onToggleExpand = { expanded = !expanded },
-                    onExportSession = { exportSessionClicked = true },
-                    onDeleteSession = { deleteSessionClicked = true },
-                    onSolveClick = { _, _ -> },
-                    onSolveLongClick = {},
-                    onToggleSolveSelection = {},
-                    onTogglePlusTwo = {},
-                    onToggleDnf = {},
-                    onDeleteSolve = {}
+                    expanded = expanded,
+                    onClick = { expanded = !expanded }
                 )
             }
         }
@@ -180,10 +172,24 @@ class HistoryScreenM4Test {
         composeTestRule.onNodeWithText("8.42").assertIsDisplayed()
         composeTestRule.onNodeWithText("11.35").assertIsDisplayed()
 
-        // Session actions only appear once the group is expanded
-        composeTestRule.onNodeWithText("Export").assertDoesNotExist()
+        // Tapping the header reports the toggle and the chevron flips to "collapse"
         composeTestRule.onNodeWithContentDescription("Expand session").performClick()
         composeTestRule.onNodeWithContentDescription("Collapse session").assertIsDisplayed()
+    }
+
+    @Test
+    fun testSessionCardActions_invokeExportAndDelete() {
+        var exportSessionClicked = false
+        var deleteSessionClicked = false
+
+        composeTestRule.setContent {
+            MaterialTheme {
+                SessionCardActions(
+                    onExport = { exportSessionClicked = true },
+                    onDelete = { deleteSessionClicked = true }
+                )
+            }
+        }
 
         // Export session
         composeTestRule.onNodeWithText("Export").performClick()
@@ -195,7 +201,7 @@ class HistoryScreenM4Test {
     }
 
     @Test
-    fun testSessionExpandableCard_expanded_rendersInnerSolves() {
+    fun testSessionCardSolveRow_expanded_rendersInnerSolves() {
         val session = createSession(name = "Fast Solves", event = Mode.CUBE_3x3)
         val solve1 = createSolve(timeInMillis = 9500L, sessionId = session.id)
         val solve2 = createSolve(timeInMillis = 10200L, sessionId = session.id)
@@ -214,20 +220,23 @@ class HistoryScreenM4Test {
 
         composeTestRule.setContent {
             MaterialTheme {
-                SessionExpandableCard(
-                    sessionGroup = group,
-                    isSelectionMode = false,
-                    selectedSolveIds = emptySet(),
-                    onToggleExpand = {},
-                    onExportSession = {},
-                    onDeleteSession = {},
-                    onSolveClick = { solve, _ -> clickedSolve = solve },
-                    onSolveLongClick = {},
-                    onToggleSolveSelection = {},
-                    onTogglePlusTwo = {},
-                    onToggleDnf = {},
-                    onDeleteSolve = {}
-                )
+                Column {
+                    group.solves.forEachIndexed { index, solve ->
+                        SessionCardSolveRow(
+                            sessionGroup = group,
+                            solve = solve,
+                            index = index,
+                            isSelectionMode = false,
+                            selectedSolveIds = emptySet(),
+                            onSolveClick = { clicked, _ -> clickedSolve = clicked },
+                            onSolveLongClick = {},
+                            onToggleSolveSelection = {},
+                            onTogglePlusTwo = {},
+                            onToggleDnf = {},
+                            onDeleteSolve = {}
+                        )
+                    }
+                }
             }
         }
 
@@ -241,7 +250,7 @@ class HistoryScreenM4Test {
     }
 
     @Test
-    fun testSessionExpandableCard_selectionMode_togglesSelection() {
+    fun testSessionCardSolveRow_selectionMode_togglesSelection() {
         val session = createSession()
         val solve1 = createSolve(timeInMillis = 8000L, sessionId = session.id)
         val solve2 = createSolve(timeInMillis = 9000L, sessionId = session.id)
@@ -259,20 +268,23 @@ class HistoryScreenM4Test {
 
         composeTestRule.setContent {
             MaterialTheme {
-                SessionExpandableCard(
-                    sessionGroup = group,
-                    isSelectionMode = true,
-                    selectedSolveIds = setOf(solve1.id),
-                    onToggleExpand = {},
-                    onExportSession = {},
-                    onDeleteSession = {},
-                    onSolveClick = { _, _ -> },
-                    onSolveLongClick = {},
-                    onToggleSolveSelection = { id -> toggledSolveId = id },
-                    onTogglePlusTwo = {},
-                    onToggleDnf = {},
-                    onDeleteSolve = {}
-                )
+                Column {
+                    group.solves.forEachIndexed { index, solve ->
+                        SessionCardSolveRow(
+                            sessionGroup = group,
+                            solve = solve,
+                            index = index,
+                            isSelectionMode = true,
+                            selectedSolveIds = setOf(solve1.id),
+                            onSolveClick = { _, _ -> },
+                            onSolveLongClick = {},
+                            onToggleSolveSelection = { id -> toggledSolveId = id },
+                            onTogglePlusTwo = {},
+                            onToggleDnf = {},
+                            onDeleteSolve = {}
+                        )
+                    }
+                }
             }
         }
 

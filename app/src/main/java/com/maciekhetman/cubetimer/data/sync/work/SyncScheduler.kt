@@ -19,7 +19,6 @@ interface SyncScheduler {
     fun schedulePeriodicSync()
     fun scheduleImmediateSync()
     fun cancelPeriodicSync()
-    fun cancelAllSync()
 }
 
 /**
@@ -92,12 +91,6 @@ class WorkManagerSyncScheduler(
 
     override fun cancelPeriodicSync() {
         workManager.cancelUniqueWork(WORK_NAME_PERIODIC)
-    }
-
-    override fun cancelAllSync() {
-        workManager.cancelUniqueWork(WORK_NAME_PERIODIC)
-        workManager.cancelUniqueWork(WORK_NAME_IMMEDIATE)
-        workManager.cancelAllWorkByTag(TAG_SYNC)
     }
 
     companion object {

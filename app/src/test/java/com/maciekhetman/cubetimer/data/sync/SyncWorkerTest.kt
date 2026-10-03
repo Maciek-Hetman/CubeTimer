@@ -94,11 +94,9 @@ class SyncWorkerTest {
         var resultToReturn: SyncResult = SyncResult.Success()
 
         override val syncStatus: StateFlow<SyncStatus> = MutableStateFlow(SyncStatus.SYNCED)
-        override val lastSyncedAt: StateFlow<Long?> = MutableStateFlow(null)
         override val isSyncing: StateFlow<Boolean> = MutableStateFlow(false)
         override val stateManager: SyncStateManager = SyncStateManager()
 
-        override fun observePendingMutationsCount(ownerId: String): Flow<Int> = emptyFlow()
         override fun observeUnresolvedConflicts(ownerId: String): Flow<List<ConflictEntity>> = emptyFlow()
 
         override suspend fun sync(ownerId: String?): SyncResult = resultToReturn

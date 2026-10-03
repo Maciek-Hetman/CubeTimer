@@ -16,7 +16,6 @@ enum class SyncStatusType {
 data class SyncUiState(
     val status: SyncStatusType = SyncStatusType.OFFLINE,
     val lastSyncTime: String? = null,
-    val lastSyncedAtMillis: Long? = null,
     val pendingCount: Int = 0,
     val errorMessage: String? = null,
     val isGuest: Boolean = true,

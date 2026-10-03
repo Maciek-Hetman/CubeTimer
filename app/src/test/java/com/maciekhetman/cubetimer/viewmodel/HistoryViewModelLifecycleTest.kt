@@ -10,7 +10,6 @@ import com.maciekhetman.cubetimer.data.local.dao.SessionDao
 import com.maciekhetman.cubetimer.data.local.dao.SolveDao
 import com.maciekhetman.cubetimer.data.local.dto.SessionWithStats
 import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
-import com.maciekhetman.cubetimer.data.session.SessionManagerImpl
 import com.maciekhetman.cubetimer.data.session.SessionRepositoryImpl
 import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.User
@@ -21,6 +20,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
@@ -59,7 +59,6 @@ class HistoryViewModelLifecycleTest {
     private lateinit var application: Application
     private lateinit var database: CubeDatabase
     private lateinit var sessionRepository: SessionRepositoryImpl
-    private lateinit var sessionManager: SessionManagerImpl
     private val authManager = GuestAuthManager()
 
     @Before
@@ -77,11 +76,6 @@ class HistoryViewModelLifecycleTest {
             database = database,
             sessionDao = database.sessionDao(),
             syncOutboxDao = database.syncOutboxDao()
-        )
-        sessionManager = SessionManagerImpl(
-            sessionRepository = sessionRepository,
-            solveDao = database.solveDao(),
-            authManager = authManager
         )
     }
 
@@ -104,7 +98,6 @@ class HistoryViewModelLifecycleTest {
             database = database,
             ioDispatcher = testDispatcher
         ),
-        sessionManager = sessionManager,
         sessionRepository = sessionRepository,
         authManager = authManager,
         database = database,
@@ -141,8 +134,8 @@ class HistoryViewModelLifecycleTest {
     }
 
     @Test
-    fun loadingEndsWithTheSessionListEvenWhenSolvePagingNeverAnswers() = runTest(testDispatcher) {
-        val viewModel = createViewModel(solveDao = HangingPagingSolveDao(database.solveDao()))
+    fun loadingEndsWithTheSessionListEvenWhenSessionSolvesNeverAnswer() = runTest(testDispatcher) {
+        val viewModel = createViewModel(solveDao = HangingSolveDao(database.solveDao()))
         backgroundScope.launch { viewModel.uiState.collect {} }
         runCurrent()
         advanceUntilIdle()
@@ -170,16 +163,10 @@ class HistoryViewModelLifecycleTest {
             .onCompletion { activeQueries.decrementAndGet() }
     }
 
-    /** The paged solve queries never return, like a query stuck behind a long write. */
-    private class HangingPagingSolveDao(private val delegate: SolveDao) : SolveDao by delegate {
-        override suspend fun getSolvesPagedByEvent(ownerId: String, event: String, limit: Int, offset: Int): List<SolveEntity> =
-            awaitCancellation()
-
-        override suspend fun getSolvesPagedBySession(ownerId: String, sessionId: String, limit: Int, offset: Int): List<SolveEntity> =
-            awaitCancellation()
-
-        override suspend fun getAllSolvesPaged(ownerId: String, limit: Int, offset: Int): List<SolveEntity> =
-            awaitCancellation()
+    /** The per-session solve query never answers, like a query stuck behind a long write. */
+    private class HangingSolveDao(private val delegate: SolveDao) : SolveDao by delegate {
+        override fun observeSolvesBySessionDesc(ownerId: String, sessionId: String): Flow<List<SolveEntity>> =
+            flow { awaitCancellation() }
     }
 
     private class GuestAuthManager : AuthManager {
@@ -190,13 +177,10 @@ class HistoryViewModelLifecycleTest {
         override suspend fun initialize() = Unit
         override suspend fun register(email: String, password: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun login(email: String, password: String): AuthResult<User> = AuthResult.Success(user)
-        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String): AuthResult<User> =
-            AuthResult.Success(user)
         override suspend fun verifyEmail(token: String): AuthResult<User> = AuthResult.Success(user)
         override suspend fun resendVerificationEmail(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun requestPasswordReset(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun resetPassword(token: String, newPassword: String): AuthResult<User> = AuthResult.Success(user)
-        override suspend fun refreshSession(): AuthResult<User> = AuthResult.Success(user)
         override suspend fun logout(): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun adoptGuestData(userId: String) = Unit
     }

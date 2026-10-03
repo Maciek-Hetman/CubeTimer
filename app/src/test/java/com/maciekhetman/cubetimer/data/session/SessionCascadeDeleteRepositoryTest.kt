@@ -10,6 +10,7 @@ import com.maciekhetman.cubetimer.data.remote.dto.SolveSyncPayload
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Penalty
 import com.maciekhetman.cubetimer.model.SolveTime
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -69,7 +70,7 @@ class SessionCascadeDeleteRepositoryTest {
         solvesRepository.saveSolve(s2, ownerId = "guest", sessionId = session.id)
         solvesRepository.saveSolve(s3, ownerId = "guest", sessionId = session.id)
 
-        assertEquals(1, repository.getActiveSessions("guest", Mode.CUBE_3x3).size)
+        assertEquals(1, repository.observeActiveSessions("guest", Mode.CUBE_3x3).first().size)
         assertEquals(3, database.solveDao().getSolvesBySession("guest", session.id).size)
 
         val snapshot = repository.deleteSessionWithSolves(session.id, ownerId = "guest")
@@ -80,7 +81,7 @@ class SessionCascadeDeleteRepositoryTest {
         val sessionInDb = database.sessionDao().getSessionById(session.id)
         assertNotNull(sessionInDb)
         assertNotNull("Session deletedAt must be populated", sessionInDb?.deletedAt)
-        assertEquals(0, repository.getActiveSessions("guest", Mode.CUBE_3x3).size)
+        assertEquals(0, repository.observeActiveSessions("guest", Mode.CUBE_3x3).first().size)
 
         assertEquals(0, database.solveDao().getSolvesBySession("guest", session.id).size)
         val rawSolves = database.solveDao().getAllSolvesForOwner("guest")
@@ -107,7 +108,7 @@ class SessionCascadeDeleteRepositoryTest {
         val snapshot = repository.deleteSessionWithSolves(session.id, ownerId = "guest")
         assertNotNull(snapshot)
 
-        assertEquals(0, repository.getActiveSessions("guest", Mode.CUBE_3x3).size)
+        assertEquals(0, repository.observeActiveSessions("guest", Mode.CUBE_3x3).first().size)
         assertEquals(0, database.solveDao().getSolvesBySession("guest", session.id).size)
 
         repository.restoreSessionWithSolves(snapshot!!, ownerId = "guest")
@@ -115,8 +116,8 @@ class SessionCascadeDeleteRepositoryTest {
         val restoredSession = repository.getSessionById(session.id)
         assertNotNull(restoredSession)
         assertNull("Restored session deletedAt must be null", restoredSession?.deletedAt)
-        assertFalse(restoredSession!!.isDeleted)
-        assertEquals(1, repository.getActiveSessions("guest", Mode.CUBE_3x3).size)
+        assertFalse(restoredSession!!.deletedAt != null)
+        assertEquals(1, repository.observeActiveSessions("guest", Mode.CUBE_3x3).first().size)
 
         val restoredSolves = database.solveDao().getSolvesBySession("guest", session.id)
         assertEquals(1, restoredSolves.size)

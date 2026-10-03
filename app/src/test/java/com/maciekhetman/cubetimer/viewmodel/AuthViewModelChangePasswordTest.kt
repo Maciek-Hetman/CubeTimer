@@ -382,13 +382,10 @@ class AuthViewModelChangePasswordTest {
         override suspend fun initialize() = Unit
         override suspend fun register(email: String, password: String): AuthResult<Unit> = throw NotImplementedError()
         override suspend fun login(email: String, password: String): AuthResult<User> = throw NotImplementedError()
-        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String): AuthResult<User> =
-            throw NotImplementedError()
         override suspend fun verifyEmail(token: String): AuthResult<User> = throw NotImplementedError()
         override suspend fun resendVerificationEmail(email: String): AuthResult<Unit> = throw NotImplementedError()
         override suspend fun requestPasswordReset(email: String): AuthResult<Unit> = throw NotImplementedError()
         override suspend fun resetPassword(token: String, newPassword: String): AuthResult<User> = throw NotImplementedError()
-        override suspend fun refreshSession(): AuthResult<User> = throw NotImplementedError()
         override suspend fun logout(): AuthResult<Unit> = throw NotImplementedError()
         override suspend fun adoptGuestData(userId: String) = Unit
     }

@@ -48,6 +48,13 @@ interface SyncMetadataDao {
     """)
     suspend fun setSyncError(ownerId: String, error: String?): Int
 
+    /**
+     * Clears every owner's `is_syncing`. For process start only: a sync cut short by a process
+     * death never got to clear its own flag, and nothing else would until a later sync finishes.
+     */
+    @Query("UPDATE sync_metadata SET is_syncing = 0 WHERE is_syncing = 1")
+    suspend fun clearStaleSyncingFlags(): Int
+
     @Query("DELETE FROM sync_metadata WHERE owner_id = :ownerId")
     suspend fun deleteForOwner(ownerId: String): Int
 }

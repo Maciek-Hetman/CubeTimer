@@ -96,17 +96,4 @@ class SyncSchedulerTest {
         assertNotNull(workInfos)
         assertTrue(workInfos.all { it.state == WorkInfo.State.CANCELLED })
     }
-
-    @Test
-    fun cancelAllSync_cancelsAllSyncWork() {
-        scheduler.schedulePeriodicSync()
-        scheduler.scheduleImmediateSync()
-        scheduler.cancelAllSync()
-
-        val periodic = workManager.getWorkInfosForUniqueWork(WorkManagerSyncScheduler.WORK_NAME_PERIODIC).get()
-        assertTrue(periodic.all { it.state == WorkInfo.State.CANCELLED })
-
-        val immediate = workManager.getWorkInfosForUniqueWork(WorkManagerSyncScheduler.WORK_NAME_IMMEDIATE).get()
-        assertTrue(immediate.all { it.state == WorkInfo.State.CANCELLED })
-    }
 }

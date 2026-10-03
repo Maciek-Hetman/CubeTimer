@@ -1,6 +1,5 @@
 package com.maciekhetman.cubetimer.ui.screens
 
-import android.text.format.DateFormat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -25,22 +24,25 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.maciekhetman.cubetimer.R
 import com.maciekhetman.cubetimer.domain.AverageCalculator
 import com.maciekhetman.cubetimer.domain.TimeFormatter
+import com.maciekhetman.cubetimer.domain.session.AutomaticSessionHelper
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Penalty
 import com.maciekhetman.cubetimer.model.SolveTime
@@ -48,12 +50,11 @@ import com.maciekhetman.cubetimer.ui.components.ActivityTracker
 import com.maciekhetman.cubetimer.ui.components.SectionHeader
 import com.maciekhetman.cubetimer.ui.components.CollapsingTopBar
 import com.maciekhetman.cubetimer.ui.components.SessionFilterBar
+import com.maciekhetman.cubetimer.ui.components.formatDateTime
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.maciekhetman.cubetimer.viewmodel.TimerViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.text.SimpleDateFormat
-import java.util.*
 
 import com.maciekhetman.cubetimer.model.StatsFilter
 
@@ -72,21 +73,17 @@ fun StatsScreen(
     // Plain local copy so the null checks below can smart-cast it.
     val effectiveActiveSession = activeSessionState
     val appTimeMillis by viewModel.appTimeMillis.collectAsStateWithLifecycle()
-    val snackbarHostState = remember { SnackbarHostState() }
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
-    val layoutDirection = LocalLayoutDirection.current
-    val haptic = LocalHapticFeedback.current
 
     val activeSessionSolvesCount = remember(solves, effectiveActiveSession) {
         val activeId = effectiveActiveSession?.id
-        if (activeId != null) solves.count { it.sessionId == activeId } else solves.size
+        if (activeId != null) solves.count { it.sessionId == activeId } else 0
     }
 
     Scaffold(
         modifier = modifier
             .fillMaxSize()
             .nestedScroll(scrollBehavior.nestedScrollConnection),
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             CollapsingTopBar(
                 title = stringResource(R.string.stats_title),
@@ -114,7 +111,6 @@ fun StatsScreen(
                 SessionFilterBar(
                     currentFilter = statsFilter,
                     onFilterSelected = { viewModel.setStatsFilter(it) },
-                    activeSession = effectiveActiveSession,
                     activeSessionSolvesCount = activeSessionSolvesCount,
                     allSolvesCount = solves.size
                 )
@@ -194,12 +190,21 @@ fun StatsScreen(
 
 @Composable
 private fun ChartsSection(solves: List<SolveTime>) {
+    // The PB chart and the averages chart draw the rolling Ao5/Ao12 of every solve. Work them out once,
+    // and the PBs from them, off the main thread so these always-visible charts never block composition.
+    val chartData by produceState<ChartData?>(initialValue = null, solves) {
+        value = withContext(Dispatchers.Default) {
+            val rolling = calculateRollingAverages(solves)
+            ChartData(rolling, calculatePersonalBests(solves, rolling))
+        }
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         SectionHeader(title = stringResource(R.string.stats_charts))
 
-        PersonalBestsChart(solves = solves)
+        PersonalBestsChart(solves = solves, pbData = chartData?.personalBests)
         SolveTimesChart(solves = solves)
-        AveragesChart(solves = solves)
+        AveragesChart(rollingAverages = chartData?.rolling)
     }
 }
 
@@ -241,7 +246,7 @@ fun StatsHeroCard(
                 )
                 if (allTimePb != null) {
                     Text(
-                        text = formatTimestamp(allTimePb.timestamp),
+                        text = formatDateTime(allTimePb.timestamp),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -254,7 +259,7 @@ fun StatsHeroCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = if (allTimePb != null) formatTime(allTimePb.displayTime) else "--",
+                    text = if (allTimePb != null) TimeFormatter.formatTime(allTimePb.displayTime) else "--",
                     style = MaterialTheme.typography.displayMedium,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
@@ -320,24 +325,6 @@ fun StatsHeroCard(
 }
 
 @Composable
-fun StatsHeroCard(
-    solves: List<SolveTime>,
-    modifier: Modifier = Modifier
-) {
-    val allTimePb = remember(solves) {
-        solves.filter { it.penalty != Penalty.DNF }.minByOrNull { it.displayTime }
-    }
-    val sessionAo5 = remember(solves) { AverageCalculator.averageOfN(solves, 5) }
-    val sessionAo12 = remember(solves) { AverageCalculator.averageOfN(solves, 12) }
-    StatsHeroCard(
-        allTimePb = allTimePb,
-        sessionAo5 = sessionAo5,
-        sessionAo12 = sessionAo12,
-        modifier = modifier
-    )
-}
-
-@Composable
 private fun SessionAveragePill(
     label: String,
     time: Long?,
@@ -362,7 +349,7 @@ private fun SessionAveragePill(
                 fontWeight = FontWeight.Medium
             )
             Text(
-                text = if (time != null) formatTime(time) else "--",
+                text = if (time != null) TimeFormatter.formatTime(time) else "--",
                 style = MaterialTheme.typography.labelLarge,
                 fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.Bold,
@@ -471,7 +458,7 @@ private fun StandardAverageCard(
             }
 
             Text(
-                text = if (item.current != null) formatTime(item.current) else "--",
+                text = if (item.current != null) TimeFormatter.formatTime(item.current) else "--",
                 style = MaterialTheme.typography.titleLarge,
                 fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.Bold,
@@ -490,7 +477,7 @@ private fun StandardAverageCard(
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = if (item.best != null) formatTime(item.best) else "--",
+                    text = if (item.best != null) TimeFormatter.formatTime(item.best) else "--",
                     style = MaterialTheme.typography.bodySmall,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.SemiBold,
@@ -644,7 +631,7 @@ private fun LargeAveragesSection(
 
     val badgeText = remember(averagesData) {
         val ao500 = averagesData?.get(500)?.first
-        if (ao500 != null) "Ao500: ${formatTime(ao500)}" else "Ao500 • Ao1000 • Ao2000"
+        if (ao500 != null) "Ao500: ${TimeFormatter.formatTime(ao500)}" else "Ao500 • Ao1000 • Ao2000"
     }
 
     CollapsibleSectionCard(
@@ -703,7 +690,7 @@ private fun LargeAveragesSection(
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         Text(
-                            text = if (current != null) formatTime(current) else stringResource(R.string.stats_not_available),
+                            text = if (current != null) TimeFormatter.formatTime(current) else stringResource(R.string.stats_not_available),
                             style = MaterialTheme.typography.titleMedium,
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Bold,
@@ -711,7 +698,7 @@ private fun LargeAveragesSection(
                         )
                         if (best != null) {
                             Text(
-                                text = stringResource(R.string.stats_pb_time, formatTime(best)),
+                                text = stringResource(R.string.stats_pb_time, TimeFormatter.formatTime(best)),
                                 style = MaterialTheme.typography.labelSmall,
                                 fontFamily = FontFamily.Monospace,
                                 color = MaterialTheme.colorScheme.primary,
@@ -794,13 +781,13 @@ private fun SessionMetricsSection(
             ) {
                 StatCard(
                     label = stringResource(R.string.stats_session_best),
-                    value = formatTime(sessionStats.bestSessionTime),
+                    value = TimeFormatter.formatTime(sessionStats.bestSessionTime),
                     modifier = Modifier.weight(1f),
                     containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                 )
                 StatCard(
                     label = stringResource(R.string.stats_session_worst),
-                    value = formatTime(sessionStats.worstSessionTime),
+                    value = TimeFormatter.formatTime(sessionStats.worstSessionTime),
                     modifier = Modifier.weight(1f),
                     containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                 )
@@ -811,13 +798,13 @@ private fun SessionMetricsSection(
             ) {
                 StatCard(
                     label = stringResource(R.string.stats_session_avg),
-                    value = formatTime(sessionStats.sessionAverage),
+                    value = TimeFormatter.formatTime(sessionStats.sessionAverage),
                     modifier = Modifier.weight(1f),
                     containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                 )
                 StatCard(
                     label = stringResource(R.string.stats_mean_solve),
-                    value = formatTime(sessionStats.meanSolveTime),
+                    value = TimeFormatter.formatTime(sessionStats.meanSolveTime),
                     modifier = Modifier.weight(1f),
                     containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                 )
@@ -828,7 +815,7 @@ private fun SessionMetricsSection(
             ) {
                 StatCard(
                     label = stringResource(R.string.stats_session_std_dev),
-                    value = formatTime(sessionStats.standardDeviation.toLong()),
+                    value = TimeFormatter.formatTime(sessionStats.standardDeviation.toLong()),
                     modifier = Modifier.weight(1f),
                     containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                 )
@@ -853,7 +840,7 @@ private fun SessionMetricsSection(
             )
             StatCard(
                 label = stringResource(R.string.stats_all_time_mean),
-                value = formatTime(allTimeMean),
+                value = TimeFormatter.formatTime(allTimeMean),
                 modifier = Modifier.weight(1f),
                 containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
             )
@@ -864,7 +851,7 @@ private fun SessionMetricsSection(
         ) {
             StatCard(
                 label = stringResource(R.string.stats_std_dev),
-                value = formatTime(allTimeStdDev.toLong()),
+                value = TimeFormatter.formatTime(allTimeStdDev.toLong()),
                 modifier = Modifier.weight(1f),
                 containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
             )
@@ -898,9 +885,7 @@ private data class PenaltyDistributionData(
     val dnfCount: Int,
     val plusTwoCount: Int,
     val dnfPercent: Int,
-    val plusTwoPercent: Int,
-    val cleanCount: Int,
-    val cleanPercent: Int
+    val plusTwoPercent: Int
 )
 
 @Composable
@@ -910,15 +895,13 @@ private fun PenaltyStatsSection(
 ) {
     var isExpanded by rememberSaveable { mutableStateOf(false) }
 
-    val (dnfCount, plusTwoCount, dnfPercent, plusTwoPercent, cleanCount, cleanPercent) = remember(solves) {
+    val (dnfCount, plusTwoCount, dnfPercent, plusTwoPercent) = remember(solves) {
         val dnf = solves.count { it.penalty == Penalty.DNF }
         val plusTwo = solves.count { it.penalty == Penalty.PLUS_TWO }
         val total = solves.size.toFloat()
         val dnfPct = if (total > 0) (dnf / total * 100).toInt() else 0
         val plusTwoPct = if (total > 0) (plusTwo / total * 100).toInt() else 0
-        val clean = solves.size - dnf - plusTwo
-        val cleanPct = if (total > 0) (clean / total * 100).toInt() else 100
-        PenaltyDistributionData(dnf, plusTwo, dnfPct, plusTwoPct, clean, cleanPct)
+        PenaltyDistributionData(dnf, plusTwo, dnfPct, plusTwoPct)
     }
 
     val badgeText = if (dnfCount + plusTwoCount == 0) {
@@ -957,19 +940,13 @@ private fun PenaltyStatsSection(
 }
 
 @Composable
-private fun PersonalBestsChart(solves: List<SolveTime>) {
+private fun PersonalBestsChart(solves: List<SolveTime>, pbData: PersonalBestsData?) {
     var selectedRange by remember { mutableStateOf(ChartRange.ALL) }
     val haptic = LocalHapticFeedback.current
     val validSolves = remember(solves) { solves.filter { it.penalty != Penalty.DNF } }
 
     if (validSolves.isEmpty()) {
         return
-    }
-
-    // calculatePersonalBests walks every solve computing rolling Ao5/Ao12 windows; keep it off
-    // the main thread so this always-visible chart never blocks composition.
-    val pbData by produceState<PersonalBestsData?>(initialValue = null, solves) {
-        value = withContext(Dispatchers.Default) { calculatePersonalBests(solves) }
     }
 
     Surface(
@@ -1045,15 +1022,9 @@ private fun PersonalBestsChart(solves: List<SolveTime>) {
                         .height(200.dp)
                 ) {
                     val width = size.width
-                    val height = size.height
-                    val padding = 40f
+                    val padding = ChartPadding
                     
-                    val minValue = allPBs.minOrNull() ?: 0L
-                    val maxValue = allPBs.maxOrNull() ?: 1L
-                    val range = (maxValue - minValue).coerceAtLeast(1L)
-                    // Add 10% padding to the range to ensure lines don't overlap with axes
-                    val displayRange = range * 1.1f
-                    val displayMin = minValue - (range * 0.05f).toLong()
+                    val yOf = chartYScale(allPBs)
                     val indexRange = (rangeEndIndex - rangeStartIndex).coerceAtLeast(1)
                     
                     // Helper function to draw PB line
@@ -1066,7 +1037,7 @@ private fun PersonalBestsChart(solves: List<SolveTime>) {
                         // Draw line through all PB points
                         pbs.forEach { (solveIndex, pbTime) ->
                             val x = padding + ((solveIndex - rangeStartIndex).toFloat() / indexRange) * (width - 2 * padding)
-                            val y = height - padding - ((pbTime - displayMin).toFloat() / displayRange) * (height - 2 * padding)
+                            val y = yOf(pbTime)
                             
                             if (firstPoint) {
                                 path.moveTo(x, y)
@@ -1081,7 +1052,7 @@ private fun PersonalBestsChart(solves: List<SolveTime>) {
                         // Extend line to the end of the chart (current PB holds)
                         val lastPB = pbs.last()
                         val lastX = padding + ((lastPB.first - rangeStartIndex).toFloat() / indexRange) * (width - 2 * padding)
-                        val lastY = height - padding - ((lastPB.second - displayMin).toFloat() / displayRange) * (height - 2 * padding)
+                        val lastY = yOf(lastPB.second)
                         val endX = width - padding
                         
                         if (lastX < endX) {
@@ -1097,18 +1068,7 @@ private fun PersonalBestsChart(solves: List<SolveTime>) {
                     drawPBLine(visibleSinglePBs, singleColor)
                     
                     // Draw axes
-                    drawLine(
-                        onSurfaceVariant,
-                        Offset(padding, height - padding),
-                        Offset(width - padding, height - padding),
-                        strokeWidth = 2f
-                    )
-                    drawLine(
-                        onSurfaceVariant,
-                        Offset(padding, padding),
-                        Offset(padding, height - padding),
-                        strokeWidth = 2f
-                    )
+                    drawChartAxes(onSurfaceVariant)
                 }
 
                 ChartRangeSelector(
@@ -1134,54 +1094,9 @@ private fun PersonalBestsChart(solves: List<SolveTime>) {
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Surface(
-                                    modifier = Modifier.size(12.dp),
-                                    color = singleColor,
-                                    shape = MaterialTheme.shapes.extraSmall
-                                ) {}
-                                Text(
-                                    text = stringResource(R.string.stats_single),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Surface(
-                                    modifier = Modifier.size(12.dp),
-                                    color = ao5Color,
-                                    shape = MaterialTheme.shapes.extraSmall
-                                ) {}
-                                Text(
-                                    text = "Ao5",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Surface(
-                                    modifier = Modifier.size(12.dp),
-                                    color = ao12Color,
-                                    shape = MaterialTheme.shapes.extraSmall
-                                ) {}
-                                Text(
-                                    text = "Ao12",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
+                            ChartLegendItem(color = singleColor, label = stringResource(R.string.stats_single))
+                            ChartLegendItem(color = ao5Color, label = "Ao5")
+                            ChartLegendItem(color = ao12Color, label = "Ao12")
                         }
                     }
                 }
@@ -1251,36 +1166,20 @@ private fun SolveTimesChart(solves: List<SolveTime>) {
                         .height(200.dp)
                 ) {
                     val width = size.width
-                    val height = size.height
-                    val padding = 40f
-                    val minValue = values.minOrNull() ?: 0L
-                    val maxValue = values.maxOrNull() ?: 1L
-                    val range = (maxValue - minValue).coerceAtLeast(1L)
-                    val displayRange = range * 1.1f
-                    val displayMin = minValue - (range * 0.05f).toLong()
+                    val padding = ChartPadding
+                    val yOf = chartYScale(values)
                     val rangeEndIndex = (solves.size - 1).coerceAtLeast(rangeStartIndex + 1)
                     val indexRange = (rangeEndIndex - rangeStartIndex).coerceAtLeast(1)
                     val path = Path()
 
                     smoothed.forEachIndexed { index, (solveIndex, time) ->
                         val x = padding + ((solveIndex - rangeStartIndex).toFloat() / indexRange) * (width - 2 * padding)
-                        val y = height - padding - ((time - displayMin).toFloat() / displayRange) * (height - 2 * padding)
+                        val y = yOf(time)
                         if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
                     }
 
                     drawPath(path, lineColor, style = Stroke(width = 6f))
-                    drawLine(
-                        axisColor,
-                        Offset(padding, height - padding),
-                        Offset(width - padding, height - padding),
-                        strokeWidth = 2f
-                    )
-                    drawLine(
-                        axisColor,
-                        Offset(padding, padding),
-                        Offset(padding, height - padding),
-                        strokeWidth = 2f
-                    )
+                    drawChartAxes(axisColor)
                 }
             }
 
@@ -1296,15 +1195,9 @@ private fun SolveTimesChart(solves: List<SolveTime>) {
 }
 
 @Composable
-private fun AveragesChart(solves: List<SolveTime>) {
+private fun AveragesChart(rollingAverages: RollingAveragesData?) {
     var selectedRange by remember { mutableStateOf(ChartRange.ALL) }
     val haptic = LocalHapticFeedback.current
-
-    // calculateRollingAverages computes a trimmed-mean window for every solve; keep it off the
-    // main thread so this always-visible chart never blocks composition.
-    val rollingAverages by produceState<RollingAveragesData?>(initialValue = null, solves) {
-        value = withContext(Dispatchers.Default) { calculateRollingAverages(solves) }
-    }
 
     Surface(
         modifier = Modifier
@@ -1368,7 +1261,7 @@ private fun AveragesChart(solves: List<SolveTime>) {
             ) {
                 val width = size.width
                 val height = size.height
-                val padding = 40f
+                val padding = ChartPadding
                 
                 val minValue = allValues.minOrNull() ?: 0L
                 val maxValue = allValues.maxOrNull() ?: 1L
@@ -1415,18 +1308,7 @@ private fun AveragesChart(solves: List<SolveTime>) {
             }
             
             // Draw axes
-            drawLine(
-                onSurfaceVariant,
-                Offset(padding, height - padding),
-                Offset(width - padding, height - padding),
-                strokeWidth = 2f
-            )
-            drawLine(
-                onSurfaceVariant,
-                Offset(padding, padding),
-                Offset(padding, height - padding),
-                strokeWidth = 2f
-            )
+            drawChartAxes(onSurfaceVariant)
             }
         }
         
@@ -1448,46 +1330,26 @@ private fun AveragesChart(solves: List<SolveTime>) {
                     color = MaterialTheme.colorScheme.surfaceContainer,
                     shape = RoundedCornerShape(16.dp)
                 ) {
-                    Row(
+                    ChartLegendItem(
+                        color = ao5Color,
+                        label = "Ao5",
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Surface(
-                            modifier = Modifier.size(12.dp),
-                            color = ao5Color,
-                            shape = MaterialTheme.shapes.extraSmall
-                        ) {}
-                        Text(
-                            text = "Ao5",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                        labelStyle = MaterialTheme.typography.labelLarge,
+                        spacing = 8.dp
+                    )
                 }
                 Spacer(modifier = Modifier.width(12.dp))
                 Surface(
                     color = MaterialTheme.colorScheme.surfaceContainer,
                     shape = RoundedCornerShape(16.dp)
                 ) {
-                    Row(
+                    ChartLegendItem(
+                        color = ao12Color,
+                        label = "Ao12",
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Surface(
-                            modifier = Modifier.size(12.dp),
-                            color = ao12Color,
-                            shape = MaterialTheme.shapes.extraSmall
-                        ) {}
-                        Text(
-                            text = "Ao12",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                        labelStyle = MaterialTheme.typography.labelLarge,
+                        spacing = 8.dp
+                    )
                 }
             }
         }
@@ -1527,6 +1389,69 @@ private fun ChartRangeSelector(
 private fun rangeStartIndex(solveCount: Int, selectedRange: ChartRange): Int {
     val visibleCount = selectedRange.solveCount ?: solveCount
     return (solveCount - visibleCount).coerceAtLeast(0)
+}
+
+/** Space kept free around a chart's plot area, in pixels; the axes run along its inner edges. */
+private const val ChartPadding = 40f
+
+/** Draws the x axis along the bottom and the y axis along the left edge of the plot area. */
+private fun DrawScope.drawChartAxes(color: Color) {
+    drawLine(
+        color,
+        Offset(ChartPadding, size.height - ChartPadding),
+        Offset(size.width - ChartPadding, size.height - ChartPadding),
+        strokeWidth = 2f
+    )
+    drawLine(
+        color,
+        Offset(ChartPadding, ChartPadding),
+        Offset(ChartPadding, size.height - ChartPadding),
+        strokeWidth = 2f
+    )
+}
+
+/**
+ * Maps a value to its y position in the plot area. The lowest and highest of [values] sit 5% of their
+ * range inside the bottom and top edges, so lines don't run along the axes.
+ */
+private fun DrawScope.chartYScale(values: List<Long>): (Long) -> Float {
+    val height = size.height
+    val minValue = values.minOrNull() ?: 0L
+    val maxValue = values.maxOrNull() ?: 1L
+    val range = (maxValue - minValue).coerceAtLeast(1L)
+    val displayRange = range * 1.1f
+    val displayMin = minValue - (range * 0.05f).toLong()
+    return { value ->
+        height - ChartPadding - ((value - displayMin).toFloat() / displayRange) * (height - 2 * ChartPadding)
+    }
+}
+
+/** A chart legend entry: a swatch in the series' [color] followed by its [label]. */
+@Composable
+private fun ChartLegendItem(
+    color: Color,
+    label: String,
+    modifier: Modifier = Modifier,
+    labelStyle: TextStyle = MaterialTheme.typography.labelMedium,
+    spacing: Dp = 6.dp
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(spacing)
+    ) {
+        Surface(
+            modifier = Modifier.size(12.dp),
+            color = color,
+            shape = MaterialTheme.shapes.extraSmall
+        ) {}
+        Text(
+            text = label,
+            style = labelStyle,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
 }
 
 @Composable
@@ -1633,17 +1558,6 @@ private enum class ChartRange(val solveCount: Int?) {
     ALL(null)
 }
 
-private fun formatTime(millis: Long): String {
-    return TimeFormatter.formatTime(millis)
-}
-
-private fun formatTimestamp(timestamp: Long): String {
-    // Not cached: the app's language can change while it runs (system per-app language setting).
-    val locale = Locale.getDefault()
-    val pattern = DateFormat.getBestDateTimePattern(locale, "MMMddyyyyHHmm")
-    return SimpleDateFormat(pattern, locale).format(Date(timestamp))
-}
-
 // Session calculation: group solves with max 1 hour gap between consecutive solves
 private data class AutoCalculatedSession(
     val solves: List<SolveTime>,
@@ -1655,7 +1569,6 @@ private fun calculateSessions(solves: List<SolveTime>): List<AutoCalculatedSessi
     if (solves.isEmpty()) return emptyList()
     
     val sessions = mutableListOf<AutoCalculatedSession>()
-    val oneHourInMillis = 60 * 60 * 1000L
     
     var currentSession = mutableListOf<SolveTime>()
     var sessionStart = solves.first().timestamp
@@ -1669,7 +1582,7 @@ private fun calculateSessions(solves: List<SolveTime>): List<AutoCalculatedSessi
         } else {
             val timeSinceLastSolve = solve.timestamp - currentSession.last().timestamp
             
-            if (timeSinceLastSolve > oneHourInMillis) {
+            if (timeSinceLastSolve > AutomaticSessionHelper.DEFAULT_INACTIVITY_GAP_MILLIS) {
                 // Start new session
                 sessions.add(AutoCalculatedSession(
                     solves = currentSession.toList(),
@@ -1745,43 +1658,36 @@ private data class PersonalBestsData(
     val ao12PBs: List<Pair<Int, Long>>
 )
 
-private fun calculatePersonalBests(solves: List<SolveTime>): PersonalBestsData {
-    val singlePBs = mutableListOf<Pair<Int, Long>>()
-    val ao5PBs = mutableListOf<Pair<Int, Long>>()
-    val ao12PBs = mutableListOf<Pair<Int, Long>>()
-    var bestSingle = Long.MAX_VALUE
-    var bestAo5 = Long.MAX_VALUE
-    var bestAo12 = Long.MAX_VALUE
+/** The PB progressions of [solves]; the Ao5 and Ao12 ones are read off the [rolling] averages, not recomputed. */
+private fun calculatePersonalBests(solves: List<SolveTime>, rolling: RollingAveragesData): PersonalBestsData =
+    PersonalBestsData(
+        singlePBs = personalBestProgression(solves.map { if (it.penalty != Penalty.DNF) it.displayTime else null }),
+        ao5PBs = personalBestProgression(rolling.ao5List),
+        ao12PBs = personalBestProgression(rolling.ao12List)
+    )
 
-    for (i in solves.indices) {
-        val solve = solves[i]
-        if (solve.penalty != Penalty.DNF && solve.displayTime < bestSingle) {
-            bestSingle = solve.displayTime
-            singlePBs.add(i to bestSingle)
-        }
-        if (i >= 4) {
-            AverageCalculator.averageWindow(solves.subList(i - 4, i + 1))?.let { avg ->
-                if (avg < bestAo5) {
-                    bestAo5 = avg
-                    ao5PBs.add(i to bestAo5)
-                }
-            }
-        }
-        if (i >= 11) {
-            AverageCalculator.averageWindow(solves.subList(i - 11, i + 1))?.let { avg ->
-                if (avg < bestAo12) {
-                    bestAo12 = avg
-                    ao12PBs.add(i to bestAo12)
-                }
-            }
+/** The (index, value) pairs at which [values] reach a new best (lowest) value; null entries are skipped. */
+private fun personalBestProgression(values: List<Long?>): List<Pair<Int, Long>> {
+    val progression = mutableListOf<Pair<Int, Long>>()
+    var best = Long.MAX_VALUE
+    values.forEachIndexed { index, value ->
+        if (value != null && value < best) {
+            best = value
+            progression.add(index to value)
         }
     }
-    return PersonalBestsData(singlePBs, ao5PBs, ao12PBs)
+    return progression
 }
 
 private data class RollingAveragesData(
     val ao5List: List<Long?>,
     val ao12List: List<Long?>
+)
+
+/** What the PB chart and the averages chart draw: the rolling averages, and the PBs read off them. */
+private data class ChartData(
+    val rolling: RollingAveragesData,
+    val personalBests: PersonalBestsData
 )
 
 private fun calculateRollingAverages(solves: List<SolveTime>): RollingAveragesData {
