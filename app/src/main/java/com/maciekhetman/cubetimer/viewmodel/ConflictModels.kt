@@ -10,9 +10,8 @@ import com.maciekhetman.cubetimer.data.remote.dto.SessionSyncPayload
 import com.maciekhetman.cubetimer.data.remote.dto.SolveSnapshotDto
 import com.maciekhetman.cubetimer.data.remote.dto.SolveSyncPayload
 import com.maciekhetman.cubetimer.domain.TimeFormatter
+import com.maciekhetman.cubetimer.ui.components.formatDateTime
 import kotlinx.serialization.json.Json
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 
@@ -165,8 +164,6 @@ object ConflictUiMapper {
     private fun formatDate(iso: String, timeZone: TimeZone): String? {
         val millis = CubeTypeConverters.isoToEpochMillis(iso)
         if (millis <= 0L) return null
-        val format = SimpleDateFormat("d MMM yyyy, HH:mm", Locale.getDefault())
-        format.timeZone = timeZone
-        return format.format(Date(millis))
+        return formatDateTime(millis, timeZone)
     }
 }

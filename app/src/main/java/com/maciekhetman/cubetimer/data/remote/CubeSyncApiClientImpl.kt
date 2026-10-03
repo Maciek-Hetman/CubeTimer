@@ -61,42 +61,30 @@ class CubeSyncApiClientImpl(
     ): com.maciekhetman.cubetimer.data.remote.dto.SnapshotResponse =
         executeSafe { apiService.snapshot(request) }
 
-    private suspend fun <T : Any> executeSafe(call: suspend () -> Response<T>): T {
-        try {
-            val response = call()
-            if (response.isSuccessful) {
-                val body = response.body()
-                if (body != null) {
-                    return body
-                }
-                throw AuthException.Unknown("Server returned empty body with status ${response.code()}")
-            }
-
-            val errorBodyString = response.errorBody()?.string()
-            val apiError = ErrorParser.parseApiError(errorBodyString)
-            val code = apiError?.error?.code
-            val message = apiError?.error?.message ?: response.message().ifBlank { "HTTP Error ${response.code()}" }
-
-            throw ErrorParser.toAuthException(code, message, response.code())
-        } catch (e: CancellationException) {
-            // Structured concurrency: a cancelled call is not an API failure, let it propagate.
-            throw e
-        } catch (e: AuthException) {
-            throw e
-        } catch (e: IOException) {
-            throw AuthException.NetworkError("Network request failed: ${e.message}", e)
-        } catch (e: SerializationException) {
-            throw AuthException.SerializationError("Failed to deserialize response: ${e.message}", e)
-        } catch (e: Exception) {
-            throw AuthException.Unknown("Unexpected error occurred: ${e.message}", e)
+    private suspend fun <T : Any> executeSafe(call: suspend () -> Response<T>): T =
+        executeGuarded(call) { response ->
+            response.body()
+                ?: throw AuthException.Unknown("Server returned empty body with status ${response.code()}")
         }
-    }
 
     private suspend fun executeSafeUnit(call: suspend () -> Response<Unit>) {
+        executeGuarded(call) { }
+    }
+
+    /**
+     * Runs [call] and turns every way it can fail into an [AuthException]: a non-2xx response into
+     * the server's own error, an I/O or (de)serialization failure into a network or serialization
+     * error. [onSuccess] maps a 2xx response to the result. It runs inside the same guard, so an
+     * [AuthException] it throws passes through unchanged.
+     */
+    private suspend fun <T, R> executeGuarded(
+        call: suspend () -> Response<T>,
+        onSuccess: (Response<T>) -> R
+    ): R {
         try {
             val response = call()
             if (response.isSuccessful) {
-                return
+                return onSuccess(response)
             }
 
             val errorBodyString = response.errorBody()?.string()

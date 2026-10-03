@@ -803,7 +803,7 @@ private fun AverageStat(
         )
         Spacer(modifier = Modifier.height(2.dp))
         Text(
-            text = time?.let { formatDisplayTime(it) } ?: "DNF",
+            text = time?.let { TimeFormatter.formatTime(it) } ?: "DNF",
             style = MaterialTheme.typography.titleSmall,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Bold,
@@ -856,7 +856,7 @@ private fun RecentSolvesDisplay(
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 ) {
                     Text(
-                        text = formatDisplayTime(solve.displayTime),
+                        text = TimeFormatter.formatTime(solve.displayTime),
                         style = MaterialTheme.typography.labelSmall,
                         fontSize = dynamicFontSize,
                         fontFamily = FontFamily.Monospace,
@@ -874,10 +874,6 @@ private fun RecentSolvesDisplay(
             }
         }
     }
-}
-
-private fun formatDisplayTime(millis: Long): String {
-    return TimeFormatter.formatTime(millis)
 }
 
 @Composable
@@ -1068,7 +1064,7 @@ private fun RecordCelebrationOverlay(
                             )
                         }
                         Text(
-                            text = formatDisplayTime(it.time),
+                            text = TimeFormatter.formatTime(it.time),
                             style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary,

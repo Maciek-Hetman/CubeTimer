@@ -420,28 +420,14 @@ class AuthViewModel(
             _formState.update { it.copy(emailError = text(R.string.auth_msg_email_required)) }
             valid = false
         }
-        if (state.password.length < 10) {
-            _formState.update { it.copy(passwordError = text(R.string.auth_msg_password_too_short)) }
-            valid = false
-        }
-        if (state.password != state.confirmPassword) {
-            _formState.update { it.copy(confirmPasswordError = text(R.string.auth_msg_passwords_mismatch)) }
-            valid = false
-        }
+        if (!validateNewPassword(state)) valid = false
         return valid
     }
 
     private fun validateResetPasswordForm(state: AuthFormState): Boolean {
         var valid = true
         if (state.token.isBlank()) valid = false
-        if (state.password.length < 10) {
-            _formState.update { it.copy(passwordError = text(R.string.auth_msg_password_too_short)) }
-            valid = false
-        }
-        if (state.password != state.confirmPassword) {
-            _formState.update { it.copy(confirmPasswordError = text(R.string.auth_msg_passwords_mismatch)) }
-            valid = false
-        }
+        if (!validateNewPassword(state)) valid = false
         return valid
     }
 
@@ -451,10 +437,20 @@ class AuthViewModel(
             _formState.update { it.copy(currentPasswordError = text(R.string.auth_msg_current_password_required)) }
             valid = false
         }
-        if (state.password.length < 10) {
+        if (!validateNewPassword(state)) valid = false
+        return valid
+    }
+
+    /**
+     * Checks the new password in [state] the way the server does (10 to 128 characters, see
+     * [AuthException.InvalidPassword]) and that its confirmation matches, flagging the field at fault.
+     */
+    private fun validateNewPassword(state: AuthFormState): Boolean {
+        var valid = true
+        if (state.password.length < MIN_PASSWORD_LENGTH) {
             _formState.update { it.copy(passwordError = text(R.string.auth_msg_password_too_short)) }
             valid = false
-        } else if (state.password.length > 128) {
+        } else if (state.password.length > MAX_PASSWORD_LENGTH) {
             _formState.update { it.copy(passwordError = text(R.string.auth_msg_password_too_long)) }
             valid = false
         }
@@ -499,5 +495,7 @@ class AuthViewModel(
 
     private companion object {
         const val TAG = "AuthViewModel"
+        const val MIN_PASSWORD_LENGTH = 10
+        const val MAX_PASSWORD_LENGTH = 128
     }
 }

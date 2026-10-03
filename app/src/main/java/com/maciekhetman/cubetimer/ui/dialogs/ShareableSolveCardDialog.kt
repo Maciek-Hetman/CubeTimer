@@ -8,7 +8,6 @@ import android.content.res.Resources
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
-import android.text.format.DateFormat
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
@@ -74,15 +73,13 @@ import com.maciekhetman.cubetimer.model.Penalty
 import com.maciekhetman.cubetimer.model.SolveTime
 import com.maciekhetman.cubetimer.model.TimingDevice
 import com.maciekhetman.cubetimer.ui.components.Scramble2DPreview
+import com.maciekhetman.cubetimer.ui.components.formatDateTime
 import com.maciekhetman.cubetimer.viewmodel.SolveDetailState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 /**
  * State holder for capturing composable drawings into an [android.graphics.Picture].
@@ -139,12 +136,6 @@ fun Modifier.recordPicture(captureState: PictureCaptureState): Modifier = this.d
  */
 object SolveShareHelper {
 
-    /** In the app's language; not cached, as that can change while the app runs. */
-    fun formatSolveDate(timestamp: Long): String {
-        val locale = Locale.getDefault()
-        return SimpleDateFormat(DateFormat.getBestDateTimePattern(locale, "yMMMdjmm"), locale).format(Date(timestamp))
-    }
-
     fun formatShareText(
         resources: Resources,
         solve: SolveTime,
@@ -157,7 +148,7 @@ object SolveShareHelper {
             Penalty.NONE -> "${TimeFormatter.formatTime(solve.displayTime)}s"
         }
         val pbSuffix = if (isPb && !pbDeltaText.isNullOrBlank()) " [$pbDeltaText]" else ""
-        val formattedDate = formatSolveDate(solve.timestamp)
+        val formattedDate = formatDateTime(solve.timestamp)
 
         return buildString {
             appendLine(resources.getString(R.string.share_text_title, solve.mode.displayName))
@@ -335,7 +326,7 @@ fun ShareableSolveCardDialog(
 
                         // Formatted Date
                         Text(
-                            text = SolveShareHelper.formatSolveDate(solve.timestamp),
+                            text = formatDateTime(solve.timestamp),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                         )

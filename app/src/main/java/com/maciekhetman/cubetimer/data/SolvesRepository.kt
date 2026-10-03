@@ -11,6 +11,7 @@ import com.maciekhetman.cubetimer.data.local.dao.SolveDao
 import com.maciekhetman.cubetimer.data.local.dao.SyncOutboxDao
 import com.maciekhetman.cubetimer.data.local.dao.getSolvesByIdsChunked
 import com.maciekhetman.cubetimer.data.local.dao.softDeleteAllChunked
+import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
 import com.maciekhetman.cubetimer.data.local.mapper.toDbString
 import com.maciekhetman.cubetimer.data.local.mapper.toDeleteMutation
 import com.maciekhetman.cubetimer.data.local.mapper.toEventString
@@ -89,6 +90,29 @@ class SolvesRepository(
     }
 
     /**
+     * [existing] overwritten with [solve]'s content and revived (`deleted_at` cleared) at [updatedAt].
+     * Its id, server version and timing device are kept, and so is the stored event string when it
+     * names an event this app has no [Mode] for (see [CubeTypeConverters.eventForRewrite]).
+     */
+    private fun rewriteExisting(
+        existing: SolveEntity,
+        solve: SolveTime,
+        ownerId: String,
+        sessionId: String?,
+        updatedAt: String
+    ): SolveEntity = existing.copy(
+        ownerId = ownerId,
+        sessionId = sessionId,
+        event = CubeTypeConverters.eventForRewrite(existing.event, solve.mode),
+        durationMs = solve.timeInMillis,
+        penalty = CubeTypeConverters.fromPenalty(solve.penalty),
+        solvedAt = CubeTypeConverters.epochMillisToIso(solve.timestamp),
+        scramble = solve.scramble,
+        deletedAt = null,
+        updatedAt = updatedAt
+    )
+
+    /**
      * Observe all active solves for a specific owner.
      */
     fun getAllSolvesFlow(ownerId: String = "guest"): Flow<List<SolveTime>> {
@@ -128,17 +152,7 @@ class SolvesRepository(
         runInTransaction {
             val existing = solveDao.getSolveById(solve.id)
             val entity = if (existing != null) {
-                existing.copy(
-                    ownerId = ownerId,
-                    sessionId = sessionId ?: solve.sessionId,
-                    event = CubeTypeConverters.eventForRewrite(existing.event, solve.mode),
-                    durationMs = solve.timeInMillis,
-                    penalty = CubeTypeConverters.fromPenalty(solve.penalty),
-                    solvedAt = CubeTypeConverters.epochMillisToIso(solve.timestamp),
-                    scramble = solve.scramble,
-                    deletedAt = null,
-                    updatedAt = nowIso
-                )
+                rewriteExisting(existing, solve, ownerId, sessionId = sessionId ?: solve.sessionId, updatedAt = nowIso)
             } else {
                 solve.toSolveEntity(ownerId = ownerId, sessionId = sessionId ?: solve.sessionId)
             }
@@ -281,17 +295,7 @@ class SolvesRepository(
             val entities = solves.map { solve ->
                 val existing = existingById[solve.id]
                 if (existing != null) {
-                    existing.copy(
-                        ownerId = ownerId,
-                        sessionId = solve.sessionId,
-                        event = CubeTypeConverters.eventForRewrite(existing.event, solve.mode),
-                        durationMs = solve.timeInMillis,
-                        penalty = CubeTypeConverters.fromPenalty(solve.penalty),
-                        solvedAt = CubeTypeConverters.epochMillisToIso(solve.timestamp),
-                        scramble = solve.scramble,
-                        deletedAt = null,
-                        updatedAt = nowIso
-                    )
+                    rewriteExisting(existing, solve, ownerId, sessionId = solve.sessionId, updatedAt = nowIso)
                 } else {
                     solve.toSolveEntity(ownerId = ownerId, deletedAt = null)
                 }

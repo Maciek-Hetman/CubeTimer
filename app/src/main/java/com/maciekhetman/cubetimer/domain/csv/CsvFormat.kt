@@ -1,5 +1,6 @@
 package com.maciekhetman.cubetimer.domain.csv
 
+import com.maciekhetman.cubetimer.data.local.converter.CubeTypeConverters
 import com.maciekhetman.cubetimer.model.Penalty
 import java.io.PushbackReader
 import java.io.Reader
@@ -125,13 +126,7 @@ object CsvFormat {
      * Parses a raw CSV penalty string into domain [Penalty].
      * Tolerates "+2", "plus_two", "plus2", "dnf", "none", and null/blank inputs.
      */
-    fun parsePenalty(value: String?): Penalty {
-        return when (value?.trim()?.lowercase()) {
-            "+2", "plus_two", "plus2" -> Penalty.PLUS_TWO
-            "dnf" -> Penalty.DNF
-            else -> Penalty.NONE
-        }
-    }
+    fun parsePenalty(value: String?): Penalty = CubeTypeConverters.toPenalty(value)
 
     /**
      * Wraps a [Reader] in a [PushbackReader] that silently consumes a leading

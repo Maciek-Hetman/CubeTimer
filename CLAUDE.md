@@ -217,7 +217,8 @@ signed-in owners' session-less solves are left alone, as the server accepts them
   AndroidViewModels resolve messages with `getApplication<Application>().getString(...)`, so their state stays
   plain strings (tests run in English); enums shown in the UI carry `@StringRes labelRes`. Automatic session names
   stay English in the DB and on the wire — `displaySessionName` (`ui/components/SessionNames.kt`) only translates
-  their display. Dates use `DateFormat.getBestDateTimePattern(Locale.getDefault(), …)`, never cached, because
+  their display. Dates go through `formatDateTime` (`ui/components/DateTimeFormat.kt`:
+  `DateFormat.getBestDateTimePattern(Locale.getDefault(), "yMMMdjmm")`), built on every call, never cached, because
   the language can change while the app runs. CSV contents, Mode names and cubing notation (Ao5, DNF, +2) are not
   translated.
 - Theming: `CubeTimerTheme(dynamicColor, amoled)`, which prefers dynamic color where the device has it (API 31+),

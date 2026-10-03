@@ -684,25 +684,59 @@ class HistoryViewModel(
         solves.size
     }
 
-    fun exportAllSolves(context: Context, uri: Uri) {
+    /**
+     * What the CSV exports to [uri] have in common. On [ioDispatcher] the stream behind [uri] is opened
+     * and filled by [write], which returns how many solves it wrote; [message] then turns that count into
+     * what the user is told. [precheck] may return a message instead, which ends the export before anything
+     * is opened, and [onWritten] runs once the stream is written and closed. A failure is logged and
+     * shown as the fixed [failureRes] message.
+     */
+    private fun launchExport(
+        context: Context,
+        uri: Uri,
+        @StringRes failureRes: Int,
+        precheck: () -> String? = { null },
+        write: suspend (OutputStream) -> Int,
+        onWritten: () -> Unit = {},
+        message: (count: Int) -> String
+    ) {
         viewModelScope.launch {
             try {
+                val refusal = precheck()
+                if (refusal != null) {
+                    _effectsChannel.send(HistoryUiEffect.ShowMessage(refusal))
+                    return@launch
+                }
+
                 val count = withContext(ioDispatcher) {
                     val outputStream = context.contentResolver.openOutputStream(uri)
                         ?: throw IllegalStateException("Unable to open output stream for URI: $uri")
                     outputStream.use { stream ->
-                        exportAllSolvesToStream(stream)
+                        write(stream)
                     }
                 }
-                if (count > 0) {
-                    _effectsChannel.send(HistoryUiEffect.ShowMessage(quantityText(R.plurals.history_exported_solves, count)))
-                } else {
-                    _effectsChannel.send(HistoryUiEffect.ShowMessage(text(R.string.history_nothing_to_export)))
-                }
+                onWritten()
+                _effectsChannel.send(HistoryUiEffect.ShowMessage(message(count)))
             } catch (e: Exception) {
-                reportFailure(R.string.history_error_export, e)
+                reportFailure(failureRes, e)
             }
         }
+    }
+
+    fun exportAllSolves(context: Context, uri: Uri) {
+        launchExport(
+            context = context,
+            uri = uri,
+            failureRes = R.string.history_error_export,
+            write = { exportAllSolvesToStream(it) },
+            message = { count ->
+                if (count > 0) {
+                    quantityText(R.plurals.history_exported_solves, count)
+                } else {
+                    text(R.string.history_nothing_to_export)
+                }
+            }
+        )
     }
 
     suspend fun exportSessionToStream(session: Session, outputStream: OutputStream): Int = withContext(ioDispatcher) {
@@ -723,28 +757,19 @@ class HistoryViewModel(
     }
 
     fun exportSession(context: Context, session: Session, uri: Uri) {
-        viewModelScope.launch {
-            try {
-                val count = withContext(ioDispatcher) {
-                    val outputStream = context.contentResolver.openOutputStream(uri)
-                        ?: throw IllegalStateException("Unable to open output stream for URI: $uri")
-                    outputStream.use { stream ->
-                        exportSessionToStream(session, stream)
-                    }
-                }
+        launchExport(
+            context = context,
+            uri = uri,
+            failureRes = R.string.history_error_export_session,
+            write = { exportSessionToStream(session, it) },
+            message = { count ->
                 if (count > 0) {
-                    _effectsChannel.send(
-                        HistoryUiEffect.ShowMessage(quantityText(R.plurals.history_exported_session, count, sessionName(session.name)))
-                    )
+                    quantityText(R.plurals.history_exported_session, count, sessionName(session.name))
                 } else {
-                    _effectsChannel.send(
-                        HistoryUiEffect.ShowMessage(text(R.string.history_nothing_to_export_session, sessionName(session.name)))
-                    )
+                    text(R.string.history_nothing_to_export_session, sessionName(session.name))
                 }
-            } catch (e: Exception) {
-                reportFailure(R.string.history_error_export_session, e)
             }
-        }
+        )
     }
 
     suspend fun exportSelectedSolvesToStream(outputStream: OutputStream): Int = withContext(ioDispatcher) {
@@ -764,32 +789,23 @@ class HistoryViewModel(
     }
 
     fun exportSelectedSolves(context: Context, uri: Uri) {
-        viewModelScope.launch {
-            try {
-                val selectedCount = _selectedSolveIds.value.size
-                if (selectedCount == 0) {
-                    _effectsChannel.send(HistoryUiEffect.ShowMessage(text(R.string.history_nothing_selected_to_export)))
-                    return@launch
-                }
-
-                val count = withContext(ioDispatcher) {
-                    val outputStream = context.contentResolver.openOutputStream(uri)
-                        ?: throw IllegalStateException("Unable to open output stream for URI: $uri")
-                    outputStream.use { stream ->
-                        exportSelectedSolvesToStream(stream)
-                    }
-                }
-
-                _selectedSolveIds.value = emptySet()
+        launchExport(
+            context = context,
+            uri = uri,
+            failureRes = R.string.history_error_export_selected,
+            precheck = {
+                if (_selectedSolveIds.value.isEmpty()) text(R.string.history_nothing_selected_to_export) else null
+            },
+            write = { exportSelectedSolvesToStream(it) },
+            onWritten = { _selectedSolveIds.value = emptySet() },
+            message = { count ->
                 if (count > 0) {
-                    _effectsChannel.send(HistoryUiEffect.ShowMessage(quantityText(R.plurals.history_exported_selected, count)))
+                    quantityText(R.plurals.history_exported_selected, count)
                 } else {
-                    _effectsChannel.send(HistoryUiEffect.ShowMessage(text(R.string.history_selected_not_found)))
+                    text(R.string.history_selected_not_found)
                 }
-            } catch (e: Exception) {
-                reportFailure(R.string.history_error_export_selected, e)
             }
-        }
+        )
     }
 
     suspend fun importSolvesFromStream(inputStream: InputStream): CsvImportStatus = withContext(ioDispatcher) {
@@ -917,12 +933,8 @@ class HistoryViewModel(
 
         if (_selectedSolveDetail.value?.solve?.id == solve.id) {
             val currentDetail = _selectedSolveDetail.value!!
-            val newPbResult = HistoricalPbCalculator.calculate(updatedSolve, currentDetail.priorBestTime)
-            _selectedSolveDetail.value = currentDetail.copy(
-                solve = updatedSolve,
-                isPb = newPbResult.isPb,
-                pbDelta = newPbResult.deltaMs
-            )
+            _selectedSolveDetail.value =
+                solveDetailState(updatedSolve, currentDetail.solveNumber, currentDetail.priorBestTime)
         }
 
         viewModelScope.launch {
@@ -938,12 +950,8 @@ class HistoryViewModel(
                 if (_selectedSolveDetail.value?.solve?.id == solve.id) {
                     val currentDetail = _selectedSolveDetail.value!!
                     val revertedSolve = solve.copy(penalty = previousPenalty)
-                    val revertedPbResult = HistoricalPbCalculator.calculate(revertedSolve, currentDetail.priorBestTime)
-                    _selectedSolveDetail.value = currentDetail.copy(
-                        solve = revertedSolve,
-                        isPb = revertedPbResult.isPb,
-                        pbDelta = revertedPbResult.deltaMs
-                    )
+                    _selectedSolveDetail.value =
+                        solveDetailState(revertedSolve, currentDetail.solveNumber, currentDetail.priorBestTime)
                 }
                 reportFailure(R.string.history_error_update_penalty, e)
             }
@@ -1030,18 +1038,7 @@ class HistoryViewModel(
             // A newer tap, or a dismiss, happened while the lookup was in flight.
             if (generation != solveDetailGeneration) return@launch
 
-            val pbResult = HistoricalPbCalculator.calculate(
-                solve = solve,
-                priorBestDurationMs = priorBestTime
-            )
-
-            _selectedSolveDetail.value = SolveDetailState(
-                solve = solve,
-                solveNumber = solveNumber,
-                priorBestTime = priorBestTime,
-                isPb = pbResult.isPb,
-                pbDelta = pbResult.deltaMs
-            )
+            _selectedSolveDetail.value = solveDetailState(solve, solveNumber, priorBestTime)
         }
     }
 
@@ -1049,6 +1046,18 @@ class HistoryViewModel(
         solveDetailGeneration++
         solveDetailJob?.cancel()
         _selectedSolveDetail.value = null
+    }
+
+    /** The detail card of [solve]; its PB status is judged against [priorBestTime], the best time before it. */
+    private fun solveDetailState(solve: SolveTime, solveNumber: Int, priorBestTime: Long?): SolveDetailState {
+        val pbResult = HistoricalPbCalculator.calculate(solve, priorBestTime)
+        return SolveDetailState(
+            solve = solve,
+            solveNumber = solveNumber,
+            priorBestTime = priorBestTime,
+            isPb = pbResult.isPb,
+            pbDelta = pbResult.deltaMs
+        )
     }
 
     /** Shows a fixed, human-readable [message] and keeps the technical detail in the log. */

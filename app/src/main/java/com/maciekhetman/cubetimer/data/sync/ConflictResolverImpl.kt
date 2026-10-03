@@ -12,6 +12,7 @@ import com.maciekhetman.cubetimer.data.local.entity.SessionEntity
 import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
 import com.maciekhetman.cubetimer.data.local.mapper.sessionDeleteMutation
 import com.maciekhetman.cubetimer.data.local.mapper.solveDeleteMutation
+import com.maciekhetman.cubetimer.data.local.mapper.toEntity
 import com.maciekhetman.cubetimer.data.local.mapper.toUpsertMutation
 import com.maciekhetman.cubetimer.data.remote.NetworkModule
 import com.maciekhetman.cubetimer.data.remote.dto.SessionSnapshotDto
@@ -116,18 +117,10 @@ class ConflictResolverImpl(
             if (localVersion != null && localVersion > snapshotVersion) {
                 // Row is newer than the snapshot: leave it alone.
             } else if (dto != null) {
-                val entity = SessionEntity(
-                    id = dto.id,
+                val entity = dto.toEntity(
                     ownerId = conflict.ownerId,
-                    name = dto.name,
-                    event = dto.event,
-                    kind = dto.kind,
-                    startedAt = dto.startedAt,
-                    endedAt = dto.endedAt,
-                    archived = dto.archived,
                     version = conflict.serverVersion.coerceAtLeast(dto.version),
-                    updatedAt = dto.updatedAt ?: serverUpdated,
-                    deletedAt = dto.deletedAt
+                    updatedAt = dto.updatedAt ?: serverUpdated
                 )
                 sessionDao.upsert(entity)
             } else {
@@ -155,19 +148,10 @@ class ConflictResolverImpl(
             if (localVersion != null && localVersion > snapshotVersion) {
                 // Row is newer than the snapshot: leave it alone.
             } else if (dto != null) {
-                val entity = SolveEntity(
-                    id = dto.id,
+                val entity = dto.toEntity(
                     ownerId = conflict.ownerId,
-                    sessionId = dto.sessionId,
-                    durationMs = dto.durationMs,
-                    penalty = dto.penalty,
-                    solvedAt = dto.solvedAt,
-                    scramble = dto.scramble,
-                    event = dto.event,
                     version = conflict.serverVersion.coerceAtLeast(dto.version),
-                    updatedAt = dto.updatedAt ?: serverUpdated,
-                    deletedAt = dto.deletedAt,
-                    timingDevice = dto.timingDevice
+                    updatedAt = dto.updatedAt ?: serverUpdated
                 )
                 solveDao.upsert(entity)
             } else {

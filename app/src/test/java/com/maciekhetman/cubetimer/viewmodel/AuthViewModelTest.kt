@@ -134,6 +134,22 @@ class AuthViewModelTest {
     }
 
     @Test
+    fun testRegisterValidationRejectsPasswordLongerThanTheServerAccepts() = testScope.runTest {
+        viewModel.openDialog(AuthDialogType.REGISTER)
+        viewModel.onEmailChanged("newuser@example.com")
+        val tooLong = "a".repeat(129)
+        viewModel.onPasswordChanged(tooLong)
+        viewModel.onConfirmPasswordChanged(tooLong)
+
+        viewModel.submitRegister()
+        advanceUntilIdle()
+
+        assertEquals("Password must be at most 128 characters", viewModel.formState.value.passwordError)
+        assertNull(viewModel.formState.value.confirmPasswordError)
+        assertEquals(0, fakeAuthManager.registerCallCount)
+    }
+
+    @Test
     fun testRegisterSuccessTransitionsToEmailVerificationDialog() = testScope.runTest {
         viewModel.openDialog(AuthDialogType.REGISTER)
         viewModel.onEmailChanged("newuser@example.com")
@@ -275,6 +291,20 @@ class AuthViewModelTest {
 
         assertEquals(1, fakeAuthManager.resetPasswordCallCount)
         assertEquals(AuthDialogType.NONE, viewModel.formState.value.dialogType)
+    }
+
+    @Test
+    fun testResetPasswordValidationRejectsPasswordLongerThanTheServerAccepts() = testScope.runTest {
+        viewModel.openEmailLink(AuthLink.ResetPassword("valid-reset-token"))
+        val tooLong = "a".repeat(129)
+        viewModel.onPasswordChanged(tooLong)
+        viewModel.onConfirmPasswordChanged(tooLong)
+
+        viewModel.submitResetPassword()
+        advanceUntilIdle()
+
+        assertEquals("Password must be at most 128 characters", viewModel.formState.value.passwordError)
+        assertEquals(0, fakeAuthManager.resetPasswordCallCount)
     }
 
     @Test

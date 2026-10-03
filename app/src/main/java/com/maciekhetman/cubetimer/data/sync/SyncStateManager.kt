@@ -123,58 +123,25 @@ class SyncStateManager(
                     conflictCountFlow,
                     localSyncStateFlow
                 ) { metadata, pendingCount, conflictCount, local ->
-                    when {
-                        metadata?.lastError != null -> SyncUiState(
-                            status = SyncStatusType.ERROR,
-                            lastSyncTime = metadata.lastSyncTime,
-                            pendingCount = pendingCount,
-                            errorMessage = metadata.lastError,
-                            isGuest = false,
-                            conflictCount = conflictCount
-                        )
-                        metadata?.isSyncing == true || local.isSyncing -> SyncUiState(
-                            status = SyncStatusType.SYNCING,
-                            lastSyncTime = metadata?.lastSyncTime,
-                            pendingCount = pendingCount,
-                            errorMessage = null,
-                            isGuest = false,
-                            conflictCount = conflictCount
-                        )
-                        !local.isOnline -> SyncUiState(
-                            status = SyncStatusType.OFFLINE,
-                            lastSyncTime = metadata?.lastSyncTime,
-                            pendingCount = pendingCount,
-                            errorMessage = null,
-                            isGuest = false,
-                            conflictCount = conflictCount
-                        )
+                    val (status, errorMessage) = when {
+                        metadata?.lastError != null -> SyncStatusType.ERROR to metadata.lastError
+                        metadata?.isSyncing == true || local.isSyncing -> SyncStatusType.SYNCING to null
+                        !local.isOnline -> SyncStatusType.OFFLINE to null
                         // The last attempt couldn't reach the server (unreachable, DNS, timeout) although
                         // the device reports a network. Not persisted, so it isn't a sticky error.
-                        local.syncStatus == SyncStatus.OFFLINE -> SyncUiState(
-                            status = SyncStatusType.OFFLINE,
-                            lastSyncTime = metadata?.lastSyncTime,
-                            pendingCount = pendingCount,
-                            errorMessage = null,
-                            isGuest = false,
-                            conflictCount = conflictCount
-                        )
-                        local.syncStatus == SyncStatus.ERROR -> SyncUiState(
-                            status = SyncStatusType.ERROR,
-                            lastSyncTime = metadata?.lastSyncTime,
-                            pendingCount = pendingCount,
-                            errorMessage = local.lastErrorMessage ?: "Sync failed",
-                            isGuest = false,
-                            conflictCount = conflictCount
-                        )
-                        else -> SyncUiState(
-                            status = SyncStatusType.SYNCED,
-                            lastSyncTime = metadata?.lastSyncTime,
-                            pendingCount = pendingCount,
-                            errorMessage = null,
-                            isGuest = false,
-                            conflictCount = conflictCount
-                        )
+                        local.syncStatus == SyncStatus.OFFLINE -> SyncStatusType.OFFLINE to null
+                        local.syncStatus == SyncStatus.ERROR ->
+                            SyncStatusType.ERROR to (local.lastErrorMessage ?: "Sync failed")
+                        else -> SyncStatusType.SYNCED to null
                     }
+                    SyncUiState(
+                        status = status,
+                        lastSyncTime = metadata?.lastSyncTime,
+                        pendingCount = pendingCount,
+                        errorMessage = errorMessage,
+                        isGuest = false,
+                        conflictCount = conflictCount
+                    )
                 }
             }
         }.stateIn(scope, SharingStarted.Eagerly, SyncUiState(isGuest = true))

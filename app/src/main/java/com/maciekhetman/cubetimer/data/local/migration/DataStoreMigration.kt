@@ -13,6 +13,7 @@ import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
 import com.maciekhetman.cubetimer.data.settingsDataStore
 import com.maciekhetman.cubetimer.data.solvesDataStore
 import com.maciekhetman.cubetimer.domain.session.AutomaticSessionHelper
+import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.SessionKind
 import java.time.Instant
 import java.time.ZoneId
@@ -180,23 +181,17 @@ class DataStoreMigration(
     }
 
     private fun mapModeNameToEvent(modeRaw: String): String {
-        return when (modeRaw.uppercase().trim()) {
-            "CUBE_2X2", "2X2", "2" -> "2x2"
-            "CUBE_3X3", "3X3", "3" -> "3x3"
-            "CUBE_4X4", "4X4", "4" -> "4x4"
-            "CUBE_5X5", "5X5", "5" -> "5x5"
-            "MEGAMINX" -> "megaminx"
-            "PYRAMINX" -> "pyraminx"
-            else -> "3x3"
+        val mode = when (val name = modeRaw.trim()) {
+            // The oldest builds stored a cube mode as its bare size ("3"), which the converter doesn't know.
+            "2" -> Mode.CUBE_2x2
+            "3" -> Mode.CUBE_3x3
+            "4" -> Mode.CUBE_4x4
+            "5" -> Mode.CUBE_5x5
+            else -> CubeTypeConverters.toMode(name)
         }
+        return CubeTypeConverters.fromMode(mode)
     }
 
-    private fun mapPenaltyNameToDb(penaltyRaw: String): String {
-        return when (penaltyRaw.uppercase().trim()) {
-            "NONE" -> "none"
-            "PLUS_TWO", "+2", "PLUS2" -> "plus_two"
-            "DNF" -> "dnf"
-            else -> "none"
-        }
-    }
+    private fun mapPenaltyNameToDb(penaltyRaw: String): String =
+        CubeTypeConverters.fromPenalty(CubeTypeConverters.toPenalty(penaltyRaw))
 }
