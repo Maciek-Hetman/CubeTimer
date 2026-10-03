@@ -50,7 +50,6 @@
 
     <string name="auth_msg_account_created">Account created.</string>
     <string name="auth_msg_verification_sent">Verification email sent. Check your inbox.</string>
-    <string name="auth_msg_verification_token_required">Verification token is required</string>
     <string name="auth_msg_password_changed">Password changed.</string>
     <string name="auth_msg_password_changed_sign_in">Password changed. Sign in again with your new password.</string>
     <string name="auth_msg_current_password_incorrect">Current password is incorrect.</string>
@@ -61,7 +60,6 @@
     <string name="auth_msg_password_too_short">Password must be at least 10 characters</string>
     <string name="auth_msg_password_too_long">Password must be at most 128 characters</string>
     <string name="auth_msg_passwords_mismatch">Passwords do not match</string>
-    <string name="auth_msg_token_required">Token is required</string>
     <string name="auth_msg_current_password_required">Current password is required</string>
 
     <string name="auth_error_invalid_credentials">Incorrect email or password.</string>
@@ -70,9 +68,6 @@
     <string name="auth_error_invalid_token">Invalid or expired verification/reset token.</string>
     <string name="auth_error_session_expired">Your session has expired. Please log in again.</string>
     <string name="auth_error_session_revoked">Your session was ended for security reasons. Please log in again.</string>
-    <string name="auth_error_account_link_required">An account with this email already exists. Please log in with your email and password.</string>
-    <string name="auth_error_google_failed">Google sign-in failed. Please try again.</string>
-    <string name="auth_error_google_linked">This Google account is already linked to another user.</string>
     <string name="auth_error_rate_limited">Too many attempts. Please try again in a few moments.</string>
     <string name="auth_error_invalid_password">Password must be between 10 and 128 characters.</string>
     <string name="auth_error_invalid_email">Please enter a valid email address</string>
@@ -87,8 +82,4 @@
     <string name="auth_error_unknown">Something went wrong. Please try again.</string>
 
     <string name="timer_error_save">Couldn\'t save the solve</string>
-    <string name="timer_error_delete">Couldn\'t delete the solve</string>
-    <string name="timer_error_update">Couldn\'t update the solve</string>
-    <string name="timer_error_delete_many">Couldn\'t delete the solves</string>
-    <string name="timer_error_restore">Couldn\'t restore the solves</string>
 </resources>

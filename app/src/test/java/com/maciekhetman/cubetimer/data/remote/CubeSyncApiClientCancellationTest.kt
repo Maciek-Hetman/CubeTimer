@@ -92,7 +92,7 @@ class CubeSyncApiClientCancellationTest {
 
     @Test
     fun cancelledSync_rethrowsCancellationException() {
-        assertPlainCancellation(cancelWhileWaiting { apiClient.sync(SyncRequest(device = DeviceDto(id = "device", name = "test", platform = "android")), authToken = "access") })
+        assertPlainCancellation(cancelWhileWaiting { apiClient.sync(SyncRequest(device = DeviceDto(id = "device", name = "test", platform = "android"))) })
     }
 
     @Test

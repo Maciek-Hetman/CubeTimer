@@ -49,13 +49,11 @@ class SyncStateManager(
     val syncStatus: StateFlow<SyncStatus> = _syncStatus.asStateFlow()
 
     private val _lastSyncedAt = MutableStateFlow<Long?>(initialLastSyncedAt)
-    val lastSyncedAt: StateFlow<Long?> = _lastSyncedAt.asStateFlow()
 
     private val _isSyncing = MutableStateFlow(initialStatus == SyncStatus.SYNCING)
     val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
 
     private val _lastErrorMessage = MutableStateFlow<String?>(null)
-    val lastErrorMessage: StateFlow<String?> = _lastErrorMessage.asStateFlow()
 
     // Every network currently satisfying the callback's request. The callback fires per network,
     // so a single onLost (e.g. Wi-Fi dropping while mobile data is still up) doesn't mean offline.
@@ -106,7 +104,6 @@ class SyncStateManager(
                     SyncUiState(
                         status = SyncStatusType.SYNCED,
                         lastSyncTime = null,
-                        lastSyncedAtMillis = null,
                         pendingCount = 0,
                         errorMessage = null,
                         isGuest = true
@@ -194,7 +191,6 @@ class SyncStateManager(
             SyncUiState(
                 status = uiStatus,
                 lastSyncTime = lastSynced?.toString(),
-                lastSyncedAtMillis = lastSynced,
                 pendingCount = 0,
                 errorMessage = errMsg,
                 isGuest = (status == SyncStatus.UNAUTHENTICATED)

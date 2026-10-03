@@ -1,7 +1,5 @@
 package com.maciekhetman.cubetimer.domain.session
 
-import com.maciekhetman.cubetimer.data.local.entity.SessionEntity
-import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
 import com.maciekhetman.cubetimer.model.DayPart
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Session
@@ -14,6 +12,7 @@ import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.ZoneOffset
+import java.time.ZonedDateTime
 
 class AutomaticSessionBoundaryStressTest {
 
@@ -22,6 +21,9 @@ class AutomaticSessionBoundaryStressTest {
     private val newYorkZone = ZoneId.of("America/New_York") // UTC-5 (or UTC-4 in EDT)
     private val kathmanduZone = ZoneId.of("Asia/Kathmandu") // UTC+5:45
 
+    private fun dayPartAt(instant: Instant, zone: ZoneId): DayPart =
+        DayPart.fromHour(ZonedDateTime.ofInstant(instant, zone).hour)
+
     // =========================================================================
     // 1. HOUR BOUNDARY TESTS (04:59 vs 05:00, 11:59 vs 12:00, 16:59 vs 17:00, 21:59 vs 22:00)
     // =========================================================================
@@ -29,20 +31,20 @@ class AutomaticSessionBoundaryStressTest {
     @Test
     fun testExactHourBoundariesOnDayPartEnum() {
         // Night -> Morning boundary
-        assertEquals(DayPart.NIGHT, AutomaticSessionHelper.dayPartFromHour(4))
-        assertEquals(DayPart.MORNING, AutomaticSessionHelper.dayPartFromHour(5))
+        assertEquals(DayPart.NIGHT, DayPart.fromHour(4))
+        assertEquals(DayPart.MORNING, DayPart.fromHour(5))
 
         // Morning -> Afternoon boundary
-        assertEquals(DayPart.MORNING, AutomaticSessionHelper.dayPartFromHour(11))
-        assertEquals(DayPart.AFTERNOON, AutomaticSessionHelper.dayPartFromHour(12))
+        assertEquals(DayPart.MORNING, DayPart.fromHour(11))
+        assertEquals(DayPart.AFTERNOON, DayPart.fromHour(12))
 
         // Afternoon -> Evening boundary
-        assertEquals(DayPart.AFTERNOON, AutomaticSessionHelper.dayPartFromHour(16))
-        assertEquals(DayPart.EVENING, AutomaticSessionHelper.dayPartFromHour(17))
+        assertEquals(DayPart.AFTERNOON, DayPart.fromHour(16))
+        assertEquals(DayPart.EVENING, DayPart.fromHour(17))
 
         // Evening -> Night boundary
-        assertEquals(DayPart.EVENING, AutomaticSessionHelper.dayPartFromHour(21))
-        assertEquals(DayPart.NIGHT, AutomaticSessionHelper.dayPartFromHour(22))
+        assertEquals(DayPart.EVENING, DayPart.fromHour(21))
+        assertEquals(DayPart.NIGHT, DayPart.fromHour(22))
     }
 
     @Test
@@ -52,32 +54,32 @@ class AutomaticSessionBoundaryStressTest {
         val t0500 = LocalDateTime.of(2026, 8, 30, 5, 0, 0, 0).toInstant(ZoneOffset.UTC)
         assertEquals("30 aug 2026 night", AutomaticSessionHelper.automaticSessionName(t0459, utcZone))
         assertEquals("30 aug 2026 morning", AutomaticSessionHelper.automaticSessionName(t0500, utcZone))
-        assertEquals(DayPart.NIGHT, AutomaticSessionHelper.dayPartFromInstant(t0459, utcZone))
-        assertEquals(DayPart.MORNING, AutomaticSessionHelper.dayPartFromInstant(t0500, utcZone))
+        assertEquals(DayPart.NIGHT, dayPartAt(t0459, utcZone))
+        assertEquals(DayPart.MORNING, dayPartAt(t0500, utcZone))
 
         // 11:59:59.999 -> MORNING vs 12:00:00.000 -> AFTERNOON
         val t1159 = LocalDateTime.of(2026, 8, 30, 11, 59, 59, 999_000_000).toInstant(ZoneOffset.UTC)
         val t1200 = LocalDateTime.of(2026, 8, 30, 12, 0, 0, 0).toInstant(ZoneOffset.UTC)
         assertEquals("30 aug 2026 morning", AutomaticSessionHelper.automaticSessionName(t1159, utcZone))
         assertEquals("30 aug 2026 afternoon", AutomaticSessionHelper.automaticSessionName(t1200, utcZone))
-        assertEquals(DayPart.MORNING, AutomaticSessionHelper.dayPartFromInstant(t1159, utcZone))
-        assertEquals(DayPart.AFTERNOON, AutomaticSessionHelper.dayPartFromInstant(t1200, utcZone))
+        assertEquals(DayPart.MORNING, dayPartAt(t1159, utcZone))
+        assertEquals(DayPart.AFTERNOON, dayPartAt(t1200, utcZone))
 
         // 16:59:59.999 -> AFTERNOON vs 17:00:00.000 -> EVENING
         val t1659 = LocalDateTime.of(2026, 8, 30, 16, 59, 59, 999_000_000).toInstant(ZoneOffset.UTC)
         val t1700 = LocalDateTime.of(2026, 8, 30, 17, 0, 0, 0).toInstant(ZoneOffset.UTC)
         assertEquals("30 aug 2026 afternoon", AutomaticSessionHelper.automaticSessionName(t1659, utcZone))
         assertEquals("30 aug 2026 evening", AutomaticSessionHelper.automaticSessionName(t1700, utcZone))
-        assertEquals(DayPart.AFTERNOON, AutomaticSessionHelper.dayPartFromInstant(t1659, utcZone))
-        assertEquals(DayPart.EVENING, AutomaticSessionHelper.dayPartFromInstant(t1700, utcZone))
+        assertEquals(DayPart.AFTERNOON, dayPartAt(t1659, utcZone))
+        assertEquals(DayPart.EVENING, dayPartAt(t1700, utcZone))
 
         // 21:59:59.999 -> EVENING vs 22:00:00.000 -> NIGHT
         val t2159 = LocalDateTime.of(2026, 8, 30, 21, 59, 59, 999_000_000).toInstant(ZoneOffset.UTC)
         val t2200 = LocalDateTime.of(2026, 8, 30, 22, 0, 0, 0).toInstant(ZoneOffset.UTC)
         assertEquals("30 aug 2026 evening", AutomaticSessionHelper.automaticSessionName(t2159, utcZone))
         assertEquals("30 aug 2026 night", AutomaticSessionHelper.automaticSessionName(t2200, utcZone))
-        assertEquals(DayPart.EVENING, AutomaticSessionHelper.dayPartFromInstant(t2159, utcZone))
-        assertEquals(DayPart.NIGHT, AutomaticSessionHelper.dayPartFromInstant(t2200, utcZone))
+        assertEquals(DayPart.EVENING, dayPartAt(t2159, utcZone))
+        assertEquals(DayPart.NIGHT, dayPartAt(t2200, utcZone))
 
         // 23:59:59.999 -> NIGHT vs 00:00:00.000 -> NIGHT (next day)
         val t2359 = LocalDateTime.of(2026, 8, 30, 23, 59, 59, 999_000_000).toInstant(ZoneOffset.UTC)
@@ -197,23 +199,14 @@ class AutomaticSessionBoundaryStressTest {
     }
 
     @Test
-    fun testInactivityGapWithEntityAndSolveOverloadBoundaries() {
-        val sessionEntity = SessionEntity(
-            id = "entity-gap",
+    fun testInactivityGapWithLastSolveTimestampBoundaries() {
+        val session = Session(
+            id = "session-gap",
             ownerId = "user-1",
             name = "30 aug 2026 afternoon",
-            event = "3x3",
-            kind = "automatic",
+            event = Mode.CUBE_3x3,
+            kind = SessionKind.AUTOMATIC,
             startedAt = "2026-08-30T14:00:00Z"
-        )
-        val solveEntity = SolveEntity(
-            id = "solve-gap",
-            ownerId = "user-1",
-            sessionId = "entity-gap",
-            event = "3x3",
-            durationMs = 15000L,
-            penalty = "none",
-            solvedAt = "2026-08-30T14:30:00Z"
         )
 
         val solveMs = Instant.parse("2026-08-30T14:30:00Z").toEpochMilli()
@@ -222,33 +215,33 @@ class AutomaticSessionBoundaryStressTest {
         // Exactly 60 mins after solve -> TRUE
         assertTrue(
             AutomaticSessionHelper.shouldReuseAutomaticSession(
-                session = sessionEntity,
-                lastSolve = solveEntity,
+                session = session,
+                lastSolveTimestampMs = solveMs,
                 nowMs = solveMs + gapMs,
                 gapMs = gapMs,
-                event = "3x3"
+                mode = Mode.CUBE_3x3
             )
         )
 
         // 60 mins + 1 ms after solve -> FALSE
         assertFalse(
             AutomaticSessionHelper.shouldReuseAutomaticSession(
-                session = sessionEntity,
-                lastSolve = solveEntity,
+                session = session,
+                lastSolveTimestampMs = solveMs,
                 nowMs = solveMs + gapMs + 1L,
                 gapMs = gapMs,
-                event = "3x3"
+                mode = Mode.CUBE_3x3
             )
         )
 
-        // Wrong event -> FALSE
+        // Wrong mode -> FALSE
         assertFalse(
             AutomaticSessionHelper.shouldReuseAutomaticSession(
-                session = sessionEntity,
-                lastSolve = solveEntity,
+                session = session,
+                lastSolveTimestampMs = solveMs,
                 nowMs = solveMs + 1000L,
                 gapMs = gapMs,
-                event = "4x4"
+                mode = Mode.CUBE_4x4
             )
         )
     }

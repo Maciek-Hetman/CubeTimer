@@ -257,7 +257,7 @@ fun ShareableSolveCardDialog(
         Mode.MEGAMINX, Mode.PYRAMINX -> solve.mode.displayName
     }
 
-    // Worded here rather than taken from HistoricalPbResult.formattedDelta, which is English.
+    // Worded from string resources so the badge follows the app language.
     val pbDisplayText = when {
         !isPb -> null
         priorBestTime != null && pbDelta != null -> stringResource(

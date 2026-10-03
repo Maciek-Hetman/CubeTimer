@@ -42,28 +42,12 @@ class SessionRepositoryImpl(
             .distinctUntilChanged()
     }
 
-    override fun observeAllSessions(ownerId: String, mode: Mode): Flow<List<Session>> {
-        return sessionDao.observeAllSessionsByEvent(ownerId, CubeTypeConverters.fromMode(mode))
-            .map { list -> list.map { it.toDomain() } }
-            .distinctUntilChanged()
-    }
-
-    override fun observeSessionById(id: String): Flow<Session?> {
-        return sessionDao.observeSessionById(id)
-            .map { it?.toDomain() }
-            .distinctUntilChanged()
-    }
-
     override suspend fun getSessionById(id: String): Session? = withContext(ioDispatcher) {
         sessionDao.getSessionById(id)?.toDomain()
     }
 
     override suspend fun getOpenAutomaticSession(ownerId: String, mode: Mode): Session? = withContext(ioDispatcher) {
         sessionDao.getOpenAutomaticSession(ownerId, CubeTypeConverters.fromMode(mode))?.toDomain()
-    }
-
-    override suspend fun getActiveSessions(ownerId: String, mode: Mode): List<Session> = withContext(ioDispatcher) {
-        sessionDao.getActiveSessionsByEvent(ownerId, CubeTypeConverters.fromMode(mode)).map { it.toDomain() }
     }
 
     override suspend fun getSessionNamesWithPrefix(
@@ -117,45 +101,6 @@ class SessionRepositoryImpl(
         }
         if (changed) syncTrigger?.invoke()
         updated
-    }
-
-    /**
-     * Soft-deletes the session AND cascades to soft-delete its still-active solves in the same
-     * transaction, so a plain [deleteSession] call never orphans solves that would otherwise
-     * remain active (and keep counting in stats) under a deleted session. Mirrors
-     * [deleteSessionWithSolves] but without the undo snapshot.
-     */
-    override suspend fun deleteSession(
-        id: String,
-        ownerId: String
-    ): Boolean = withContext(ioDispatcher) {
-        var deleted = false
-        database.withTransaction {
-            val existing = sessionDao.getSessionById(id) ?: return@withTransaction
-            if (existing.ownerId != ownerId) return@withTransaction
-            val nowIso = CubeTypeConverters.nowIso()
-            val entity = existing.copy(
-                deletedAt = nowIso,
-                updatedAt = nowIso
-            )
-            sessionDao.update(entity)
-
-            val activeSolves = solveDao.getSolvesBySession(ownerId, id)
-            if (activeSolves.isNotEmpty()) {
-                solveDao.softDeleteAllChunked(activeSolves.map { it.id }, deletedAt = nowIso, updatedAt = nowIso)
-            }
-
-            if (ownerId != "guest") {
-                val mutations = buildList {
-                    add(entity.toDeleteMutation(clientTime = nowIso))
-                    activeSolves.forEach { add(it.toDeleteMutation(clientTime = nowIso)) }
-                }
-                syncOutboxDao.enqueueAll(mutations)
-            }
-            deleted = true
-        }
-        if (deleted) syncTrigger?.invoke()
-        deleted
     }
 
     override suspend fun deleteSessionWithSolves(

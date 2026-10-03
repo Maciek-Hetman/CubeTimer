@@ -2,7 +2,6 @@ package com.maciekhetman.cubetimer.data.remote
 
 import com.maciekhetman.cubetimer.data.remote.dto.AuthResponse
 import com.maciekhetman.cubetimer.data.remote.dto.ChangePasswordRequest
-import com.maciekhetman.cubetimer.data.remote.dto.GoogleAuthRequest
 import com.maciekhetman.cubetimer.data.remote.dto.LoginRequest
 import com.maciekhetman.cubetimer.data.remote.dto.LogoutRequest
 import com.maciekhetman.cubetimer.data.remote.dto.PasswordResetConfirmRequest
@@ -11,7 +10,6 @@ import com.maciekhetman.cubetimer.data.remote.dto.RefreshRequest
 import com.maciekhetman.cubetimer.data.remote.dto.RegisterRequest
 import com.maciekhetman.cubetimer.data.remote.dto.ResendVerificationEmailRequest
 import com.maciekhetman.cubetimer.data.remote.dto.StatusResponse
-import com.maciekhetman.cubetimer.data.remote.dto.UserDto
 import com.maciekhetman.cubetimer.data.remote.dto.VerifyEmailRequest
 import com.maciekhetman.cubetimer.model.AuthException
 import kotlinx.coroutines.CancellationException
@@ -47,50 +45,21 @@ class CubeSyncApiClientImpl(
     override suspend fun confirmPasswordReset(token: String, newPassword: String): AuthResponse =
         executeSafe { apiService.resetPassword(PasswordResetConfirmRequest(token, newPassword)) }
 
-    override suspend fun loginWithGoogle(request: GoogleAuthRequest): AuthResponse =
-        executeSafe { apiService.loginWithGoogle(request) }
+    override suspend fun changePassword(request: ChangePasswordRequest): Unit =
+        executeSafeUnit { apiService.changePassword(request) }
 
-    override suspend fun linkGoogle(request: GoogleAuthRequest, authToken: String?): Unit =
-        executeSafeUnit {
-            val authHeader = authToken?.let { if (it.startsWith("Bearer ")) it else "Bearer $it" } ?: ""
-            apiService.linkGoogleAccount(authHeader, request)
-        }
-
-    override suspend fun getCurrentUser(authToken: String?): UserDto =
-        executeSafe {
-            val authHeader = authToken?.let { if (it.startsWith("Bearer ")) it else "Bearer $it" }
-            apiService.getCurrentUser(authHeader)
-        }
-
-    override suspend fun changePassword(request: ChangePasswordRequest, authToken: String?): Unit =
-        executeSafeUnit {
-            val authHeader = authToken?.let { if (it.startsWith("Bearer ")) it else "Bearer $it" }
-            apiService.changePassword(authHeader, request)
-        }
-
-    override suspend fun deleteAccount(authToken: String?): Unit =
-        executeSafeUnit {
-            val authHeader = authToken?.let { if (it.startsWith("Bearer ")) it else "Bearer $it" }
-            apiService.deleteAccount(authHeader)
-        }
+    override suspend fun deleteAccount(): Unit =
+        executeSafeUnit { apiService.deleteAccount() }
 
     override suspend fun sync(
-        request: com.maciekhetman.cubetimer.data.remote.dto.SyncRequest,
-        authToken: String?
+        request: com.maciekhetman.cubetimer.data.remote.dto.SyncRequest
     ): com.maciekhetman.cubetimer.data.remote.dto.SyncResponse =
-        executeSafe {
-            val authHeader = authToken?.let { if (it.startsWith("Bearer ")) it else "Bearer $it" }
-            apiService.sync(authHeader, request)
-        }
+        executeSafe { apiService.sync(request) }
 
     override suspend fun snapshot(
-        request: com.maciekhetman.cubetimer.data.remote.dto.SnapshotRequest,
-        authToken: String?
+        request: com.maciekhetman.cubetimer.data.remote.dto.SnapshotRequest
     ): com.maciekhetman.cubetimer.data.remote.dto.SnapshotResponse =
-        executeSafe {
-            val authHeader = authToken?.let { if (it.startsWith("Bearer ")) it else "Bearer $it" }
-            apiService.snapshot(authHeader, request)
-        }
+        executeSafe { apiService.snapshot(request) }
 
     private suspend fun <T : Any> executeSafe(call: suspend () -> Response<T>): T {
         try {

@@ -179,15 +179,15 @@ class Milestone3EmpiricalChallengeStressTest {
             writeCompleted.set(true)
         }
 
-        // Concurrent Readers simulating UI / ViewModel reading paged solves and counts
+        // Concurrent Readers simulating UI / ViewModel reading solves and counts
         val readerJobs = (0 until 4).map { readerId ->
             launch(Dispatchers.IO) {
                 while (!writeCompleted.get()) {
                     try {
-                        val paged = solveDao.getSolvesPagedByEvent("user-1", "3x3", limit = 50, offset = 0)
-                        assertTrue("Paged solves should not be empty", paged.isNotEmpty())
+                        val solves = solveDao.getSolvesByEvent("user-1", "3x3")
+                        assertTrue("Solves should not be empty", solves.isNotEmpty())
 
-                        val count = solveDao.getSolveCountByEvent("user-1", "3x3")
+                        val count = solveDao.getSolvesByScope("user-1", event = "3x3").size
                         assertTrue("Count should be at least 50", count >= 50)
 
                         val priorBest = solveDao.getPriorBestSolveDuration("user-1", "3x3", "2026-08-30T12:00:00.000Z")
@@ -242,7 +242,6 @@ class Milestone3EmpiricalChallengeStressTest {
         val sessionManager = SessionManagerImpl(
             sessionRepository = sessionRepository,
             solveDao = database.solveDao(),
-            authManager = fakeAuthManager,
             ioDispatcher = testDispatcher
         )
 
@@ -265,7 +264,6 @@ class Milestone3EmpiricalChallengeStressTest {
         val viewModel = HistoryViewModel(
             application = context as android.app.Application,
             solvesRepository = solvesRepository,
-            sessionManager = sessionManager,
             sessionRepository = sessionRepository,
             authManager = fakeAuthManager,
             database = database,
@@ -276,7 +274,7 @@ class Milestone3EmpiricalChallengeStressTest {
         )
 
         keepUiStateActive(viewModel)
-        viewModel.expandSession(session.id)
+        viewModel.toggleSessionExpanded(session.id)
         viewModel.uiState.first { state -> state.sessionGroups.singleOrNull()?.solves?.isNotEmpty() == true }
         advanceUntilIdle()
 
@@ -326,7 +324,6 @@ class Milestone3EmpiricalChallengeStressTest {
         val sessionManager = SessionManagerImpl(
             sessionRepository = sessionRepository,
             solveDao = database.solveDao(),
-            authManager = fakeAuthManager,
             ioDispatcher = testDispatcher
         )
 
@@ -350,7 +347,6 @@ class Milestone3EmpiricalChallengeStressTest {
         val viewModel = HistoryViewModel(
             application = context as android.app.Application,
             solvesRepository = solvesRepository,
-            sessionManager = sessionManager,
             sessionRepository = sessionRepository,
             authManager = fakeAuthManager,
             database = database,
@@ -361,7 +357,7 @@ class Milestone3EmpiricalChallengeStressTest {
         )
 
         keepUiStateActive(viewModel)
-        viewModel.expandSession(session.id)
+        viewModel.toggleSessionExpanded(session.id)
         viewModel.uiState.first { state -> state.sessionGroups.singleOrNull()?.solves?.isNotEmpty() == true }
         advanceUntilIdle()
 
@@ -385,12 +381,10 @@ class Milestone3EmpiricalChallengeStressTest {
         override suspend fun initialize() = Unit
         override suspend fun register(email: String, password: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun login(email: String, password: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
-        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun verifyEmail(token: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun resendVerificationEmail(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun requestPasswordReset(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun resetPassword(token: String, newPassword: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
-        override suspend fun refreshSession(): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun logout(): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun adoptGuestData(userId: String) = Unit
     }

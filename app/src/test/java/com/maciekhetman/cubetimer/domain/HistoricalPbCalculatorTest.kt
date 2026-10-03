@@ -12,7 +12,7 @@ import org.junit.Test
 class HistoricalPbCalculatorTest {
 
     @Test
-    fun `first solve of an event is always PB with First solve label`() {
+    fun `first solve of an event is always PB`() {
         val result = HistoricalPbCalculator.calculate(
             durationMs = 15230L,
             penalty = Penalty.NONE,
@@ -22,11 +22,10 @@ class HistoricalPbCalculatorTest {
         assertTrue(result.isPb)
         assertNull(result.priorBestDurationMs)
         assertNull(result.deltaMs)
-        assertEquals("PB (First solve)", result.formattedDelta)
     }
 
     @Test
-    fun `solve beating prior best calculates delta and formatted badge`() {
+    fun `solve beating prior best calculates delta`() {
         // Prior best: 12.40s (12400ms)
         // New solve: 11.55s (11550ms) -> improvement of 0.85s (850ms)
         val result = HistoricalPbCalculator.calculate(
@@ -38,7 +37,6 @@ class HistoricalPbCalculatorTest {
         assertTrue(result.isPb)
         assertEquals(12400L, result.priorBestDurationMs)
         assertEquals(850L, result.deltaMs)
-        assertEquals("PB (-0.85s vs 12.40s)", result.formattedDelta)
     }
 
     @Test
@@ -54,7 +52,6 @@ class HistoricalPbCalculatorTest {
         assertTrue(result.isPb)
         assertEquals(12000L, result.priorBestDurationMs)
         assertEquals(500L, result.deltaMs)
-        assertEquals("PB (-0.50s vs 12.00s)", result.formattedDelta)
 
         // But if raw 10.50s + 2s = 12.50s, which is slower than 12.00s
         val slowerResult = HistoricalPbCalculator.calculate(
@@ -64,7 +61,6 @@ class HistoricalPbCalculatorTest {
         )
         assertFalse(slowerResult.isPb)
         assertNull(slowerResult.deltaMs)
-        assertNull(slowerResult.formattedDelta)
     }
 
     @Test
@@ -78,7 +74,6 @@ class HistoricalPbCalculatorTest {
         assertFalse(result.isPb)
         assertEquals(12400L, result.priorBestDurationMs)
         assertNull(result.deltaMs)
-        assertNull(result.formattedDelta)
     }
 
     @Test
@@ -92,7 +87,6 @@ class HistoricalPbCalculatorTest {
         assertFalse(result.isPb)
         assertEquals(12400L, result.priorBestDurationMs)
         assertNull(result.deltaMs)
-        assertNull(result.formattedDelta)
     }
 
     @Test
@@ -105,7 +99,6 @@ class HistoricalPbCalculatorTest {
 
         assertFalse(resultWithPrior.isPb)
         assertNull(resultWithPrior.deltaMs)
-        assertNull(resultWithPrior.formattedDelta)
 
         val resultFirstSolve = HistoricalPbCalculator.calculate(
             durationMs = 8000L,
@@ -115,14 +108,6 @@ class HistoricalPbCalculatorTest {
 
         assertFalse(resultFirstSolve.isPb)
         assertNull(resultFirstSolve.deltaMs)
-        assertNull(resultFirstSolve.formattedDelta)
-    }
-
-    @Test
-    fun `formatPbDelta formats minute times correctly`() {
-        // Delta 3.40s (3400ms) vs prior best 1:15.80s (75800ms)
-        val formatted = HistoricalPbCalculator.formatPbDelta(3400L, 75800L)
-        assertEquals("PB (-3.40s vs 1:15.80s)", formatted)
     }
 
     @Test
@@ -141,6 +126,5 @@ class HistoricalPbCalculatorTest {
         assertTrue(result.isPb)
         assertEquals(10000L, result.priorBestDurationMs)
         assertEquals(580L, result.deltaMs)
-        assertEquals("PB (-0.58s vs 10.00s)", result.formattedDelta)
     }
 }

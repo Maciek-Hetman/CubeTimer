@@ -10,11 +10,11 @@ import com.maciekhetman.cubetimer.data.auth.AuthResult
 import com.maciekhetman.cubetimer.data.local.CubeDatabase
 import com.maciekhetman.cubetimer.data.local.entity.SessionEntity
 import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
-import com.maciekhetman.cubetimer.data.session.SessionManagerImpl
 import com.maciekhetman.cubetimer.data.session.SessionRepositoryImpl
 import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.Session
 import com.maciekhetman.cubetimer.model.User
+import com.maciekhetman.cubetimer.viewmodel.HistoryUiEffect
 import com.maciekhetman.cubetimer.viewmodel.HistoryViewModel
 import com.maciekhetman.cubetimer.viewmodel.PenaltyFilter
 import com.maciekhetman.cubetimer.viewmodel.PuzzleScope
@@ -63,7 +63,6 @@ class HistoryConcurrencyAndStressChallengeTest {
     private lateinit var database: CubeDatabase
     private lateinit var solvesRepository: SolvesRepository
     private lateinit var sessionRepository: SessionRepositoryImpl
-    private lateinit var sessionManager: SessionManagerImpl
     private lateinit var fakeAuthManager: FakeAuthManager
 
     @Before
@@ -92,11 +91,6 @@ class HistoryConcurrencyAndStressChallengeTest {
             syncOutboxDao = database.syncOutboxDao()
         )
         fakeAuthManager = FakeAuthManager()
-        sessionManager = SessionManagerImpl(
-            sessionRepository = sessionRepository,
-            solveDao = database.solveDao(),
-            authManager = fakeAuthManager
-        )
     }
 
     @After
@@ -109,7 +103,6 @@ class HistoryConcurrencyAndStressChallengeTest {
         return keepUiStateActive(HistoryViewModel(
             application = application,
             solvesRepository = solvesRepository,
-            sessionManager = sessionManager,
             sessionRepository = sessionRepository,
             authManager = fakeAuthManager,
             database = database,
@@ -250,8 +243,8 @@ class HistoryConcurrencyAndStressChallengeTest {
         advanceUntilIdle()
 
         // Expand both sessions
-        viewModel.expandSession(sId1)
-        viewModel.expandSession(sId2)
+        viewModel.toggleSessionExpanded(sId1)
+        viewModel.toggleSessionExpanded(sId2)
         advanceUntilIdle()
 
         var state = viewModel.uiState.value
@@ -305,7 +298,8 @@ class HistoryConcurrencyAndStressChallengeTest {
         assertEquals(2, updatedG2.solves.size)
 
         // Undo batch deletion
-        viewModel.undoDeleteBatch()
+        val batchEffect = viewModel.effects.first { it is HistoryUiEffect.ShowUndoBatchDelete } as HistoryUiEffect.ShowUndoBatchDelete
+        viewModel.undoDeleteBatch(batchEffect.deletedSolves)
         advanceUntilIdle()
 
         // Verify Room restored all 8 solves
@@ -370,7 +364,7 @@ class HistoryConcurrencyAndStressChallengeTest {
         assertEquals(8200L, group.bestDurationMs)
         assertEquals(8200L, group.avgDurationMs)
 
-        viewModel.expandSession(sId)
+        viewModel.toggleSessionExpanded(sId)
         advanceUntilIdle()
 
         val expandedGroup = viewModel.uiState.value.sessionGroups.first()
@@ -509,7 +503,7 @@ class HistoryConcurrencyAndStressChallengeTest {
         val viewModel = createViewModel()
         advanceUntilIdle()
 
-        viewModel.expandSession(sId)
+        viewModel.toggleSessionExpanded(sId)
         advanceUntilIdle()
 
         val domainSolves = viewModel.uiState.value.sessionGroups.first().solves
@@ -554,12 +548,10 @@ class HistoryConcurrencyAndStressChallengeTest {
         override suspend fun initialize() = Unit
         override suspend fun register(email: String, password: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun login(email: String, password: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = email))
-        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun verifyEmail(token: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun resendVerificationEmail(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun requestPasswordReset(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun resetPassword(token: String, newPassword: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
-        override suspend fun refreshSession(): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun logout(): AuthResult<Unit> {
             _authState.value = AuthState.Guest
             return AuthResult.Success(Unit)

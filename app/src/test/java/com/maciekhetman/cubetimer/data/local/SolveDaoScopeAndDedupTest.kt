@@ -33,57 +33,6 @@ class SolveDaoScopeAndDedupTest {
     }
 
     @Test
-    fun testGetExistingSolveIds_returnsMatchingSubset() = runTest {
-        val s1 = SolveEntity(id = "id-1", ownerId = "guest", event = "3x3", durationMs = 10000L, solvedAt = "2026-09-11T10:00:00.000Z")
-        val s2 = SolveEntity(id = "id-2", ownerId = "guest", event = "3x3", durationMs = 11000L, solvedAt = "2026-09-11T10:01:00.000Z")
-        val s3 = SolveEntity(id = "id-3", ownerId = "guest", event = "3x3", durationMs = 12000L, solvedAt = "2026-09-11T10:02:00.000Z")
-        solveDao.insertAll(listOf(s1, s2, s3))
-
-        // 1. Partial match
-        val partial = solveDao.getExistingSolveIds(listOf("id-2", "id-4", "id-5"))
-        assertEquals(1, partial.size)
-        assertEquals("id-2", partial[0])
-
-        // 2. Exact match
-        val exact = solveDao.getExistingSolveIds(listOf("id-1", "id-3"))
-        assertEquals(2, exact.size)
-        assertTrue(exact.contains("id-1"))
-        assertTrue(exact.contains("id-3"))
-
-        // 3. No match
-        val none = solveDao.getExistingSolveIds(listOf("id-88", "id-99"))
-        assertTrue(none.isEmpty())
-
-        // 4. Empty list
-        val empty = solveDao.getExistingSolveIds(emptyList())
-        assertTrue(empty.isEmpty())
-
-        // 5. Input with duplicate IDs
-        val dups = solveDao.getExistingSolveIds(listOf("id-1", "id-1", "id-1"))
-        assertEquals(1, dups.size)
-        assertEquals("id-1", dups[0])
-    }
-
-    @Test
-    fun testGetExistingSolveIds_includesSoftDeletedSolvesForCsvDedup() = runTest {
-        val active = SolveEntity(id = "s-act", ownerId = "guest", event = "3x3", durationMs = 10000L, solvedAt = "2026-09-11T10:00:00.000Z")
-        val deleted = SolveEntity(
-            id = "s-del",
-            ownerId = "guest",
-            event = "3x3",
-            durationMs = 12000L,
-            solvedAt = "2026-09-11T10:01:00.000Z",
-            deletedAt = "2026-09-11T10:05:00.000Z"
-        )
-        solveDao.insertAll(listOf(active, deleted))
-
-        // Querying for soft-deleted ID must still return it so CSV import skips it without SQLite PK collision
-        val found = solveDao.getExistingSolveIds(listOf("s-del"))
-        assertEquals(1, found.size)
-        assertEquals("s-del", found[0])
-    }
-
-    @Test
     fun testGetSolvesByScope_filtersCorrectly() = runTest {
         val sessionDao = database.sessionDao()
         sessionDao.insertAll(listOf(

@@ -7,12 +7,10 @@ import com.maciekhetman.cubetimer.data.local.CubeDatabase
 import com.maciekhetman.cubetimer.data.local.entity.SyncOutboxEntity
 import com.maciekhetman.cubetimer.data.local.mapper.toUpsertMutation
 import com.maciekhetman.cubetimer.data.remote.CubeSyncApiClient
-import com.maciekhetman.cubetimer.data.remote.ErrorParser
 import com.maciekhetman.cubetimer.data.remote.RefreshResult
 import com.maciekhetman.cubetimer.data.remote.TokenRefresher
 import com.maciekhetman.cubetimer.data.remote.dto.AuthResponse
 import com.maciekhetman.cubetimer.data.remote.dto.ChangePasswordRequest
-import com.maciekhetman.cubetimer.data.remote.dto.GoogleAuthRequest
 import com.maciekhetman.cubetimer.data.remote.dto.LoginRequest
 import com.maciekhetman.cubetimer.data.remote.dto.RegisterRequest
 import com.maciekhetman.cubetimer.data.remote.mapper.toDomain
@@ -49,9 +47,9 @@ class AuthManagerImpl(
     private val authScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     autoInitialize: Boolean = true,
     /**
-     * The refresh path shared with the OkHttp `TokenAuthenticator`. The startup restore and
-     * [refreshSession] refresh through it so they can never spend the same refresh token as a
-     * concurrent 401-triggered refresh. Without one they fall back to [apiClient].
+     * The refresh path shared with the OkHttp `TokenAuthenticator`. The startup restore refreshes
+     * through it so it can never spend the same refresh token as a concurrent 401-triggered
+     * refresh. Without one it falls back to [apiClient].
      */
     private val tokenRefresher: TokenRefresher? = null
 ) : AuthManager, SessionExpirationListener {
@@ -140,14 +138,14 @@ class AuthManagerImpl(
         }
 
         when (attemptRefresh(refreshToken)) {
-            is RefreshAttempt.Refreshed -> Unit
-            is RefreshAttempt.Rejected -> {
+            RefreshAttempt.Refreshed -> Unit
+            RefreshAttempt.Rejected -> {
                 tokenStorage.clearAuthData()
                 _authState.value = AuthState.Guest
             }
             // Network error or transient server failure: keep the cached identity we already
             // surfaced above, if any.
-            is RefreshAttempt.Failed -> if (cachedUser == null) {
+            RefreshAttempt.Failed -> if (cachedUser == null) {
                 _authState.value = AuthState.Guest
             }
         }
@@ -155,14 +153,14 @@ class AuthManagerImpl(
 
     /** How a refresh attempt ended, from the point of view of the session. */
     private sealed interface RefreshAttempt {
-        /** The session is valid; [user] has been published as the auth state. */
-        data class Refreshed(val user: User) : RefreshAttempt
+        /** The session is valid; the refreshed user has been published as the auth state. */
+        data object Refreshed : RefreshAttempt
 
         /** The server definitively refused the refresh token: the session is over. */
-        data class Rejected(val error: AuthException) : RefreshAttempt
+        data object Rejected : RefreshAttempt
 
         /** Connectivity or a transient server problem: nothing is known to be wrong with the session. */
-        data class Failed(val error: AuthException) : RefreshAttempt
+        data object Failed : RefreshAttempt
     }
 
     private suspend fun attemptRefresh(refreshToken: String): RefreshAttempt {
@@ -188,50 +186,33 @@ class AuthManagerImpl(
             is RefreshResult.Refreshed -> {
                 // The refresher already persisted the tokens; saving them again here could
                 // overwrite a newer rotation.
-                val user = result.session.user.toDomain()
-                publishUser(user)
-                RefreshAttempt.Refreshed(user)
+                publishUser(result.session.user.toDomain())
+                RefreshAttempt.Refreshed
             }
             is RefreshResult.AlreadyRefreshed -> {
                 val user = tokenStorage.getCachedUser()
                 if (user != null) {
                     publishUser(user)
-                    RefreshAttempt.Refreshed(user)
+                    RefreshAttempt.Refreshed
                 } else {
-                    RefreshAttempt.Failed(AuthException.Unknown("Session was refreshed but no user is stored"))
+                    RefreshAttempt.Failed
                 }
             }
-            is RefreshResult.NoRefreshToken ->
-                RefreshAttempt.Rejected(AuthException.InvalidRefreshToken("No refresh token available"))
-            is RefreshResult.Rejected -> RefreshAttempt.Rejected(refreshError(result.statusCode, result.body))
-            is RefreshResult.NetworkError -> RefreshAttempt.Failed(
-                AuthException.NetworkError("Session refresh failed: ${result.exception.localizedMessage}", result.exception)
-            )
-            is RefreshResult.Transient -> RefreshAttempt.Failed(refreshError(result.statusCode, result.body))
-            is RefreshResult.Failed -> RefreshAttempt.Failed(
-                AuthException.Unknown("Session refresh failed: ${result.cause.localizedMessage}", result.cause)
-            )
+            is RefreshResult.NoRefreshToken, is RefreshResult.Rejected -> RefreshAttempt.Rejected
+            is RefreshResult.NetworkError, is RefreshResult.Transient, is RefreshResult.Failed -> RefreshAttempt.Failed
         }
     }
 
     private suspend fun refreshThroughApiClient(refreshToken: String): RefreshAttempt = try {
         val response = apiClient.refreshToken(refreshToken)
-        RefreshAttempt.Refreshed(handleAuthSuccess(response, isNewLogin = false))
+        handleAuthSuccess(response, isNewLogin = false)
+        RefreshAttempt.Refreshed
     } catch (e: CancellationException) {
         throw e
     } catch (e: AuthException) {
-        if (e.isDefinitiveRefreshRejection()) RefreshAttempt.Rejected(e) else RefreshAttempt.Failed(e)
-    } catch (e: Exception) {
-        RefreshAttempt.Failed(AuthException.NetworkError("Session refresh failed: ${e.localizedMessage}", e))
-    }
-
-    private fun refreshError(statusCode: Int, body: String): AuthException {
-        val apiError = ErrorParser.parseApiError(body)?.error
-        return ErrorParser.toAuthException(
-            errorCode = apiError?.code,
-            message = apiError?.message ?: "HTTP Error $statusCode",
-            httpStatusCode = statusCode
-        )
+        if (e.isDefinitiveRefreshRejection()) RefreshAttempt.Rejected else RefreshAttempt.Failed
+    } catch (_: Exception) {
+        RefreshAttempt.Failed
     }
 
     /**
@@ -274,26 +255,6 @@ class AuthManagerImpl(
             throw e
         } catch (e: Exception) {
             AuthResult.Error(AuthException.NetworkError("Login failed: ${e.localizedMessage}", e))
-        }
-    }
-
-    override suspend fun loginWithGoogle(
-        idToken: String,
-        clientId: String,
-        nonce: String
-    ): AuthResult<User> = withContext(ioDispatcher) {
-        try {
-            val response = apiClient.loginWithGoogle(
-                GoogleAuthRequest(idToken = idToken, clientId = clientId, nonce = nonce)
-            )
-            val user = handleAuthSuccess(response, isNewLogin = true)
-            AuthResult.Success(user)
-        } catch (e: AuthException) {
-            AuthResult.Error(e)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            AuthResult.Error(AuthException.NetworkError("Google sign-in failed: ${e.localizedMessage}", e))
         }
     }
 
@@ -348,22 +309,6 @@ class AuthManagerImpl(
             throw e
         } catch (e: Exception) {
             AuthResult.Error(AuthException.NetworkError("Password reset confirmation failed: ${e.localizedMessage}", e))
-        }
-    }
-
-    override suspend fun refreshSession(): AuthResult<User> = withContext(ioDispatcher) {
-        val refreshToken = tokenStorage.getRefreshToken()
-            ?: return@withContext AuthResult.Error(AuthException.InvalidCredentials("No refresh token available"))
-
-        when (val attempt = attemptRefresh(refreshToken)) {
-            is RefreshAttempt.Refreshed -> AuthResult.Success(attempt.user)
-            is RefreshAttempt.Rejected -> {
-                tokenStorage.clearAuthData()
-                _authState.value = AuthState.Guest
-                AuthResult.Error(attempt.error)
-            }
-            // Offline or a server hiccup says nothing about the session: report it, keep the login.
-            is RefreshAttempt.Failed -> AuthResult.Error(attempt.error)
         }
     }
 

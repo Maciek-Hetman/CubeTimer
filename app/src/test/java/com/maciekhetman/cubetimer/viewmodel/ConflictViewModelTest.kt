@@ -18,7 +18,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -213,11 +212,8 @@ class ConflictViewModelTest {
         var throwOnResolve = false
 
         override val syncStatus: StateFlow<SyncStatus> = MutableStateFlow(SyncStatus.SYNCED)
-        override val lastSyncedAt: StateFlow<Long?> = MutableStateFlow(null)
         override val isSyncing: StateFlow<Boolean> = MutableStateFlow(false)
         override val stateManager: SyncStateManager = SyncStateManager()
-
-        override fun observePendingMutationsCount(ownerId: String): Flow<Int> = flowOf(0)
 
         override fun observeUnresolvedConflicts(ownerId: String): Flow<List<ConflictEntity>> {
             observedOwners += ownerId
@@ -254,12 +250,10 @@ class ConflictViewModelTest {
         override suspend fun initialize() = Unit
         override suspend fun register(email: String, password: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun login(email: String, password: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
-        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun verifyEmail(token: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun resendVerificationEmail(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun requestPasswordReset(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun resetPassword(token: String, newPassword: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
-        override suspend fun refreshSession(): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun logout(): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun adoptGuestData(userId: String) = Unit
     }

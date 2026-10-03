@@ -9,9 +9,7 @@ import com.maciekhetman.cubetimer.data.local.entity.isOpen
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -56,29 +54,6 @@ class SessionDaoTest {
     }
 
     @Test
-    fun testCloseSession() = runTest {
-        val session = SessionEntity(
-            id = "sess-close",
-            ownerId = "guest",
-            name = "Session To Close",
-            event = "3x3",
-            kind = "automatic",
-            startedAt = "2026-08-30T08:00:00.000Z"
-        )
-        sessionDao.insert(session)
-
-        sessionDao.closeSession("sess-close", "2026-08-30T09:00:00.000Z", "2026-08-30T09:00:00.000Z")
-
-        val active = sessionDao.getOpenAutomaticSession("guest", "3x3")
-        assertNull(active)
-
-        val retrieved = sessionDao.getSessionById("sess-close")
-        assertNotNull(retrieved)
-        assertEquals("2026-08-30T09:00:00.000Z", retrieved?.endedAt)
-        assertFalse(retrieved?.isOpen == true)
-    }
-
-    @Test
     fun testActiveSessionsByEventExcludeArchivedDeletedAndOtherScopes() = runTest {
         fun session(
             id: String,
@@ -108,7 +83,6 @@ class SessionDaoTest {
             )
         )
 
-        assertEquals(listOf("newer", "older"), sessionDao.getActiveSessionsByEvent("guest", "3x3").map { it.id })
         sessionDao.observeActiveSessionsByEvent("guest", "3x3").test {
             assertEquals(listOf("newer", "older"), awaitItem().map { it.id })
             cancelAndIgnoreRemainingEvents()

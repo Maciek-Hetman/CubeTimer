@@ -710,13 +710,13 @@ private fun UserProfileDialog(
                     is AuthState.Authenticated -> {
                         ProfileInfoCard(
                             email = authState.user.email,
-                            isVerified = authState.user.isEmailVerified
+                            isVerified = authState.user.emailVerified
                         )
                     }
                     is AuthState.Admin -> {
                         ProfileInfoCard(
                             email = authState.user.email,
-                            isVerified = authState.user.isEmailVerified
+                            isVerified = authState.user.emailVerified
                         )
                     }
                     is AuthState.Guest -> {

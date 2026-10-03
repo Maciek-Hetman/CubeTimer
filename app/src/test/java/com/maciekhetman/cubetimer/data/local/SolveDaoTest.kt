@@ -2,7 +2,6 @@ package com.maciekhetman.cubetimer.data.local
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import app.cash.turbine.test
 import com.maciekhetman.cubetimer.data.local.dao.SolveDao
 import com.maciekhetman.cubetimer.data.local.entity.SessionEntity
 import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
@@ -59,55 +58,6 @@ class SolveDaoTest {
         assertEquals(12500L, retrieved?.durationMs)
         assertEquals("none", retrieved?.penalty)
         assertEquals("2026-08-30T10:00:00.000Z", retrieved?.solvedAt)
-    }
-
-    @Test
-    fun testObserveSolvesByEvent() = runTest {
-        val solve1 = SolveEntity(
-            id = "solve-1",
-            ownerId = "guest",
-            event = "3x3",
-            durationMs = 15000L,
-            solvedAt = "2026-08-30T10:00:00.000Z"
-        )
-        val solve2 = SolveEntity(
-            id = "solve-2",
-            ownerId = "guest",
-            event = "3x3",
-            durationMs = 14000L,
-            solvedAt = "2026-08-30T10:01:00.000Z"
-        )
-        val solve2x2 = SolveEntity(
-            id = "solve-3",
-            ownerId = "guest",
-            event = "2x2",
-            durationMs = 4000L,
-            solvedAt = "2026-08-30T10:02:00.000Z"
-        )
-
-        solveDao.observeSolvesByEvent("guest", "3x3").test {
-            assertEquals(0, awaitItem().size)
-
-            solveDao.insert(solve1)
-            val item1 = awaitItem()
-            assertEquals(1, item1.size)
-            assertEquals("solve-1", item1[0].id)
-
-            solveDao.insert(solve2)
-            val item2 = awaitItem()
-            assertEquals(2, item2.size)
-            assertEquals("solve-1", item2[0].id)
-            assertEquals("solve-2", item2[1].id)
-
-            // Insert 2x2 solve triggers table invalidation and emits filtered 3x3 solves
-            solveDao.insert(solve2x2)
-            val item3 = awaitItem()
-            assertEquals(2, item3.size)
-            assertEquals("solve-1", item3[0].id)
-            assertEquals("solve-2", item3[1].id)
-
-            cancelAndIgnoreRemainingEvents()
-        }
     }
 
     @Test
@@ -191,10 +141,91 @@ class SolveDaoTest {
         assertEquals("session-1", retrievedBefore?.sessionId)
 
         // Delete session
-        database.sessionDao().deleteById("session-1")
+        database.openHelper.writableDatabase.execSQL("DELETE FROM sessions WHERE id = 'session-1'")
 
         val retrievedAfter = solveDao.getSolveById("solve-session-fk")
         assertNotNull(retrievedAfter)
         assertNull(retrievedAfter?.sessionId)
+    }
+
+    @Test
+    fun testGetPriorBestSolveDuration() = runTest {
+        val t0 = "2026-08-30T10:00:00.000Z"
+        val t1 = "2026-08-30T10:01:00.000Z"
+        val t2 = "2026-08-30T10:02:00.000Z"
+        val t3 = "2026-08-30T10:03:00.000Z"
+        val t4 = "2026-08-30T10:04:00.000Z"
+
+        // Initially no prior solves
+        val initialPrior = solveDao.getPriorBestSolveDuration("guest", "3x3", t1)
+        assertNull(initialPrior)
+
+        // Insert solve 1 at t0: 15.00s
+        solveDao.insert(
+            SolveEntity(
+                id = "s1",
+                ownerId = "guest",
+                event = "3x3",
+                durationMs = 15000L,
+                penalty = "none",
+                solvedAt = t0,
+                scramble = "R",
+                version = 0L
+            )
+        )
+
+        // At t1, prior best should be 15000L
+        assertEquals(15000L, solveDao.getPriorBestSolveDuration("guest", "3x3", t1))
+
+        // Insert solve 2 at t1: 10.00s + 2 penalty = 12.00s effective
+        solveDao.insert(
+            SolveEntity(
+                id = "s2",
+                ownerId = "guest",
+                event = "3x3",
+                durationMs = 10000L,
+                penalty = "plus_two",
+                solvedAt = t1,
+                scramble = "R U",
+                version = 0L
+            )
+        )
+
+        // At t2, prior best should be 12000L (10000 + 2000)
+        assertEquals(12000L, solveDao.getPriorBestSolveDuration("guest", "3x3", t2))
+
+        // Insert solve 3 at t2: 8.00s with DNF penalty
+        solveDao.insert(
+            SolveEntity(
+                id = "s3",
+                ownerId = "guest",
+                event = "3x3",
+                durationMs = 8000L,
+                penalty = "dnf",
+                solvedAt = t2,
+                scramble = "R U2",
+                version = 0L
+            )
+        )
+
+        // At t3, prior best should STILL be 12000L because DNF is ignored
+        assertEquals(12000L, solveDao.getPriorBestSolveDuration("guest", "3x3", t3))
+
+        // Insert solve 4 at t3: 9.50s clean
+        solveDao.insert(
+            SolveEntity(
+                id = "s4",
+                ownerId = "guest",
+                event = "3x3",
+                durationMs = 9500L,
+                penalty = "none",
+                solvedAt = t3,
+                scramble = "R U'",
+                version = 0L
+            )
+        )
+
+        // At t4, prior best should be 9500L
+        assertEquals(9500L, solveDao.getPriorBestSolveDuration("guest", "3x3", t4))
     }
 }

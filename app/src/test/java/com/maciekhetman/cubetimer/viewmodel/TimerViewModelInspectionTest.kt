@@ -24,6 +24,7 @@ import com.maciekhetman.cubetimer.model.Session
 import com.maciekhetman.cubetimer.model.TimerState
 import com.maciekhetman.cubetimer.model.TimingDevice
 import com.maciekhetman.cubetimer.model.User
+import com.maciekhetman.cubetimer.testutil.awaitCondition
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -126,16 +127,6 @@ class TimerViewModelInspectionTest {
     }
 
     // --- Helpers --------------------------------------------------------------------------------
-
-    /** DataStore reads happen on real IO threads, so poll while letting the test dispatcher run. */
-    private fun TestScope.awaitCondition(description: String, condition: () -> Boolean) {
-        repeat(300) {
-            runCurrent()
-            if (condition()) return
-            Thread.sleep(10)
-        }
-        throw AssertionError("timed out waiting for: $description")
-    }
 
     /** Inspection on or off, and the start delay that also starts a solve from inspection. */
     private fun TestScope.configure(
@@ -630,7 +621,6 @@ class TimerViewModelInspectionTest {
     // --- Fakes ----------------------------------------------------------------------------------
 
     private class FixedSessionManager(private val session: Session) : SessionManager {
-        override fun getActiveSessionFlow(mode: Mode): Flow<Session?> = MutableStateFlow(session)
         override fun getActiveSessionFlow(ownerId: String, mode: Mode): Flow<Session?> = MutableStateFlow(session)
         override suspend fun getOrCreateActiveSession(ownerId: String, mode: Mode, solveTimestamp: Long?): Session = session
     }
@@ -643,12 +633,10 @@ class TimerViewModelInspectionTest {
         override suspend fun initialize() = Unit
         override suspend fun register(email: String, password: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun login(email: String, password: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
-        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun verifyEmail(token: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun resendVerificationEmail(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun requestPasswordReset(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun resetPassword(token: String, newPassword: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
-        override suspend fun refreshSession(): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun logout(): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun adoptGuestData(userId: String) = Unit
     }

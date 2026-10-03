@@ -1,7 +1,6 @@
 package com.maciekhetman.cubetimer.data.local.dao
 
 import androidx.room.Dao
-import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
@@ -17,20 +16,6 @@ interface SolveDao {
 
     @Query("""
         SELECT * FROM solves 
-        WHERE owner_id = :ownerId AND event = :event AND deleted_at IS NULL 
-        ORDER BY solved_at ASC
-    """)
-    fun observeSolvesByEvent(ownerId: String, event: String): Flow<List<SolveEntity>>
-
-    @Query("""
-        SELECT * FROM solves 
-        WHERE owner_id = :ownerId AND session_id = :sessionId AND deleted_at IS NULL 
-        ORDER BY solved_at ASC
-    """)
-    fun observeSolvesBySession(ownerId: String, sessionId: String): Flow<List<SolveEntity>>
-
-    @Query("""
-        SELECT * FROM solves 
         WHERE owner_id = :ownerId AND session_id = :sessionId AND deleted_at IS NULL 
         ORDER BY solved_at DESC
     """)
@@ -42,76 +27,6 @@ interface SolveDao {
         ORDER BY solved_at ASC
     """)
     fun observeAllSolves(ownerId: String): Flow<List<SolveEntity>>
-
-    @Query("""
-        SELECT COUNT(*) FROM solves
-        WHERE owner_id = :ownerId AND event = :event AND deleted_at IS NULL
-    """)
-    fun observeSolveCountByEvent(ownerId: String, event: String): Flow<Int>
-
-    @Query("""
-        SELECT COUNT(*) FROM solves 
-        WHERE owner_id = :ownerId AND session_id = :sessionId AND deleted_at IS NULL
-    """)
-    fun observeSolveCountBySession(ownerId: String, sessionId: String): Flow<Int>
-
-    @Query("""
-        SELECT COUNT(*) FROM solves 
-        WHERE owner_id = :ownerId AND deleted_at IS NULL
-    """)
-    fun observeAllSolvesCount(ownerId: String): Flow<Int>
-
-    @Query("""
-        SELECT COUNT(*) FROM solves 
-        WHERE owner_id = :ownerId AND event = :event AND deleted_at IS NULL
-    """)
-    suspend fun getSolveCountByEvent(ownerId: String, event: String): Int
-
-    @Query("""
-        SELECT COUNT(*) FROM solves 
-        WHERE owner_id = :ownerId AND session_id = :sessionId AND deleted_at IS NULL
-    """)
-    suspend fun getSolveCountBySession(ownerId: String, sessionId: String): Int
-
-    // --- Chunked Paged Queries ---
-
-    @Query("""
-        SELECT * FROM solves 
-        WHERE owner_id = :ownerId AND event = :event AND deleted_at IS NULL 
-        ORDER BY solved_at DESC 
-        LIMIT :limit OFFSET :offset
-    """)
-    suspend fun getSolvesPagedByEvent(
-        ownerId: String,
-        event: String,
-        limit: Int,
-        offset: Int
-    ): List<SolveEntity>
-
-    @Query("""
-        SELECT * FROM solves 
-        WHERE owner_id = :ownerId AND session_id = :sessionId AND deleted_at IS NULL 
-        ORDER BY solved_at DESC 
-        LIMIT :limit OFFSET :offset
-    """)
-    suspend fun getSolvesPagedBySession(
-        ownerId: String,
-        sessionId: String,
-        limit: Int,
-        offset: Int
-    ): List<SolveEntity>
-
-    @Query("""
-        SELECT * FROM solves 
-        WHERE owner_id = :ownerId AND deleted_at IS NULL 
-        ORDER BY solved_at DESC 
-        LIMIT :limit OFFSET :offset
-    """)
-    suspend fun getAllSolvesPaged(
-        ownerId: String,
-        limit: Int,
-        offset: Int
-    ): List<SolveEntity>
 
     // --- Prior Best Solve Lookup (Historical PB Calculation) ---
 
@@ -133,9 +48,6 @@ interface SolveDao {
     ): Long?
 
     // --- One-Shot Queries ---
-
-    @Query("SELECT id FROM solves WHERE id IN (:ids)")
-    suspend fun getExistingSolveIds(ids: List<String>): List<String>
 
     @Query("""
         SELECT * FROM solves 
@@ -179,14 +91,6 @@ interface SolveDao {
     """)
     suspend fun getLastSolveForSession(ownerId: String, sessionId: String): SolveEntity?
 
-    @Query("""
-        SELECT * FROM solves 
-        WHERE owner_id = :ownerId AND event = :event AND deleted_at IS NULL 
-        ORDER BY solved_at DESC 
-        LIMIT 1
-    """)
-    suspend fun getLastSolveForEvent(ownerId: String, event: String): SolveEntity?
-
     @Query("SELECT * FROM solves WHERE owner_id = :ownerId AND deleted_at IS NULL")
     suspend fun getAllActiveSolvesForOwner(ownerId: String): List<SolveEntity>
 
@@ -217,19 +121,13 @@ interface SolveDao {
     @Upsert
     suspend fun upsertAll(solves: List<SolveEntity>): List<Long>
 
-    // --- Soft Delete / Hard Delete Operations ---
+    // --- Soft Delete Operations ---
 
     @Query("UPDATE solves SET deleted_at = :deletedAt, updated_at = :updatedAt WHERE id = :id")
     suspend fun softDelete(id: String, deletedAt: String, updatedAt: String): Int
 
     @Query("UPDATE solves SET deleted_at = :deletedAt, updated_at = :updatedAt WHERE id IN (:ids)")
     suspend fun softDeleteAll(ids: List<String>, deletedAt: String, updatedAt: String): Int
-
-    @Delete
-    suspend fun delete(solve: SolveEntity): Int
-
-    @Query("DELETE FROM solves WHERE id = :id")
-    suspend fun deleteById(id: String): Int
 
     // --- Guest Adoption & Bulk Updates ---
 

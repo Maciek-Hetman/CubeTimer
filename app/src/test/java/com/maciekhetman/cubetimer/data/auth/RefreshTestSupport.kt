@@ -41,7 +41,6 @@ internal class ThreadSafeFakeTokenStorage : TokenStorage {
         accessTokenState.value = token
     }
     override fun getRefreshToken(): String? = synchronized(lock) { refreshToken }
-    override fun setRefreshToken(token: String?) = synchronized(lock) { refreshToken = token }
     override fun getUserId(): String? = synchronized(lock) { cachedUser?.id }
     override fun getUserEmail(): String? = synchronized(lock) { cachedUser?.email }
     override fun getUserRole(): String? = synchronized(lock) {
@@ -74,7 +73,6 @@ internal class ThreadSafeFakeTokenStorage : TokenStorage {
         accessTokenState.value = accessToken
     }
 
-    override fun saveUser(user: User) = synchronized(lock) { cachedUser = user }
     override fun getDeviceId(): String = "device-refresh-tests"
 
     override fun clearAuthData() {

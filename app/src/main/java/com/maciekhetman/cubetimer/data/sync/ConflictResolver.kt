@@ -11,13 +11,7 @@ enum class ConflictPolicy {
     SERVER_WINS,
 
     /** Re-enqueue local record as a new mutation targeting the server's version. */
-    LOCAL_WINS,
-
-    /** Automatically choose LOCAL_WINS if local updatedAt > server updatedAt; otherwise SERVER_WINS. */
-    LAST_WRITE_WINS,
-
-    /** Leave conflict unresolved for manual user intervention in UI. */
-    MANUAL_PROMPT
+    LOCAL_WINS
 }
 
 /**
@@ -27,9 +21,6 @@ interface ConflictResolver {
 
     /** Observe unresolved conflicts for an owner (e.g. for UI prompts). */
     fun observeUnresolvedConflicts(ownerId: String): Flow<List<ConflictEntity>>
-
-    /** Observe unresolved conflict count for an owner. */
-    fun observeUnresolvedCount(ownerId: String): Flow<Int>
 
     /** Get a single conflict by ID. */
     suspend fun getConflictById(conflictId: String): ConflictEntity?

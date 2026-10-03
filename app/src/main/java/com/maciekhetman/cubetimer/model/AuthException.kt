@@ -32,18 +32,6 @@ sealed class AuthException(
     class RefreshTokenReused(message: String = "Refresh token reuse detected; session revoked") :
         AuthException(message)
 
-    /** 409 account_link_required: federated email belongs to existing password account */
-    class AccountLinkRequired(message: String = "Account exists with password; please login and link Google account") :
-        AuthException(message)
-
-    /** 401 invalid_social_token / invalid_social_code */
-    class InvalidSocialToken(message: String = "Google authentication failed: invalid token or authorization code") :
-        AuthException(message)
-
-    /** 409 identity_in_use / provider_already_linked */
-    class IdentityAlreadyLinked(message: String = "Google account is already linked to another user") :
-        AuthException(message)
-
     /** 429 rate_limited: too many requests */
     class RateLimited(message: String = "Too many requests; please try again later") :
         AuthException(message)

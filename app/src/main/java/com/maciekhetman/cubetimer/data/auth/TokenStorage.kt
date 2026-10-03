@@ -14,7 +14,6 @@ interface TokenStorage {
 
     // Persistent refresh token & user metadata
     fun getRefreshToken(): String?
-    fun setRefreshToken(token: String?)
     fun getUserId(): String?
     fun getUserEmail(): String?
     fun getUserRole(): String?
@@ -34,8 +33,6 @@ interface TokenStorage {
         emailVerified: Boolean = true,
         displayName: String? = null
     )
-
-    fun saveUser(user: User)
 
     // Device identity (persists across logouts)
     fun getDeviceId(): String

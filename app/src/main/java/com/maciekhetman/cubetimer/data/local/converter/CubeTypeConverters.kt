@@ -87,14 +87,14 @@ class CubeTypeConverters {
             return ISO_MILLIS_FORMATTER.format(Instant.ofEpochMilli(epochMillis))
         }
 
+        /** Current time as a fixed millisecond-precision ISO-8601 UTC string. */
+        fun nowIso(): String = epochMillisToIso(System.currentTimeMillis())
+
         /**
          * Parses an ISO-8601 timestamp to epoch millis. Returns 0L (rather than "now") for a
          * blank or unparsable string so a corrupted timestamp doesn't silently become "now" on
          * every read (which would also re-persist a drifting value on next save).
          */
-        /** Current time as a fixed millisecond-precision ISO-8601 UTC string. */
-        fun nowIso(): String = epochMillisToIso(System.currentTimeMillis())
-
         fun isoToEpochMillis(isoString: String?): Long {
             if (isoString.isNullOrBlank()) return 0L
             return try {

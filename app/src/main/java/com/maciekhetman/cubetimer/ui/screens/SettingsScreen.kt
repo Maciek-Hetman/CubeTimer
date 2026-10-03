@@ -651,37 +651,35 @@ fun syncConflictHint(resources: Resources, count: Int): String =
 
 /**
  * The account card's avatar: the user's initial on a primary "cookie", or a person on a neutral one for
- * a guest. Admins get a shield badge.
+ * a guest.
  */
 @Composable
 private fun AccountAvatar(authState: AuthState) {
     val user = authState.currentUser
     val colors = MaterialTheme.colorScheme
-    Box {
-        Box(
-            modifier = Modifier
-                .size(56.dp)
-                .background(
-                    color = if (user != null) colors.primary else colors.surfaceContainerHighest,
-                    shape = AvatarShape
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            if (user != null) {
-                Text(
-                    text = avatarInitial(user),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = colors.onPrimary
-                )
-            } else {
-                Icon(
-                    imageVector = Icons.Filled.Person,
-                    contentDescription = null,
-                    tint = colors.onSurfaceVariant,
-                    modifier = Modifier.size(28.dp)
-                )
-            }
+    Box(
+        modifier = Modifier
+            .size(56.dp)
+            .background(
+                color = if (user != null) colors.primary else colors.surfaceContainerHighest,
+                shape = AvatarShape
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        if (user != null) {
+            Text(
+                text = avatarInitial(user),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.onPrimary
+            )
+        } else {
+            Icon(
+                imageVector = Icons.Filled.Person,
+                contentDescription = null,
+                tint = colors.onSurfaceVariant,
+                modifier = Modifier.size(28.dp)
+            )
         }
     }
 }

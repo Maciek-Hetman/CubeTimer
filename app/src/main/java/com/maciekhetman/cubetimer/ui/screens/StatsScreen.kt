@@ -29,7 +29,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -72,10 +71,7 @@ fun StatsScreen(
     // Plain local copy so the null checks below can smart-cast it.
     val effectiveActiveSession = activeSessionState
     val appTimeMillis by viewModel.appTimeMillis.collectAsStateWithLifecycle()
-    val snackbarHostState = remember { SnackbarHostState() }
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
-    val layoutDirection = LocalLayoutDirection.current
-    val haptic = LocalHapticFeedback.current
 
     val activeSessionSolvesCount = remember(solves, effectiveActiveSession) {
         val activeId = effectiveActiveSession?.id
@@ -86,7 +82,6 @@ fun StatsScreen(
         modifier = modifier
             .fillMaxSize()
             .nestedScroll(scrollBehavior.nestedScrollConnection),
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             CollapsingTopBar(
                 title = stringResource(R.string.stats_title),
@@ -114,7 +109,6 @@ fun StatsScreen(
                 SessionFilterBar(
                     currentFilter = statsFilter,
                     onFilterSelected = { viewModel.setStatsFilter(it) },
-                    activeSession = effectiveActiveSession,
                     activeSessionSolvesCount = activeSessionSolvesCount,
                     allSolvesCount = solves.size
                 )
@@ -317,24 +311,6 @@ fun StatsHeroCard(
             }
         }
     }
-}
-
-@Composable
-fun StatsHeroCard(
-    solves: List<SolveTime>,
-    modifier: Modifier = Modifier
-) {
-    val allTimePb = remember(solves) {
-        solves.filter { it.penalty != Penalty.DNF }.minByOrNull { it.displayTime }
-    }
-    val sessionAo5 = remember(solves) { AverageCalculator.averageOfN(solves, 5) }
-    val sessionAo12 = remember(solves) { AverageCalculator.averageOfN(solves, 12) }
-    StatsHeroCard(
-        allTimePb = allTimePb,
-        sessionAo5 = sessionAo5,
-        sessionAo12 = sessionAo12,
-        modifier = modifier
-    )
 }
 
 @Composable
@@ -898,9 +874,7 @@ private data class PenaltyDistributionData(
     val dnfCount: Int,
     val plusTwoCount: Int,
     val dnfPercent: Int,
-    val plusTwoPercent: Int,
-    val cleanCount: Int,
-    val cleanPercent: Int
+    val plusTwoPercent: Int
 )
 
 @Composable
@@ -910,15 +884,13 @@ private fun PenaltyStatsSection(
 ) {
     var isExpanded by rememberSaveable { mutableStateOf(false) }
 
-    val (dnfCount, plusTwoCount, dnfPercent, plusTwoPercent, cleanCount, cleanPercent) = remember(solves) {
+    val (dnfCount, plusTwoCount, dnfPercent, plusTwoPercent) = remember(solves) {
         val dnf = solves.count { it.penalty == Penalty.DNF }
         val plusTwo = solves.count { it.penalty == Penalty.PLUS_TWO }
         val total = solves.size.toFloat()
         val dnfPct = if (total > 0) (dnf / total * 100).toInt() else 0
         val plusTwoPct = if (total > 0) (plusTwo / total * 100).toInt() else 0
-        val clean = solves.size - dnf - plusTwo
-        val cleanPct = if (total > 0) (clean / total * 100).toInt() else 100
-        PenaltyDistributionData(dnf, plusTwo, dnfPct, plusTwoPct, clean, cleanPct)
+        PenaltyDistributionData(dnf, plusTwo, dnfPct, plusTwoPct)
     }
 
     val badgeText = if (dnfCount + plusTwoCount == 0) {

@@ -34,16 +34,6 @@ fun Session.toEntity(): SessionEntity = SessionEntity(
     deletedAt = this.deletedAt
 )
 
-fun Session.toSyncPayload(): SessionSyncPayload = SessionSyncPayload(
-    id = this.id,
-    name = this.name,
-    event = CubeTypeConverters.fromMode(this.event),
-    kind = this.kind.value,
-    startedAt = this.startedAt,
-    endedAt = this.endedAt,
-    archived = this.archived
-)
-
 fun SessionEntity.toSyncPayload(): SessionSyncPayload = SessionSyncPayload(
     id = this.id,
     name = this.name,

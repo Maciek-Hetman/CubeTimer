@@ -135,8 +135,7 @@ class CubeTimerApplication : Application(), Configuration.Provider {
     val sessionManager: SessionManager by lazy {
         SessionManagerImpl(
             sessionRepository = sessionRepository,
-            solveDao = database.solveDao(),
-            authManager = authManager
+            solveDao = database.solveDao()
         )
     }
 

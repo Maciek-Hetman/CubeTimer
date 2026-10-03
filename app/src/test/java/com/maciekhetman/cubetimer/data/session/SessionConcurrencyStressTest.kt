@@ -4,23 +4,16 @@ import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.test.core.app.ApplicationProvider
 import com.maciekhetman.cubetimer.data.SolvesRepository
-import com.maciekhetman.cubetimer.data.auth.AuthManager
-import com.maciekhetman.cubetimer.data.auth.AuthResult
 import com.maciekhetman.cubetimer.data.local.CubeDatabase
 import com.maciekhetman.cubetimer.data.settingsDataStore
 import com.maciekhetman.cubetimer.domain.session.AutomaticSessionHelper
-import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Penalty
 import com.maciekhetman.cubetimer.model.SessionKind
 import com.maciekhetman.cubetimer.model.SolveTime
-import com.maciekhetman.cubetimer.model.User
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -39,7 +32,6 @@ class SessionConcurrencyStressTest {
     private lateinit var database: CubeDatabase
     private lateinit var sessionRepository: SessionRepositoryImpl
     private lateinit var solvesRepository: SolvesRepository
-    private lateinit var fakeAuthManager: FakeAuthManager
     private lateinit var sessionManager: SessionManagerImpl
 
     @Before
@@ -59,11 +51,9 @@ class SessionConcurrencyStressTest {
             syncOutboxDao = database.syncOutboxDao(),
             database = database
         )
-        fakeAuthManager = FakeAuthManager()
         sessionManager = SessionManagerImpl(
             sessionRepository = sessionRepository,
-            solveDao = database.solveDao(),
-            authManager = fakeAuthManager
+            solveDao = database.solveDao()
         )
     }
 
@@ -186,27 +176,5 @@ class SessionConcurrencyStressTest {
         assertNotNull(dbS1?.endedAt)
         assertNotNull(dbS2?.endedAt)
         assertEquals(null, dbS3?.endedAt)
-    }
-
-    private class FakeAuthManager : AuthManager {
-        private val _authState = MutableStateFlow<AuthState>(AuthState.Guest)
-        override val authState: StateFlow<AuthState> = _authState.asStateFlow()
-        override val currentUser: User? get() = when (val state = _authState.value) {
-            is AuthState.Authenticated -> state.user
-            is AuthState.Admin -> state.user
-            AuthState.Guest, AuthState.Loading -> null
-        }
-
-        override suspend fun initialize() {}
-        override suspend fun register(email: String, password: String) = AuthResult.Success(Unit)
-        override suspend fun login(email: String, password: String) = AuthResult.Success(User("user-1", email, "User", true))
-        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String) = AuthResult.Success(User("user-1", "user@test.com", "User", true))
-        override suspend fun verifyEmail(token: String) = AuthResult.Success(User("user-1", "user@test.com", "User", true))
-        override suspend fun resendVerificationEmail(email: String) = AuthResult.Success(Unit)
-        override suspend fun requestPasswordReset(email: String) = AuthResult.Success(Unit)
-        override suspend fun resetPassword(token: String, newPassword: String) = AuthResult.Success(User("user-1", "user@test.com", "User", true))
-        override suspend fun refreshSession() = AuthResult.Success(User("user-1", "user@test.com", "User", true))
-        override suspend fun logout() = AuthResult.Success(Unit)
-        override suspend fun adoptGuestData(userId: String) {}
     }
 }

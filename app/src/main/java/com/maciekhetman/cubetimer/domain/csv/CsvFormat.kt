@@ -134,13 +134,6 @@ object CsvFormat {
     }
 
     /**
-     * Strips a leading UTF-8 Byte Order Mark (\uFEFF) if present on the input string.
-     */
-    fun stripBom(input: String): String {
-        return input.removePrefix(UTF8_BOM_CHAR.toString())
-    }
-
-    /**
      * Wraps a [Reader] in a [PushbackReader] that silently consumes a leading
      * UTF-8 BOM (\uFEFF) if present at the start of the stream.
      */

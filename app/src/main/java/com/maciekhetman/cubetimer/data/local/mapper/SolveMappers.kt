@@ -57,18 +57,5 @@ fun SolveEntity.toSyncPayload(): SolveSyncPayload = SolveSyncPayload(
     timingDevice = this.timingDevice
 )
 
-fun SolveTime.toSyncPayload(): SolveSyncPayload = SolveSyncPayload(
-    id = this.id,
-    sessionId = this.sessionId,
-    durationMs = this.timeInMillis,
-    penalty = CubeTypeConverters.fromPenalty(this.penalty),
-    solvedAt = CubeTypeConverters.epochMillisToIso(this.timestamp),
-    scramble = this.scramble,
-    event = CubeTypeConverters.fromMode(this.mode),
-    timingDevice = this.timingDevice.value
-)
-
 fun Mode.toEventString(): String = CubeTypeConverters.fromMode(this)
-fun String.toMode(): Mode = CubeTypeConverters.toMode(this)
 fun Penalty.toDbString(): String = CubeTypeConverters.fromPenalty(this)
-fun String.toPenalty(): Penalty = CubeTypeConverters.toPenalty(this)

@@ -65,9 +65,3 @@ data class SolveEntity(
     @ColumnInfo(name = "timing_device", defaultValue = "keyboard")
     val timingDevice: String = "keyboard"
 )
-
-val SolveEntity.isDnf: Boolean
-    get() = penalty == "dnf"
-
-val SolveEntity.isPlusTwo: Boolean
-    get() = penalty == "plus_two"

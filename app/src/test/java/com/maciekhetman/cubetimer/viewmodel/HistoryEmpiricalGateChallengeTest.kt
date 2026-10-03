@@ -12,7 +12,6 @@ import com.maciekhetman.cubetimer.data.local.CubeDatabase
 import com.maciekhetman.cubetimer.data.local.converter.CubeTypeConverters
 import com.maciekhetman.cubetimer.data.local.entity.SessionEntity
 import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
-import com.maciekhetman.cubetimer.data.session.SessionManagerImpl
 import com.maciekhetman.cubetimer.data.session.SessionRepositoryImpl
 import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.Mode
@@ -24,6 +23,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
@@ -52,7 +52,6 @@ class HistoryEmpiricalGateChallengeTest {
     private lateinit var database: CubeDatabase
     private lateinit var solvesRepository: SolvesRepository
     private lateinit var sessionRepository: SessionRepositoryImpl
-    private lateinit var sessionManager: SessionManagerImpl
     private lateinit var fakeAuthManager: FakeAuthManager
 
     @Before
@@ -81,11 +80,6 @@ class HistoryEmpiricalGateChallengeTest {
             syncOutboxDao = database.syncOutboxDao()
         )
         fakeAuthManager = FakeAuthManager()
-        sessionManager = SessionManagerImpl(
-            sessionRepository = sessionRepository,
-            solveDao = database.solveDao(),
-            authManager = fakeAuthManager
-        )
     }
 
     @After
@@ -118,7 +112,6 @@ class HistoryEmpiricalGateChallengeTest {
         return keepUiStateActive(HistoryViewModel(
             application = application,
             solvesRepository = solvesRepository,
-            sessionManager = sessionManager,
             sessionRepository = sessionRepository,
             authManager = fakeAuthManager,
             database = database,
@@ -157,7 +150,7 @@ class HistoryEmpiricalGateChallengeTest {
 
         val vm = createViewModel()
         advanceUntilIdle()
-        vm.expandSession(sessionId)
+        vm.toggleSessionExpanded(sessionId)
         advanceUntilIdle()
 
         val solveTime = vm.expandedSolves(sessionId).single()
@@ -228,7 +221,7 @@ class HistoryEmpiricalGateChallengeTest {
 
         val vm = createViewModel()
         advanceUntilIdle()
-        vm.expandSession(sessionId)
+        vm.toggleSessionExpanded(sessionId)
         advanceUntilIdle()
 
         val item = vm.expandedSolves(sessionId).single()
@@ -273,7 +266,7 @@ class HistoryEmpiricalGateChallengeTest {
 
         val vm = createViewModel()
         advanceUntilIdle()
-        vm.expandSession(sessionId)
+        vm.toggleSessionExpanded(sessionId)
         advanceUntilIdle()
 
         assertEquals(2, vm.expandedSolves(sessionId).size)
@@ -287,7 +280,6 @@ class HistoryEmpiricalGateChallengeTest {
             assertTrue("Expected ShowUndoSnackbar effect", effect is HistoryUiEffect.ShowUndoSnackbar)
             val snackbarEffect = effect as HistoryUiEffect.ShowUndoSnackbar
             assertEquals("del-s2", snackbarEffect.solve.id)
-            assertEquals(0, snackbarEffect.originalIndex)
         }
         advanceUntilIdle()
 
@@ -304,7 +296,7 @@ class HistoryEmpiricalGateChallengeTest {
         assertEquals("del-s2", outbox[0].entityId)
 
         // Test Undo
-        vm.undoDelete()
+        vm.restoreSolve(solveToDelete)
         advanceUntilIdle()
 
         // Restored in UI
@@ -346,7 +338,7 @@ class HistoryEmpiricalGateChallengeTest {
         advanceUntilIdle()
         assertEquals(3, vm.uiState.value.sessionGroups.single().solveCount)
 
-        vm.clearHistory()
+        vm.deleteAllSolves()
         advanceUntilIdle()
 
         assertEquals(0, vm.uiState.value.sessionGroups.single().solveCount)
@@ -356,8 +348,9 @@ class HistoryEmpiricalGateChallengeTest {
         assertEquals(3, deleteMutations.size)
         assertTrue(deleteMutations.all { it.action == "delete" })
 
-        // Verify undoClearHistory restores all solves
-        vm.undoClearHistory()
+        // Verify undoing the clear restores all solves
+        val clearEffect = vm.effects.first { it is HistoryUiEffect.ShowUndoClearAll } as HistoryUiEffect.ShowUndoClearAll
+        vm.undoDeleteAllSolves(clearEffect.deletedSolves)
         advanceUntilIdle()
 
         assertEquals(3, vm.uiState.value.sessionGroups.single().solveCount)
@@ -441,7 +434,7 @@ class HistoryEmpiricalGateChallengeTest {
 
         val vm = createViewModel()
         advanceUntilIdle()
-        vm.expandSession(sessionId)
+        vm.toggleSessionExpanded(sessionId)
         advanceUntilIdle()
         val group = vm.uiState.value.sessionGroups.single()
         fun select(id: String) {
@@ -501,10 +494,12 @@ class HistoryEmpiricalGateChallengeTest {
 
     @Test
     fun testEmpiricalProofOfTimestampVariableLengthBugInRoom() = runTest(testDispatcher) {
+        val sessionId = seedSession("guest")
         // Solve A occurred at exactly 10:00:00.000 (stored with variable length "2026-08-30T10:00:00Z")
         val solveA = SolveEntity(
             id = "solve-A",
             ownerId = "guest",
+            sessionId = sessionId,
             event = "3x3",
             durationMs = 15000L,
             penalty = "none",
@@ -516,6 +511,7 @@ class HistoryEmpiricalGateChallengeTest {
         val solveB = SolveEntity(
             id = "solve-B",
             ownerId = "guest",
+            sessionId = sessionId,
             event = "3x3",
             durationMs = 12000L,
             penalty = "none",
@@ -536,7 +532,7 @@ class HistoryEmpiricalGateChallengeTest {
         assertNull("Empirical finding: SQLite string comparison omits solveA because 'Z' > '.'", priorForB)
 
         // EMPIRICALLY CONFIRMED BUG 2: ORDER BY solved_at DESC orders solveA BEFORE solveB!
-        val ordered = database.solveDao().getSolvesPagedByEvent("guest", "3x3", limit = 10, offset = 0)
+        val ordered = database.solveDao().observeSolvesBySessionDesc("guest", sessionId).first()
         assertEquals("solve-A", ordered[0].id) // solve-A is older but appears FIRST in DESC
         assertEquals("solve-B", ordered[1].id) // solve-B is newer but appears SECOND
     }
@@ -559,12 +555,10 @@ class HistoryEmpiricalGateChallengeTest {
         override suspend fun initialize() = Unit
         override suspend fun register(email: String, password: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun login(email: String, password: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
-        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun verifyEmail(token: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun resendVerificationEmail(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun requestPasswordReset(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun resetPassword(token: String, newPassword: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
-        override suspend fun refreshSession(): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun logout(): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun adoptGuestData(userId: String) = Unit
     }

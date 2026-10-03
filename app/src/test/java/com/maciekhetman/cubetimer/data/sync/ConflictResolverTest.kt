@@ -118,7 +118,7 @@ class ConflictResolverTest {
         assertEquals(1, unresolved.size)
         assertEquals(conflict.conflictId, unresolved[0].conflictId)
 
-        val count = resolver.observeUnresolvedCount(testUserId).first()
+        val count = conflictDao.observeUnresolvedCount(testUserId).first()
         assertEquals(1, count)
     }
 
@@ -295,84 +295,5 @@ class ConflictResolverTest {
         assertEquals("solve", mutation.entityType)
         assertEquals("upsert", mutation.action)
         assertEquals(5L, mutation.baseVersion)
-    }
-
-    @Test
-    fun resolveConflict_lastWriteWins_selectsLocalWinsWhenLocalNewer() = runTest {
-        val solveId = "solve-lww-local"
-        val localSolve = SolveEntity(
-            id = solveId,
-            ownerId = testUserId,
-            durationMs = 8888L,
-            penalty = "none",
-            solvedAt = "2026-08-30T09:00:00Z",
-            version = 1L,
-            updatedAt = "2026-08-30T10:30:00Z" // Newer than server
-        )
-        solveDao.insert(localSolve)
-
-        val conflict = resolver.recordConflict(
-            ownerId = testUserId,
-            mutationId = "mut-lww-1",
-            entityType = "solve",
-            entityId = solveId,
-            serverVersion = 3L,
-            serverUpdatedAt = "2026-08-30T10:00:00Z", // Older
-            localPayloadJson = json.encodeToString(SolveSyncPayload.serializer(), localSolve.toSyncPayload()),
-            serverPayloadJson = """{"id":"$solveId","duration_ms":9000,"version":3,"updated_at":"2026-08-30T10:00:00Z"}"""
-        )
-
-        val resolved = resolver.resolveConflict(conflict.conflictId, ConflictPolicy.LAST_WRITE_WINS)
-        assertTrue(resolved)
-
-        // Should have enqueued local mutation with server base version 3
-        val pending = syncOutboxDao.getPendingMutations(testUserId)
-        assertEquals(1, pending.size)
-        assertEquals(3L, pending[0].baseVersion)
-    }
-
-    @Test
-    fun resolveConflict_lastWriteWins_selectsServerWinsWhenServerNewer() = runTest {
-        val solveId = "solve-lww-server"
-        val localSolve = SolveEntity(
-            id = solveId,
-            ownerId = testUserId,
-            durationMs = 8888L,
-            penalty = "none",
-            solvedAt = "2026-08-30T09:00:00Z",
-            version = 1L,
-            updatedAt = "2026-08-30T09:30:00Z" // Older than server
-        )
-        solveDao.insert(localSolve)
-
-        val serverDto = SolveSnapshotDto(
-            id = solveId,
-            durationMs = 7777L,
-            penalty = "none",
-            solvedAt = "2026-08-30T09:00:00Z",
-            version = 3L,
-            updatedAt = "2026-08-30T10:00:00Z" // Newer
-        )
-
-        val conflict = resolver.recordConflict(
-            ownerId = testUserId,
-            mutationId = "mut-lww-2",
-            entityType = "solve",
-            entityId = solveId,
-            serverVersion = 3L,
-            serverUpdatedAt = "2026-08-30T10:00:00Z",
-            localPayloadJson = json.encodeToString(SolveSyncPayload.serializer(), localSolve.toSyncPayload()),
-            serverPayloadJson = json.encodeToString(SolveSnapshotDto.serializer(), serverDto)
-        )
-
-        val resolved = resolver.resolveConflict(conflict.conflictId, ConflictPolicy.LAST_WRITE_WINS)
-        assertTrue(resolved)
-
-        val updated = solveDao.getSolveById(solveId)
-        assertEquals(7777L, updated?.durationMs)
-        assertEquals(3L, updated?.version)
-
-        val pending = syncOutboxDao.getPendingMutations(testUserId)
-        assertEquals(0, pending.size)
     }
 }

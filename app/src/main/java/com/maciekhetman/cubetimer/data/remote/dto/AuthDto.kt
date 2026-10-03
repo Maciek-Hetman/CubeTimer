@@ -82,29 +82,6 @@ data class PasswordResetConfirmRequest(
 )
 
 /**
- * Request payload for POST /v1/auth/federated/google and POST /v1/auth/link/google.
- *
- * The backend requires [clientId] to be one of its configured Google OAuth client IDs (and the ID
- * token's audience), and [nonce] to equal the token's `nonce` claim; either an [idToken] or the
- * [code] + [redirectUri] + [codeVerifier] triple must be present.
- */
-@Serializable
-data class GoogleAuthRequest(
-    @SerialName("id_token")
-    val idToken: String? = null,
-    @SerialName("client_id")
-    val clientId: String,
-    @SerialName("nonce")
-    val nonce: String,
-    @SerialName("code")
-    val code: String? = null,
-    @SerialName("redirect_uri")
-    val redirectUri: String? = null,
-    @SerialName("code_verifier")
-    val codeVerifier: String? = null
-)
-
-/**
  * Request payload for PUT /v1/me/password
  */
 @Serializable
@@ -116,7 +93,7 @@ data class ChangePasswordRequest(
 )
 
 /**
- * User representation returned in auth session responses and GET /v1/me.
+ * User representation returned in auth session responses.
  */
 @Serializable
 data class UserDto(
@@ -136,7 +113,7 @@ data class UserDto(
 
 /**
  * Complete Auth Session returned on successful login, verify email, refresh,
- * password reset confirmation, and federated Google sign-in.
+ * and password reset confirmation.
  */
 @Serializable
 data class AuthResponse(

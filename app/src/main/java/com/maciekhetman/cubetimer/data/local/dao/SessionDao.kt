@@ -1,7 +1,6 @@
 package com.maciekhetman.cubetimer.data.local.dao
 
 import androidx.room.Dao
-import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
@@ -53,23 +52,6 @@ interface SessionDao {
     """)
     fun observeActiveSessionsByEvent(ownerId: String, event: String): Flow<List<SessionEntity>>
 
-    @Query("""
-        SELECT * FROM sessions 
-        WHERE owner_id = :ownerId AND event = :event AND deleted_at IS NULL 
-        ORDER BY started_at DESC
-    """)
-    fun observeAllSessionsByEvent(ownerId: String, event: String): Flow<List<SessionEntity>>
-
-    @Query("""
-        SELECT * FROM sessions 
-        WHERE owner_id = :ownerId AND deleted_at IS NULL 
-        ORDER BY started_at DESC
-    """)
-    fun observeAllSessions(ownerId: String): Flow<List<SessionEntity>>
-
-    @Query("SELECT * FROM sessions WHERE id = :id LIMIT 1")
-    fun observeSessionById(id: String): Flow<SessionEntity?>
-
     // --- One-Shot Queries ---
 
     @Query("SELECT * FROM sessions WHERE id = :id LIMIT 1")
@@ -86,13 +68,6 @@ interface SessionDao {
         LIMIT 1
     """)
     suspend fun getOpenAutomaticSession(ownerId: String, event: String): SessionEntity?
-
-    @Query("""
-        SELECT * FROM sessions
-        WHERE owner_id = :ownerId AND event = :event AND deleted_at IS NULL AND archived = 0
-        ORDER BY started_at DESC
-    """)
-    suspend fun getActiveSessionsByEvent(ownerId: String, event: String): List<SessionEntity>
 
     @Query("""
         SELECT name FROM sessions 
@@ -126,21 +101,8 @@ interface SessionDao {
 
     // --- Lifecycle State Updates ---
 
-    @Query("""
-        UPDATE sessions 
-        SET ended_at = :endedAt, updated_at = :updatedAt 
-        WHERE id = :id AND ended_at IS NULL
-    """)
-    suspend fun closeSession(id: String, endedAt: String, updatedAt: String): Int
-
     @Query("UPDATE sessions SET deleted_at = :deletedAt, updated_at = :updatedAt WHERE id = :id")
     suspend fun softDelete(id: String, deletedAt: String, updatedAt: String): Int
-
-    @Delete
-    suspend fun delete(session: SessionEntity): Int
-
-    @Query("DELETE FROM sessions WHERE id = :id")
-    suspend fun deleteById(id: String): Int
 
     // --- Guest Adoption ---
 

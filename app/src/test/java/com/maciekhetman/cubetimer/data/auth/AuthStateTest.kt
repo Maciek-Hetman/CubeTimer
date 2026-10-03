@@ -4,9 +4,6 @@ import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.User
 import com.maciekhetman.cubetimer.model.UserRole
 import com.maciekhetman.cubetimer.model.currentUser
-import com.maciekhetman.cubetimer.model.isAuthenticated
-import com.maciekhetman.cubetimer.model.isGuest
-import com.maciekhetman.cubetimer.model.isLoading
 import com.maciekhetman.cubetimer.model.ownerId
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -37,10 +34,10 @@ class AuthStateTest {
         val state: AuthState = AuthState.Loading
 
         assertNull(state.currentUser)
-        assertFalse(state.isAuthenticated)
+        assertFalse(state is AuthState.Authenticated || state is AuthState.Admin)
         assertFalse(state is AuthState.Admin)
-        assertFalse(state.isGuest)
-        assertTrue(state.isLoading)
+        assertFalse(state is AuthState.Guest)
+        assertTrue(state is AuthState.Loading)
         assertEquals("guest", state.ownerId)
     }
 
@@ -49,10 +46,10 @@ class AuthStateTest {
         val state: AuthState = AuthState.Guest
 
         assertNull(state.currentUser)
-        assertFalse(state.isAuthenticated)
+        assertFalse(state is AuthState.Authenticated || state is AuthState.Admin)
         assertFalse(state is AuthState.Admin)
-        assertTrue(state.isGuest)
-        assertFalse(state.isLoading)
+        assertTrue(state is AuthState.Guest)
+        assertFalse(state is AuthState.Loading)
         assertEquals("guest", state.ownerId)
     }
 
@@ -61,10 +58,10 @@ class AuthStateTest {
         val state: AuthState = AuthState.Authenticated(regularUser)
 
         assertEquals(regularUser, state.currentUser)
-        assertTrue(state.isAuthenticated)
+        assertTrue(state is AuthState.Authenticated || state is AuthState.Admin)
         assertFalse(state is AuthState.Admin)
-        assertFalse(state.isGuest)
-        assertFalse(state.isLoading)
+        assertFalse(state is AuthState.Guest)
+        assertFalse(state is AuthState.Loading)
         assertEquals("user-123", state.ownerId)
     }
 
@@ -73,10 +70,10 @@ class AuthStateTest {
         val state: AuthState = AuthState.Admin(adminUser)
 
         assertEquals(adminUser, state.currentUser)
-        assertTrue(state.isAuthenticated)
+        assertTrue(state is AuthState.Authenticated || state is AuthState.Admin)
         assertTrue(state is AuthState.Admin)
-        assertFalse(state.isGuest)
-        assertFalse(state.isLoading)
+        assertFalse(state is AuthState.Guest)
+        assertFalse(state is AuthState.Loading)
         assertEquals("admin-456", state.ownerId)
     }
 }

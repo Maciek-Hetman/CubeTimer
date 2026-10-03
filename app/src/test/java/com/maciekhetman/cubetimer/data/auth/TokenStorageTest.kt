@@ -2,7 +2,6 @@ package com.maciekhetman.cubetimer.data.auth
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import com.maciekhetman.cubetimer.model.User
 import com.maciekhetman.cubetimer.model.UserRole
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -73,26 +72,6 @@ class TokenStorageTest {
         assertEquals("Tymon Kolasinski", cachedUser?.displayName)
         assertEquals(UserRole.ADMIN, cachedUser?.userRole)
         assertTrue(cachedUser?.emailVerified == true)
-    }
-
-    @Test
-    fun `saveUser updates persistent user details`() {
-        val user = User(
-            id = "user-200",
-            email = "yiheng@example.com",
-            displayName = "Yiheng Wang",
-            emailVerified = true,
-            userRole = UserRole.USER
-        )
-
-        tokenStorage.saveUser(user)
-
-        val cached = tokenStorage.getCachedUser()
-        assertNotNull(cached)
-        assertEquals("user-200", cached?.id)
-        assertEquals("yiheng@example.com", cached?.email)
-        assertEquals("Yiheng Wang", cached?.displayName)
-        assertEquals(UserRole.USER, cached?.userRole)
     }
 
     @Test

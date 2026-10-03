@@ -1,15 +1,10 @@
 package com.maciekhetman.cubetimer.ui.components
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -48,82 +43,16 @@ import com.maciekhetman.cubetimer.model.SolveTime
 import com.maciekhetman.cubetimer.ui.screens.HistorySolveCard
 import com.maciekhetman.cubetimer.viewmodel.SessionGroupUiModel
 
+// A session on the History screen is one connected group of tonal segments (the header, one row per
+// solve and an action row): outer corners are large, inner corners small, and the header's bottom
+// corners morph as the group opens.
 internal val GroupOuterCorner = 28.dp
 internal val GroupInnerCorner = 6.dp
 internal val GroupSegmentGap = 2.dp
 
 /**
- * A session on the History screen, drawn as one connected group of tonal segments:
- * the header, one row per solve and an action row. Outer corners are large, inner
- * corners small, and the header's bottom corners morph as the group opens.
- */
-@Composable
-fun SessionExpandableCard(
-    sessionGroup: SessionGroupUiModel,
-    isSelectionMode: Boolean,
-    selectedSolveIds: Set<String>,
-    onToggleExpand: () -> Unit,
-    onExportSession: () -> Unit,
-    onDeleteSession: () -> Unit,
-    onSolveClick: (SolveTime, Int) -> Unit,
-    onSolveLongClick: (SolveTime) -> Unit,
-    onToggleSolveSelection: (String) -> Unit,
-    onTogglePlusTwo: (SolveTime) -> Unit,
-    onToggleDnf: (SolveTime) -> Unit,
-    onDeleteSolve: (SolveTime) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val expanded = sessionGroup.isExpanded
-
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(GroupSegmentGap)
-    ) {
-        SessionCardHeader(
-            sessionGroup = sessionGroup,
-            expanded = expanded,
-            onClick = onToggleExpand
-        )
-
-        AnimatedVisibility(
-            visible = expanded,
-            enter = fadeIn() + expandVertically(spring(stiffness = Spring.StiffnessMediumLow)),
-            exit = fadeOut() + shrinkVertically(spring(stiffness = Spring.StiffnessMediumLow))
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(GroupSegmentGap)) {
-                if (sessionGroup.solves.isEmpty()) {
-                    SessionCardEmptyOrLoadingMessage(sessionGroup)
-                } else {
-                    sessionGroup.solves.forEachIndexed { index, solve ->
-                        SessionCardSolveRow(
-                            sessionGroup = sessionGroup,
-                            solve = solve,
-                            index = index,
-                            isSelectionMode = isSelectionMode,
-                            selectedSolveIds = selectedSolveIds,
-                            onSolveClick = onSolveClick,
-                            onSolveLongClick = onSolveLongClick,
-                            onToggleSolveSelection = onToggleSolveSelection,
-                            onTogglePlusTwo = onTogglePlusTwo,
-                            onToggleDnf = onToggleDnf,
-                            onDeleteSolve = onDeleteSolve
-                        )
-                    }
-                }
-
-                SessionCardActions(
-                    onExport = onExportSession,
-                    onDelete = onDeleteSession
-                )
-            }
-        }
-    }
-}
-
-/**
- * Single solve row inside an expanded session group, extracted so it can also be emitted as its
- * own `LazyColumn` item (see `HistoryScreen`) instead of being composed eagerly for every solve
- * in a large expanded session.
+ * Single solve row inside an expanded session group, emitted as its own `LazyColumn` item (see
+ * `HistoryScreen`) so a large expanded session doesn't compose every solve at once.
  */
 @Composable
 fun SessionCardSolveRow(

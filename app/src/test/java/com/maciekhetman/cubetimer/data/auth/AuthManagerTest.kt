@@ -9,7 +9,6 @@ import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
 import com.maciekhetman.cubetimer.data.remote.CubeSyncApiClient
 import com.maciekhetman.cubetimer.data.remote.dto.AuthResponse
 import com.maciekhetman.cubetimer.data.remote.dto.ChangePasswordRequest
-import com.maciekhetman.cubetimer.data.remote.dto.GoogleAuthRequest
 import com.maciekhetman.cubetimer.data.remote.dto.LoginRequest
 import com.maciekhetman.cubetimer.data.remote.dto.RegisterRequest
 import com.maciekhetman.cubetimer.data.remote.dto.SessionSyncPayload
@@ -21,8 +20,6 @@ import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.User
 import com.maciekhetman.cubetimer.model.UserRole
 import com.maciekhetman.cubetimer.model.currentUser
-import com.maciekhetman.cubetimer.model.isAuthenticated
-import com.maciekhetman.cubetimer.model.isGuest
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -88,7 +85,7 @@ class AuthManagerTest {
 
         authManager.initialize()
 
-        assertTrue(authManager.authState.value.isGuest)
+        assertTrue(authManager.authState.value is AuthState.Guest)
         assertNull(authManager.currentUser)
     }
 
@@ -103,7 +100,7 @@ class AuthManagerTest {
 
         authManager.initialize()
 
-        assertTrue(authManager.authState.value.isAuthenticated)
+        assertTrue(authManager.authState.value.let { it is AuthState.Authenticated || it is AuthState.Admin })
         assertEquals("u-1", authManager.currentUser?.id)
         assertEquals("new-acc", fakeTokenStorage.storedAccessToken)
         assertEquals("new-ref", fakeTokenStorage.storedRefreshToken)
@@ -116,7 +113,7 @@ class AuthManagerTest {
 
         authManager.initialize()
 
-        assertTrue(authManager.authState.value.isGuest)
+        assertTrue(authManager.authState.value is AuthState.Guest)
         assertNull(fakeTokenStorage.storedRefreshToken)
     }
 
@@ -133,7 +130,7 @@ class AuthManagerTest {
 
         authManager.initialize()
 
-        assertTrue(authManager.authState.value.isAuthenticated)
+        assertTrue(authManager.authState.value.let { it is AuthState.Authenticated || it is AuthState.Admin })
         assertEquals("cached-u", authManager.currentUser?.id)
     }
 
@@ -156,7 +153,7 @@ class AuthManagerTest {
         testDispatcher.scheduler.runCurrent()
 
         // The network call hasn't resolved yet, but authState is already Authenticated.
-        assertTrue(authManager.authState.value.isAuthenticated)
+        assertTrue(authManager.authState.value.let { it is AuthState.Authenticated || it is AuthState.Admin })
         assertEquals("cached-u", authManager.currentUser?.id)
 
         // Now let the refresh succeed with a (possibly updated) user and confirm the final state.
@@ -169,7 +166,7 @@ class AuthManagerTest {
         )
         job.join()
 
-        assertTrue(authManager.authState.value.isAuthenticated)
+        assertTrue(authManager.authState.value.let { it is AuthState.Authenticated || it is AuthState.Admin })
         assertEquals("new-acc", fakeTokenStorage.storedAccessToken)
     }
 
@@ -189,12 +186,12 @@ class AuthManagerTest {
         testDispatcher.scheduler.runCurrent()
 
         // Immediately shown as Authenticated from the cache while the rejection is in flight.
-        assertTrue(authManager.authState.value.isAuthenticated)
+        assertTrue(authManager.authState.value.let { it is AuthState.Authenticated || it is AuthState.Admin })
 
         pendingRefresh.completeExceptionally(AuthException.RefreshTokenReused("Reused"))
         job.join()
 
-        assertTrue(authManager.authState.value.isGuest)
+        assertTrue(authManager.authState.value is AuthState.Guest)
         assertNull(authManager.currentUser)
         assertNull(fakeTokenStorage.storedRefreshToken)
     }
@@ -267,7 +264,7 @@ class AuthManagerTest {
         assertTrue(result is AuthResult.Error)
         val error = (result as AuthResult.Error).exception
         assertTrue(error is AuthException.InvalidCredentials)
-        assertTrue(authManager.authState.value.isGuest)
+        assertTrue(authManager.authState.value is AuthState.Guest)
     }
 
     @Test
@@ -278,7 +275,7 @@ class AuthManagerTest {
         val result = authManager.register("newuser@test.com", "Password123!")
 
         assertTrue(result is AuthResult.Success)
-        assertTrue(authManager.authState.value.isGuest)
+        assertTrue(authManager.authState.value is AuthState.Guest)
     }
 
     @Test
@@ -303,7 +300,7 @@ class AuthManagerTest {
         val result = authManager.verifyEmail("token-123")
 
         assertTrue(result is AuthResult.Success)
-        assertTrue(authManager.authState.value.isAuthenticated)
+        assertTrue(authManager.authState.value.let { it is AuthState.Authenticated || it is AuthState.Admin })
         assertEquals("user-v", authManager.currentUser?.id)
     }
 
@@ -318,33 +315,8 @@ class AuthManagerTest {
         val result = authManager.resetPassword("token-456", "NewPassword123!")
 
         assertTrue(result is AuthResult.Success)
-        assertTrue(authManager.authState.value.isAuthenticated)
+        assertTrue(authManager.authState.value.let { it is AuthState.Authenticated || it is AuthState.Admin })
         assertEquals("user-reset", authManager.currentUser?.id)
-    }
-
-    @Test
-    fun `loginWithGoogle adopts guest data and authenticates`() = runTest(testDispatcher) {
-        fakeApiClient.googleLoginResponse = AuthResponse(
-            accessToken = "acc-g",
-            refreshToken = "ref-g",
-            user = UserDto(id = "user-g", email = "g@gmail.com", userRole = "user", emailVerified = true)
-        )
-
-        val result = authManager.loginWithGoogle(
-            idToken = "id-token-xyz",
-            clientId = "123-abc.apps.googleusercontent.com",
-            nonce = "nonce-1"
-        )
-
-        assertTrue(result is AuthResult.Success)
-        assertTrue(authManager.authState.value.isAuthenticated)
-        assertEquals("user-g", authManager.currentUser?.id)
-        // The backend checks client_id against its allow-list and the token's aud, and nonce
-        // against the token's nonce claim; the device id is not a valid client_id.
-        val request = requireNotNull(fakeApiClient.lastGoogleRequest)
-        assertEquals("id-token-xyz", request.idToken)
-        assertEquals("123-abc.apps.googleusercontent.com", request.clientId)
-        assertEquals("nonce-1", request.nonce)
     }
 
     @Test
@@ -384,7 +356,7 @@ class AuthManagerTest {
         val logoutResult = authManager.logout()
 
         assertTrue(logoutResult is AuthResult.Success)
-        assertTrue(authManager.authState.value.isGuest)
+        assertTrue(authManager.authState.value is AuthState.Guest)
         assertNull(authManager.currentUser)
         assertNull(fakeTokenStorage.storedAccessToken)
         assertNull(fakeTokenStorage.storedRefreshToken)
@@ -499,10 +471,6 @@ class AuthManagerTest {
         var resetPasswordResponse: AuthResponse? = null
         var resetPasswordError: AuthException? = null
 
-        var googleLoginResponse: AuthResponse? = null
-        var googleLoginError: AuthException? = null
-        var lastGoogleRequest: GoogleAuthRequest? = null
-
         override suspend fun register(request: RegisterRequest): StatusResponse {
             registerError?.let { throw it }
             return registerResponse
@@ -535,24 +503,14 @@ class AuthManagerTest {
             return resetPasswordResponse ?: throw AuthException.InvalidToken()
         }
 
-        override suspend fun loginWithGoogle(request: GoogleAuthRequest): AuthResponse {
-            lastGoogleRequest = request
-            googleLoginError?.let { throw it }
-            return googleLoginResponse ?: throw AuthException.InvalidSocialToken()
-        }
-
-        override suspend fun linkGoogle(request: com.maciekhetman.cubetimer.data.remote.dto.GoogleAuthRequest, authToken: String?) {}
-        override suspend fun getCurrentUser(authToken: String?): UserDto = UserDto("u", "e@t.com")
-        override suspend fun changePassword(request: ChangePasswordRequest, authToken: String?) {}
-        override suspend fun deleteAccount(authToken: String?) {}
+        override suspend fun changePassword(request: ChangePasswordRequest) {}
+        override suspend fun deleteAccount() {}
         override suspend fun sync(
-            request: com.maciekhetman.cubetimer.data.remote.dto.SyncRequest,
-            authToken: String?
+            request: com.maciekhetman.cubetimer.data.remote.dto.SyncRequest
         ): com.maciekhetman.cubetimer.data.remote.dto.SyncResponse =
             com.maciekhetman.cubetimer.data.remote.dto.SyncResponse()
         override suspend fun snapshot(
-            request: com.maciekhetman.cubetimer.data.remote.dto.SnapshotRequest,
-            authToken: String?
+            request: com.maciekhetman.cubetimer.data.remote.dto.SnapshotRequest
         ): com.maciekhetman.cubetimer.data.remote.dto.SnapshotResponse =
             com.maciekhetman.cubetimer.data.remote.dto.SnapshotResponse()
     }
@@ -577,7 +535,6 @@ class AuthManagerTest {
             _flow.value = token
         }
         override fun getRefreshToken(): String? = storedRefreshToken
-        override fun setRefreshToken(token: String?) { storedRefreshToken = token }
         override fun getUserId(): String? = storedUserId
         override fun getUserEmail(): String? = storedUserEmail
         override fun getUserRole(): String? = storedUserRole
@@ -607,9 +564,6 @@ class AuthManagerTest {
                 emailVerified = emailVerified,
                 userRole = UserRole.fromString(userRole)
             )
-        }
-        override fun saveUser(user: User) {
-            this.storedCachedUser = user
         }
         override fun getDeviceId(): String = storedDeviceId
         override fun clearAuthData() {

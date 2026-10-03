@@ -9,6 +9,7 @@ import com.maciekhetman.cubetimer.data.remote.dto.SessionSyncPayload
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Session
 import com.maciekhetman.cubetimer.model.SessionKind
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -142,16 +143,16 @@ class SessionRepositoryTest {
     @Test
     fun testDeleteSessionSoftDeletesAndEnqueuesDeleteMutation() = runTest {
         val session = repository.insertSession("Delete Me", Mode.CUBE_3x3, "user-abc")
-        val success = repository.deleteSession(session.id, "user-abc")
-        assertTrue(success)
+        val snapshot = repository.deleteSessionWithSolves(session.id, "user-abc")
+        assertNotNull(snapshot)
 
         val fetched = repository.getSessionById(session.id)
         assertNotNull(fetched)
-        assertTrue(fetched!!.isDeleted)
+        assertTrue(fetched!!.deletedAt != null)
         assertNotNull(fetched.deletedAt)
         assertFalse(fetched.isOpen)
 
-        val activeList = repository.getActiveSessions("user-abc", Mode.CUBE_3x3)
+        val activeList = repository.observeActiveSessions("user-abc", Mode.CUBE_3x3).first()
         assertTrue(activeList.none { it.id == session.id })
 
         val pending = database.syncOutboxDao().getPendingMutations("user-abc")
@@ -163,7 +164,7 @@ class SessionRepositoryTest {
     }
 
     @Test
-    fun testGetActiveSessionsExcludesArchivedDeletedAndOtherModeOrOwner() = runTest {
+    fun testObserveActiveSessionsExcludesArchivedDeletedAndOtherModeOrOwner() = runTest {
         fun session(id: String, ownerId: String = "user-abc", event: Mode = Mode.CUBE_3x3, archived: Boolean = false) = Session(
             id = id,
             ownerId = ownerId,
@@ -181,9 +182,9 @@ class SessionRepositoryTest {
             session("other-mode", event = Mode.CUBE_2x2),
             session("other-owner", ownerId = "user-other")
         ).forEach { repository.createSession(it) }
-        repository.deleteSession("deleted", "user-abc")
+        repository.deleteSessionWithSolves("deleted", "user-abc")
 
-        val active = repository.getActiveSessions("user-abc", Mode.CUBE_3x3)
+        val active = repository.observeActiveSessions("user-abc", Mode.CUBE_3x3).first()
 
         assertEquals(setOf("active-a", "active-b"), active.map { it.id }.toSet())
         assertEquals(2, active.size)
@@ -216,13 +217,12 @@ class SessionRepositoryTest {
         val triggersAfterCreate = syncTriggerCount
 
         assertNull(repository.closeSession(session.id, "user-abc"))
-        assertFalse(repository.deleteSession(session.id, "user-abc"))
         assertNull(repository.deleteSessionWithSolves(session.id, "user-abc"))
         assertEquals(triggersAfterCreate, syncTriggerCount)
 
         val fetched = repository.getSessionById(session.id)!!
         assertEquals("user-other", fetched.ownerId)
-        assertFalse(fetched.isDeleted)
+        assertFalse(fetched.deletedAt != null)
         assertTrue(fetched.isOpen)
         assertEquals(0, database.syncOutboxDao().getPendingMutations("user-abc").size)
         assertEquals(1, database.syncOutboxDao().getPendingMutations("user-other").size)
@@ -230,6 +230,6 @@ class SessionRepositoryTest {
         val snapshot = repository.deleteSessionWithSolves(session.id, "user-other")
         assertNotNull(snapshot)
         repository.restoreSessionWithSolves(snapshot!!, "user-abc")
-        assertTrue(repository.getSessionById(session.id)!!.isDeleted)
+        assertTrue(repository.getSessionById(session.id)!!.deletedAt != null)
     }
 }

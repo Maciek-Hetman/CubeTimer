@@ -2,11 +2,9 @@ package com.maciekhetman.cubetimer.data.remote
 
 import com.maciekhetman.cubetimer.data.remote.dto.AuthResponse
 import com.maciekhetman.cubetimer.data.remote.dto.ChangePasswordRequest
-import com.maciekhetman.cubetimer.data.remote.dto.GoogleAuthRequest
 import com.maciekhetman.cubetimer.data.remote.dto.LoginRequest
 import com.maciekhetman.cubetimer.data.remote.dto.RegisterRequest
 import com.maciekhetman.cubetimer.data.remote.dto.StatusResponse
-import com.maciekhetman.cubetimer.data.remote.dto.UserDto
 import com.maciekhetman.cubetimer.model.AuthException
 
 /**
@@ -39,29 +37,18 @@ interface CubeSyncApiClient {
     suspend fun confirmPasswordReset(token: String, newPassword: String): AuthResponse
 
     @Throws(AuthException::class)
-    suspend fun loginWithGoogle(request: GoogleAuthRequest): AuthResponse
+    suspend fun changePassword(request: ChangePasswordRequest)
 
     @Throws(AuthException::class)
-    suspend fun linkGoogle(request: GoogleAuthRequest, authToken: String? = null)
-
-    @Throws(AuthException::class)
-    suspend fun getCurrentUser(authToken: String? = null): UserDto
-
-    @Throws(AuthException::class)
-    suspend fun changePassword(request: ChangePasswordRequest, authToken: String? = null)
-
-    @Throws(AuthException::class)
-    suspend fun deleteAccount(authToken: String? = null)
+    suspend fun deleteAccount()
 
     @Throws(AuthException::class)
     suspend fun sync(
-        request: com.maciekhetman.cubetimer.data.remote.dto.SyncRequest,
-        authToken: String? = null
+        request: com.maciekhetman.cubetimer.data.remote.dto.SyncRequest
     ): com.maciekhetman.cubetimer.data.remote.dto.SyncResponse
 
     @Throws(AuthException::class)
     suspend fun snapshot(
-        request: com.maciekhetman.cubetimer.data.remote.dto.SnapshotRequest,
-        authToken: String? = null
+        request: com.maciekhetman.cubetimer.data.remote.dto.SnapshotRequest
     ): com.maciekhetman.cubetimer.data.remote.dto.SnapshotResponse
 }

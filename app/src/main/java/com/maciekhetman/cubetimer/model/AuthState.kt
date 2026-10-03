@@ -24,7 +24,7 @@ sealed class AuthState {
 
     /**
      * Authenticated administrator (user.userRole == UserRole.ADMIN).
-     * Behaves like [Authenticated]; the role is only surfaced as a badge in the account UI.
+     * Behaves exactly like [Authenticated]; the role is not surfaced anywhere in the UI.
      */
     data class Admin(val user: User) : AuthState()
 }
@@ -38,24 +38,6 @@ val AuthState.currentUser: User?
         is AuthState.Admin -> user
         AuthState.Guest, AuthState.Loading -> null
     }
-
-/**
- * True if the current state is Authenticated or Admin.
- */
-val AuthState.isAuthenticated: Boolean
-    get() = this is AuthState.Authenticated || this is AuthState.Admin
-
-/**
- * True if the current state is Guest.
- */
-val AuthState.isGuest: Boolean
-    get() = this is AuthState.Guest
-
-/**
- * True if the current state is Loading.
- */
-val AuthState.isLoading: Boolean
-    get() = this is AuthState.Loading
 
 /**
  * Active owner ID string: "guest" when unauthenticated, or the user's UUID when authenticated.

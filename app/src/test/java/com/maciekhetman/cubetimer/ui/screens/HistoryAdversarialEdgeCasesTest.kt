@@ -11,11 +11,14 @@ import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.navigationevent.NavigationEventDispatcher
 import androidx.navigationevent.NavigationEventDispatcherOwner
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -40,7 +43,6 @@ import com.maciekhetman.cubetimer.data.auth.AuthResult
 import com.maciekhetman.cubetimer.data.local.CubeDatabase
 import com.maciekhetman.cubetimer.data.local.entity.SessionEntity
 import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
-import com.maciekhetman.cubetimer.data.session.SessionManagerImpl
 import com.maciekhetman.cubetimer.data.session.SessionRepositoryImpl
 import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.Mode
@@ -49,8 +51,11 @@ import com.maciekhetman.cubetimer.model.Session
 import com.maciekhetman.cubetimer.model.SessionKind
 import com.maciekhetman.cubetimer.model.SolveTime
 import com.maciekhetman.cubetimer.model.User
+import com.maciekhetman.cubetimer.ui.components.GroupSegmentGap
 import com.maciekhetman.cubetimer.ui.components.HistoryContextualTopAppBar
-import com.maciekhetman.cubetimer.ui.components.SessionExpandableCard
+import com.maciekhetman.cubetimer.ui.components.SessionCardActions
+import com.maciekhetman.cubetimer.ui.components.SessionCardHeader
+import com.maciekhetman.cubetimer.ui.components.SessionCardSolveRow
 import com.maciekhetman.cubetimer.ui.dialogs.HistoryFilterSortBottomSheet
 import com.maciekhetman.cubetimer.viewmodel.HistoryUiState
 import com.maciekhetman.cubetimer.viewmodel.HistoryViewModel
@@ -92,7 +97,6 @@ class HistoryAdversarialEdgeCasesTest {
     private lateinit var database: CubeDatabase
     private lateinit var solvesRepository: SolvesRepository
     private lateinit var sessionRepository: SessionRepositoryImpl
-    private lateinit var sessionManager: SessionManagerImpl
     private lateinit var fakeAuthManager: FakeAuthManager
 
     @Before
@@ -121,11 +125,6 @@ class HistoryAdversarialEdgeCasesTest {
             syncOutboxDao = database.syncOutboxDao()
         )
         fakeAuthManager = FakeAuthManager()
-        sessionManager = SessionManagerImpl(
-            sessionRepository = sessionRepository,
-            solveDao = database.solveDao(),
-            authManager = fakeAuthManager
-        )
     }
 
     @After
@@ -138,7 +137,6 @@ class HistoryAdversarialEdgeCasesTest {
         return keepUiStateActive(HistoryViewModel(
             application = application,
             solvesRepository = solvesRepository,
-            sessionManager = sessionManager,
             sessionRepository = sessionRepository,
             authManager = fakeAuthManager,
             database = database,
@@ -368,21 +366,10 @@ class HistoryAdversarialEdgeCasesTest {
 
         composeTestRule.setContent {
             MaterialTheme {
-                SessionExpandableCard(
+                SessionCardHeader(
                     sessionGroup = group,
-                    isSelectionMode = false,
-                    selectedSolveIds = emptySet(),
-                    onToggleExpand = {},
-                    onExportSession = {},
-                    onDeleteSession = {
-                        // Triggers dialog in HistoryScreen
-                    },
-                    onSolveClick = { _, _ -> },
-                    onSolveLongClick = {},
-                    onToggleSolveSelection = {},
-                    onTogglePlusTwo = {},
-                    onToggleDnf = {},
-                    onDeleteSolve = {}
+                    expanded = group.isExpanded,
+                    onClick = {}
                 )
             }
         }
@@ -436,7 +423,7 @@ class HistoryAdversarialEdgeCasesTest {
     // =========================================================================
 
     @Test
-    fun testSessionExpandableCard_narrowWidth280dp_extremeFontScale2_5x() {
+    fun testSessionCardPieces_narrowWidth280dp_extremeFontScale2_5x() {
         val session = createSession(
             name = "Extra Extremely Long Session Name That Should Truncate With Ellipsis In Narrow Width",
             event = Mode.CUBE_3x3,
@@ -461,20 +448,7 @@ class HistoryAdversarialEdgeCasesTest {
             ) {
                 MaterialTheme {
                     Box(modifier = Modifier.width(280.dp).verticalScroll(rememberScrollState())) {
-                        SessionExpandableCard(
-                            sessionGroup = group,
-                            isSelectionMode = false,
-                            selectedSolveIds = emptySet(),
-                            onToggleExpand = {},
-                            onExportSession = {},
-                            onDeleteSession = {},
-                            onSolveClick = { _, _ -> },
-                            onSolveLongClick = {},
-                            onToggleSolveSelection = {},
-                            onTogglePlusTwo = {},
-                            onToggleDnf = {},
-                            onDeleteSolve = {}
-                        )
+                        ExpandedSessionPieces(group = group, isSelectionMode = false)
                     }
                 }
             }
@@ -488,7 +462,7 @@ class HistoryAdversarialEdgeCasesTest {
     }
 
     @Test
-    fun testSessionExpandableCard_narrowWidth320dp_fontScale2_0x() {
+    fun testSessionCardPieces_narrowWidth320dp_fontScale2_0x() {
         val session = createSession(
             name = "Compact 320dp Test",
             event = Mode.CUBE_4x4,
@@ -511,20 +485,7 @@ class HistoryAdversarialEdgeCasesTest {
             ) {
                 MaterialTheme {
                     Box(modifier = Modifier.width(320.dp)) {
-                        SessionExpandableCard(
-                            sessionGroup = group,
-                            isSelectionMode = true,
-                            selectedSolveIds = emptySet(),
-                            onToggleExpand = {},
-                            onExportSession = {},
-                            onDeleteSession = {},
-                            onSolveClick = { _, _ -> },
-                            onSolveLongClick = {},
-                            onToggleSolveSelection = {},
-                            onTogglePlusTwo = {},
-                            onToggleDnf = {},
-                            onDeleteSolve = {}
-                        )
+                        ExpandedSessionPieces(group = group, isSelectionMode = true)
                     }
                 }
             }
@@ -641,6 +602,30 @@ class HistoryAdversarialEdgeCasesTest {
         composeTestRule.onNodeWithText("Done").performScrollTo().assertIsDisplayed()
     }
 
+    /** An expanded session laid out from its pieces, the way HistoryScreen lists them. */
+    @Composable
+    private fun ExpandedSessionPieces(group: SessionGroupUiModel, isSelectionMode: Boolean) {
+        Column(verticalArrangement = Arrangement.spacedBy(GroupSegmentGap)) {
+            SessionCardHeader(sessionGroup = group, expanded = group.isExpanded, onClick = {})
+            group.solves.forEachIndexed { index, solve ->
+                SessionCardSolveRow(
+                    sessionGroup = group,
+                    solve = solve,
+                    index = index,
+                    isSelectionMode = isSelectionMode,
+                    selectedSolveIds = emptySet(),
+                    onSolveClick = { _, _ -> },
+                    onSolveLongClick = {},
+                    onToggleSolveSelection = {},
+                    onTogglePlusTwo = {},
+                    onToggleDnf = {},
+                    onDeleteSolve = {}
+                )
+            }
+            SessionCardActions(onExport = {}, onDelete = {})
+        }
+    }
+
     // --- Fake Auth Manager helper ---
     private class FakeAuthManager : AuthManager {
         private val _authState = MutableStateFlow<AuthState>(AuthState.Guest)
@@ -650,12 +635,10 @@ class HistoryAdversarialEdgeCasesTest {
         override suspend fun initialize() = Unit
         override suspend fun register(email: String, password: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun login(email: String, password: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
-        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun verifyEmail(token: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun resendVerificationEmail(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun requestPasswordReset(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun resetPassword(token: String, newPassword: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
-        override suspend fun refreshSession(): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun logout(): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun adoptGuestData(userId: String) = Unit
     }

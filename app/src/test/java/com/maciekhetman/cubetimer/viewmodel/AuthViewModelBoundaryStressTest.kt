@@ -8,6 +8,7 @@ import com.maciekhetman.cubetimer.model.AuthException
 import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.User
 import com.maciekhetman.cubetimer.ui.auth.AuthDialogType
+import com.maciekhetman.cubetimer.ui.auth.AuthLink
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -208,51 +209,44 @@ class AuthViewModelBoundaryStressTest {
 
     @Test
     fun `test email verification token validation boundaries`() = testScope.runTest {
-        viewModel.openDialog(AuthDialogType.EMAIL_VERIFICATION)
-
         // Empty token
-        viewModel.onTokenChanged("")
+        viewModel.openEmailLink(AuthLink.VerifyEmail(""))
         viewModel.submitVerifyEmail()
         advanceUntilIdle()
-        assertEquals("Verification token is required", viewModel.formState.value.tokenError)
         assertEquals(0, fakeAuthManager.verifyEmailCallCount)
 
         // Blank whitespace token
-        viewModel.onTokenChanged("     ")
+        viewModel.openEmailLink(AuthLink.VerifyEmail("     "))
         viewModel.submitVerifyEmail()
         advanceUntilIdle()
-        assertEquals("Verification token is required", viewModel.formState.value.tokenError)
         assertEquals(0, fakeAuthManager.verifyEmailCallCount)
 
         // Valid token
-        viewModel.onTokenChanged("  valid-token-123  ")
+        viewModel.openEmailLink(AuthLink.VerifyEmail("  valid-token-123  "))
         fakeAuthManager.verifyEmailResult = AuthResult.Success(User(id = "u1", email = "u@test.com", emailVerified = true))
         viewModel.submitVerifyEmail()
         advanceUntilIdle()
-        assertNull(viewModel.formState.value.tokenError)
         assertEquals(1, fakeAuthManager.verifyEmailCallCount)
         assertEquals(AuthDialogType.NONE, viewModel.formState.value.dialogType)
     }
 
     @Test
     fun `test password reset token validation boundaries`() = testScope.runTest {
-        viewModel.openDialog(AuthDialogType.RESET_PASSWORD)
+        // Empty token (opening a link clears the password fields, so they are typed afterwards)
+        viewModel.openEmailLink(AuthLink.ResetPassword(""))
         viewModel.onPasswordChanged("ValidPassword123!")
         viewModel.onConfirmPasswordChanged("ValidPassword123!")
-
-        // Empty token
-        viewModel.onTokenChanged("")
         viewModel.submitResetPassword()
         advanceUntilIdle()
-        assertEquals("Token is required", viewModel.formState.value.tokenError)
         assertEquals(0, fakeAuthManager.resetPasswordCallCount)
 
         // Valid token
-        viewModel.onTokenChanged("valid-reset-token-456")
+        viewModel.openEmailLink(AuthLink.ResetPassword("valid-reset-token-456"))
+        viewModel.onPasswordChanged("ValidPassword123!")
+        viewModel.onConfirmPasswordChanged("ValidPassword123!")
         fakeAuthManager.resetPasswordResult = AuthResult.Success(User(id = "u1", email = "u@test.com", emailVerified = true))
         viewModel.submitResetPassword()
         advanceUntilIdle()
-        assertNull(viewModel.formState.value.tokenError)
         assertEquals(1, fakeAuthManager.resetPasswordCallCount)
         assertEquals(AuthDialogType.NONE, viewModel.formState.value.dialogType)
     }
@@ -359,8 +353,6 @@ class AuthViewModelBoundaryStressTest {
             return loginResult
         }
 
-        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String): AuthResult<User> = loginResult
-
         override suspend fun verifyEmail(token: String): AuthResult<User> {
             verifyEmailCallCount++
             return verifyEmailResult
@@ -377,8 +369,6 @@ class AuthViewModelBoundaryStressTest {
             resetPasswordCallCount++
             return resetPasswordResult
         }
-
-        override suspend fun refreshSession(): AuthResult<User> = loginResult
 
         override suspend fun logout(): AuthResult<Unit> {
             logoutCallCount++

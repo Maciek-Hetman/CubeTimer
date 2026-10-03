@@ -145,22 +145,18 @@ class TimerViewModel(
     private val confirmedSolvesByOwner = mutableMapOf<String, List<SolveTime>>()
 
     /**
-     * A local write that the DB has not reflected yet ([solve] == null means a pending delete).
+     * A local write that the DB has not reflected yet.
      * Pending entries let the UI update instantly, but they are always short-lived: each one is
      * dropped as soon as a DB emission proves it applied, or one emission after its write finished,
      * so a failed write can never keep a stale solve on screen indefinitely.
      */
-    private class PendingWrite(val ownerId: String, val solve: SolveTime?, var settledAtEmission: Long? = null)
+    private class PendingWrite(val ownerId: String, val solve: SolveTime, var settledAtEmission: Long? = null)
 
     private val pendingWrites = linkedMapOf<String, PendingWrite>()
     private var emissionCount = 0L
 
     private fun markPendingUpserts(ownerId: String, solves: List<SolveTime>) {
         solves.forEach { pendingWrites[it.id] = PendingWrite(ownerId, it) }
-    }
-
-    private fun markPendingDeletes(ownerId: String, ids: Collection<String>) {
-        ids.forEach { pendingWrites[it] = PendingWrite(ownerId, null) }
     }
 
     private fun settlePending(ids: Collection<String>) {
@@ -177,7 +173,7 @@ class TimerViewModel(
             val pending = entry.value
             if (pending.ownerId != ownerId) continue
             val inDb = dbById[entry.key]
-            val applied = if (pending.solve == null) inDb == null else inDb == pending.solve
+            val applied = inDb == pending.solve
             val settledEarlier = pending.settledAtEmission?.let { emissionCount > it } == true
             if (applied || settledEarlier) iterator.remove()
         }
@@ -186,7 +182,7 @@ class TimerViewModel(
     private fun mergeWithPending(ownerId: String, dbSolves: List<SolveTime>): List<SolveTime> {
         val relevant = pendingWrites.filterValues { it.ownerId == ownerId }
         if (relevant.isEmpty()) return dbSolves
-        val upserts = relevant.values.mapNotNull { it.solve }
+        val upserts = relevant.values.map { it.solve }
         val replacedIds = relevant.keys
         return (dbSolves.filter { it.id !in replacedIds } + upserts).sortedBy { it.timestamp }
     }
@@ -194,33 +190,6 @@ class TimerViewModel(
     private fun publishSolves(solves: List<SolveTime>) {
         _allSolves.value = solves
         _solves.value = solves.filter { it.mode == _currentMode.value }
-    }
-
-    /**
-     * Runs the Room write behind an optimistic update of [ids]. A failure (e.g. a full disk) is
-     * rolled back on screen and reported through [writeError] instead of escaping viewModelScope
-     * and crashing the app.
-     */
-    private fun launchWrite(
-        ownerId: String,
-        ids: Collection<String>,
-        @StringRes errorMessage: Int,
-        write: suspend () -> Unit
-    ) {
-        // The entries this write stands for. A later edit of the same solve replaces its entry, and
-        // settling that newer one here would let this write's (older) emission drop it early.
-        val entries = ids.mapNotNull { pendingWrites[it] }
-        viewModelScope.launch {
-            try {
-                write()
-                entries.forEach { it.settledAtEmission = emissionCount }
-            } catch (e: CancellationException) {
-                entries.forEach { it.settledAtEmission = emissionCount }
-                throw e
-            } catch (e: Exception) {
-                onWriteFailed(ownerId, ids, errorMessage, e)
-            }
-        }
     }
 
     /**
@@ -257,7 +226,7 @@ class TimerViewModel(
     }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     /**
-     * Solves filtered for StatsScreen based on the selected StatsFilter (ActiveSession, AllSessions, SpecificSession).
+     * Solves filtered for StatsScreen based on the selected StatsFilter (ActiveSession, AllSessions).
      */
     val statsFilteredSolves: StateFlow<List<SolveTime>> = combine(
         _solves,
@@ -275,7 +244,6 @@ class TimerViewModel(
                 }
             }
             is StatsFilter.AllSessions -> modeSolves
-            is StatsFilter.SpecificSession -> modeSolves.filter { it.sessionId == filter.sessionId }
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -339,7 +307,6 @@ class TimerViewModel(
             authManager.authState.collect { authState ->
                 val newOwnerId = authState.ownerId
                 if (lastOwnerId != newOwnerId) {
-                    val currentMode = _currentMode.value
                     val ownerSolves = confirmedSolvesByOwner[newOwnerId] ?: emptyList()
                     publishSolves(mergeWithPending(newOwnerId, ownerSolves))
                 }
@@ -666,50 +633,8 @@ class TimerViewModel(
         _timerState.value = TimerState.Idle
     }
 
-    fun deleteSolve(solve: SolveTime) {
-        val ownerId = authManager.currentOwnerId
-        markPendingDeletes(ownerId, listOf(solve.id))
-        publishSolves(_allSolves.value.filter { it.id != solve.id })
-        launchWrite(ownerId, listOf(solve.id), R.string.timer_error_delete) {
-            repository.deleteSolve(solve, ownerId = ownerId)
-        }
-    }
-
-    fun updateSolvePenalty(solve: SolveTime, penalty: Penalty) {
-        val ownerId = authManager.currentOwnerId
-        val updated = solve.copy(penalty = penalty)
-        val newAllSolves = _allSolves.value.map { existing ->
-            if (existing.id == solve.id) existing.copy(penalty = penalty) else existing
-        }
-        markPendingUpserts(ownerId, listOf(updated))
-        publishSolves(newAllSolves)
-        launchWrite(ownerId, listOf(solve.id), R.string.timer_error_update) {
-            repository.updateSolvePenalty(solve, penalty, ownerId = ownerId)
-        }
-    }
-
     fun setStatsFilter(filter: StatsFilter) {
         _statsFilter.value = filter
-    }
-
-    fun clearAllSolves() {
-        val ownerId = authManager.currentOwnerId
-        val clearedIds = _allSolves.value.map { it.id }
-        markPendingDeletes(ownerId, clearedIds)
-        publishSolves(emptyList())
-        launchWrite(ownerId, clearedIds, R.string.timer_error_delete_many) {
-            repository.clearAllSolves(ownerId = ownerId)
-        }
-    }
-
-    fun restoreSolves(previous: List<SolveTime>) {
-        val ownerId = authManager.currentOwnerId
-        val toRestoreIds = previous.map { it.id }.toSet()
-        markPendingUpserts(ownerId, previous)
-        publishSolves((_allSolves.value.filter { it.id !in toRestoreIds } + previous).sortedBy { it.timestamp })
-        launchWrite(ownerId, toRestoreIds, R.string.timer_error_restore) {
-            repository.restoreSolves(previous, ownerId = ownerId)
-        }
     }
 
     fun setDynamicColorEnabled(enabled: Boolean) {

@@ -20,7 +20,4 @@ data class Session(
 ) {
     val isOpen: Boolean
         get() = endedAt == null && !archived && deletedAt == null
-
-    val isDeleted: Boolean
-        get() = deletedAt != null
 }

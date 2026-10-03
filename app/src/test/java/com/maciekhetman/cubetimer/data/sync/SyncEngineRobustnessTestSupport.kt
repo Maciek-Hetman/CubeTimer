@@ -10,7 +10,6 @@ import com.maciekhetman.cubetimer.data.remote.CubeSyncApiClient
 import com.maciekhetman.cubetimer.data.remote.NetworkModule
 import com.maciekhetman.cubetimer.data.remote.dto.AuthResponse
 import com.maciekhetman.cubetimer.data.remote.dto.ChangePasswordRequest
-import com.maciekhetman.cubetimer.data.remote.dto.GoogleAuthRequest
 import com.maciekhetman.cubetimer.data.remote.dto.LoginRequest
 import com.maciekhetman.cubetimer.data.remote.dto.MutationOutcomeDto
 import com.maciekhetman.cubetimer.data.remote.dto.RegisterRequest
@@ -20,7 +19,6 @@ import com.maciekhetman.cubetimer.data.remote.dto.SolveSyncPayload
 import com.maciekhetman.cubetimer.data.remote.dto.StatusResponse
 import com.maciekhetman.cubetimer.data.remote.dto.SyncRequest
 import com.maciekhetman.cubetimer.data.remote.dto.SyncResponse
-import com.maciekhetman.cubetimer.data.remote.dto.UserDto
 import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.User
 import com.maciekhetman.cubetimer.model.UserRole
@@ -54,12 +52,12 @@ internal class ScriptedSyncApiClient : CubeSyncApiClient {
     /** Ids of every mutation sent, in request order. */
     fun sentMutationIds(): List<String> = syncRequests.flatMap { r -> r.mutations.map { it.id } }
 
-    override suspend fun sync(request: SyncRequest, authToken: String?): SyncResponse {
+    override suspend fun sync(request: SyncRequest): SyncResponse {
         syncRequests += request
         return syncHandler(request)
     }
 
-    override suspend fun snapshot(request: SnapshotRequest, authToken: String?): SnapshotResponse {
+    override suspend fun snapshot(request: SnapshotRequest): SnapshotResponse {
         snapshotRequests += request
         return snapshotHandler(request)
     }
@@ -72,11 +70,8 @@ internal class ScriptedSyncApiClient : CubeSyncApiClient {
     override suspend fun logout(refreshToken: String) = Unit
     override suspend fun requestPasswordReset(email: String): StatusResponse = throw NotImplementedError()
     override suspend fun confirmPasswordReset(token: String, newPassword: String): AuthResponse = throw NotImplementedError()
-    override suspend fun loginWithGoogle(request: GoogleAuthRequest): AuthResponse = throw NotImplementedError()
-    override suspend fun linkGoogle(request: GoogleAuthRequest, authToken: String?) = Unit
-    override suspend fun getCurrentUser(authToken: String?): UserDto = throw NotImplementedError()
-    override suspend fun changePassword(request: ChangePasswordRequest, authToken: String?) = Unit
-    override suspend fun deleteAccount(authToken: String?) = Unit
+    override suspend fun changePassword(request: ChangePasswordRequest) = Unit
+    override suspend fun deleteAccount() = Unit
 }
 
 /** What a healthy server answers: every mutation accepted at version 1, cursor advanced. */
@@ -91,14 +86,12 @@ internal class StubTokenStorage(private val deviceId: String = "robust-device") 
     override fun getAccessToken(): String? = "robust-access-token"
     override fun setAccessToken(token: String?) {}
     override fun getRefreshToken(): String? = "robust-refresh-token"
-    override fun setRefreshToken(token: String?) {}
     override fun getUserId(): String? = ROBUSTNESS_OWNER_ID
     override fun getUserEmail(): String? = "robust@example.com"
     override fun getUserRole(): String? = "user"
     override fun isUserEmailVerified(): Boolean = true
     override fun getDisplayName(): String? = "Robust User"
     override fun saveAuthSession(accessToken: String, refreshToken: String, userId: String, userEmail: String, userRole: String, emailVerified: Boolean, displayName: String?) {}
-    override fun saveUser(user: User) {}
     override fun clearAuthData() {}
     override fun clearAll() {}
     override fun getCachedUser(): User? = null
@@ -113,12 +106,10 @@ internal class StubAuthManager(initialState: AuthState = AuthState.Authenticated
     override suspend fun initialize() {}
     override suspend fun register(email: String, password: String) = throw NotImplementedError()
     override suspend fun login(email: String, password: String) = throw NotImplementedError()
-    override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String) = throw NotImplementedError()
     override suspend fun verifyEmail(token: String) = throw NotImplementedError()
     override suspend fun resendVerificationEmail(email: String) = throw NotImplementedError()
     override suspend fun requestPasswordReset(email: String) = throw NotImplementedError()
     override suspend fun resetPassword(token: String, newPassword: String) = throw NotImplementedError()
-    override suspend fun refreshSession() = throw NotImplementedError()
     override suspend fun logout() = throw NotImplementedError()
     override suspend fun adoptGuestData(userId: String) {}
 }

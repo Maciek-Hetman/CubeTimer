@@ -50,7 +50,6 @@
 
     <string name="auth_msg_account_created">Utworzono konto.</string>
     <string name="auth_msg_verification_sent">Wysłano e-mail weryfikacyjny. Sprawdź skrzynkę.</string>
-    <string name="auth_msg_verification_token_required">Token weryfikacyjny jest wymagany</string>
     <string name="auth_msg_password_changed">Zmieniono hasło.</string>
     <string name="auth_msg_password_changed_sign_in">Zmieniono hasło. Zaloguj się ponownie nowym hasłem.</string>
     <string name="auth_msg_current_password_incorrect">Obecne hasło jest nieprawidłowe.</string>
@@ -61,7 +60,6 @@
     <string name="auth_msg_password_too_short">Hasło musi mieć co najmniej 10 znaków</string>
     <string name="auth_msg_password_too_long">Hasło może mieć najwyżej 128 znaków</string>
     <string name="auth_msg_passwords_mismatch">Hasła nie są zgodne</string>
-    <string name="auth_msg_token_required">Token jest wymagany</string>
     <string name="auth_msg_current_password_required">Obecne hasło jest wymagane</string>
 
     <string name="auth_error_invalid_credentials">Nieprawidłowy e-mail lub hasło.</string>
@@ -70,9 +68,6 @@
     <string name="auth_error_invalid_token">Link weryfikacyjny lub resetujący jest nieprawidłowy albo wygasł.</string>
     <string name="auth_error_session_expired">Sesja wygasła. Zaloguj się ponownie.</string>
     <string name="auth_error_session_revoked">Sesja została zakończona ze względów bezpieczeństwa. Zaloguj się ponownie.</string>
-    <string name="auth_error_account_link_required">Konto z tym adresem e-mail już istnieje. Zaloguj się adresem e-mail i hasłem.</string>
-    <string name="auth_error_google_failed">Logowanie przez Google nie powiodło się. Spróbuj ponownie.</string>
-    <string name="auth_error_google_linked">To konto Google jest już powiązane z innym użytkownikiem.</string>
     <string name="auth_error_rate_limited">Zbyt wiele prób. Spróbuj ponownie za chwilę.</string>
     <string name="auth_error_invalid_password">Hasło musi mieć od 10 do 128 znaków.</string>
     <string name="auth_error_invalid_email">Podaj prawidłowy adres e-mail</string>
@@ -87,8 +82,4 @@
     <string name="auth_error_unknown">Coś poszło nie tak. Spróbuj ponownie.</string>
 
     <string name="timer_error_save">Nie udało się zapisać ułożenia</string>
-    <string name="timer_error_delete">Nie udało się usunąć ułożenia</string>
-    <string name="timer_error_update">Nie udało się zaktualizować ułożenia</string>
-    <string name="timer_error_delete_many">Nie udało się usunąć ułożeń</string>
-    <string name="timer_error_restore">Nie udało się przywrócić ułożeń</string>
 </resources>

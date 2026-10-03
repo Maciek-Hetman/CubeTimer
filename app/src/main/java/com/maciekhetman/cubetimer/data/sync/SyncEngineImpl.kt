@@ -58,7 +58,6 @@ class SyncEngineImpl(
     private val conflictDao: ConflictDao = database.conflictDao(),
     private val json: Json = NetworkModule.json,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-    private val defaultConflictPolicy: ConflictPolicy = ConflictPolicy.MANUAL_PROMPT,
     /** Upper bound on waiting for [AuthManager.awaitInitialized] before a sync gives up (retryably). */
     private val authInitTimeoutMillis: Long = DEFAULT_AUTH_INIT_TIMEOUT_MILLIS,
     /**
@@ -78,12 +77,7 @@ class SyncEngineImpl(
     private val syncMutex = Mutex()
 
     override val syncStatus: StateFlow<SyncStatus> = stateManager.syncStatus
-    override val lastSyncedAt: StateFlow<Long?> = stateManager.lastSyncedAt
     override val isSyncing: StateFlow<Boolean> = stateManager.isSyncing
-
-    override fun observePendingMutationsCount(ownerId: String): Flow<Int> {
-        return syncOutboxDao.observePendingCount(ownerId)
-    }
 
     override fun observeUnresolvedConflicts(ownerId: String): Flow<List<ConflictEntity>> {
         return conflictResolver.observeUnresolvedConflicts(ownerId)
@@ -625,7 +619,7 @@ class SyncEngineImpl(
                     val serverVersion = outcome.version ?: (mutation.baseVersion + 1L)
                     val serverPayloadJson = outcome.current?.toString()
 
-                    val conflict = conflictResolver.recordConflict(
+                    conflictResolver.recordConflict(
                         ownerId = ownerId,
                         mutationId = outcome.mutationId,
                         entityType = mutation.entityType,
@@ -636,10 +630,6 @@ class SyncEngineImpl(
                         serverPayloadJson = serverPayloadJson,
                         errorMessage = outcome.message ?: "Conflict detected: server version mismatch"
                     )
-
-                    if (defaultConflictPolicy != ConflictPolicy.MANUAL_PROMPT) {
-                        conflictResolver.resolveConflict(conflict.conflictId, defaultConflictPolicy)
-                    }
 
                     conflictsRecorded++
                     mutationsSynced++

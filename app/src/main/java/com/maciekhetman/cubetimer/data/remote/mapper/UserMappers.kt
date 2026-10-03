@@ -12,12 +12,3 @@ fun UserDto.toDomain(): User = User(
     userRole = UserRole.fromString(userRole),
     createdAt = createdAt
 )
-
-fun User.toDto(): UserDto = UserDto(
-    id = id,
-    email = email,
-    displayName = displayName,
-    emailVerified = emailVerified,
-    userRole = userRole.name.lowercase(),
-    createdAt = createdAt
-)

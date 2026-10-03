@@ -12,7 +12,6 @@ import com.maciekhetman.cubetimer.data.local.CubeDatabase
 import com.maciekhetman.cubetimer.data.local.converter.CubeTypeConverters
 import com.maciekhetman.cubetimer.data.local.entity.SolveEntity
 import com.maciekhetman.cubetimer.data.local.mapper.toSolveTime
-import com.maciekhetman.cubetimer.data.session.SessionManagerImpl
 import com.maciekhetman.cubetimer.data.session.SessionRepositoryImpl
 import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.Mode
@@ -24,6 +23,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
@@ -43,6 +43,7 @@ import java.io.ByteArrayOutputStream
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import com.maciekhetman.cubetimer.testutil.insertSession
+import com.maciekhetman.cubetimer.testutil.selectedSolves
 
 /**
  * Adversarial empirical challenge test suite for HistoryViewModel verifying:
@@ -66,7 +67,6 @@ class HistoryViewModelStressChallengeTest {
     private lateinit var database: CubeDatabase
     private lateinit var solvesRepository: SolvesRepository
     private lateinit var sessionRepository: SessionRepositoryImpl
-    private lateinit var sessionManager: SessionManagerImpl
     private lateinit var fakeAuthManager: FakeAuthManager
     private lateinit var viewModel: HistoryViewModel
 
@@ -98,11 +98,6 @@ class HistoryViewModelStressChallengeTest {
             ioDispatcher = testDispatcher
         )
         fakeAuthManager = FakeAuthManager()
-        sessionManager = SessionManagerImpl(
-            sessionRepository = sessionRepository,
-            solveDao = database.solveDao(),
-            authManager = fakeAuthManager
-        )
     }
 
     @After
@@ -115,7 +110,6 @@ class HistoryViewModelStressChallengeTest {
         return keepUiStateActive(HistoryViewModel(
             application = application,
             solvesRepository = solvesRepository,
-            sessionManager = sessionManager,
             sessionRepository = sessionRepository,
             authManager = fakeAuthManager,
             database = database,
@@ -258,7 +252,7 @@ class HistoryViewModelStressChallengeTest {
 
         // Concurrently expand all 8 sessions
         sessions.forEach { s ->
-            launch { viewModel.expandSession(s.id) }
+            launch { viewModel.toggleSessionExpanded(s.id) }
         }
 
         // Concurrently insert new solves into sessions S0, S2, S5
@@ -350,7 +344,7 @@ class HistoryViewModelStressChallengeTest {
         viewModel = createViewModel()
         advanceUntilIdle()
 
-        viewModel.expandSession(session.id)
+        viewModel.toggleSessionExpanded(session.id)
         advanceUntilIdle()
 
         // Select solve-0, solve-1, solve-2, solve-3
@@ -360,7 +354,7 @@ class HistoryViewModelStressChallengeTest {
         viewModel.toggleSolveSelection(solves[3].id)
         advanceUntilIdle()
 
-        val initialSelected = viewModel.getSelectedSolves()
+        val initialSelected = viewModel.uiState.value.selectedSolves()
         assertEquals(4, initialSelected.size)
         assertTrue(viewModel.uiState.value.isSelectionMode)
 
@@ -378,8 +372,8 @@ class HistoryViewModelStressChallengeTest {
         advanceUntilIdle()
 
         // Solves 1 and 2 are deleted.
-        // getSelectedSolves() must return only valid active solves 0, 3, 4!
-        val activeSelected = viewModel.getSelectedSolves()
+        // The selected solves on screen must be only the valid active solves 0, 3, 4!
+        val activeSelected = viewModel.uiState.value.selectedSolves()
         val activeIds = activeSelected.map { it.id }.toSet()
         assertEquals(setOf(solves[0].id, solves[3].id, solves[4].id), activeIds)
 
@@ -409,9 +403,9 @@ class HistoryViewModelStressChallengeTest {
         viewModel = createViewModel()
         advanceUntilIdle()
 
-        viewModel.expandSession(s1.id)
-        viewModel.expandSession(s2.id)
-        viewModel.expandSession(s3.id)
+        viewModel.toggleSessionExpanded(s1.id)
+        viewModel.toggleSessionExpanded(s2.id)
+        viewModel.toggleSessionExpanded(s3.id)
         advanceUntilIdle()
 
         assertEquals(3, viewModel.uiState.value.sessionGroups.size)
@@ -445,10 +439,11 @@ class HistoryViewModelStressChallengeTest {
         assertEquals(3, activeSolvesS2.size)
         assertEquals(0, activeSolvesS3.size)
 
-        // Action 4: Multi-undo in interleaved sequence
-        viewModel.undoDeleteBatch()
-        viewModel.undoDelete()
-        viewModel.undoDeleteSession()
+        // Action 4: Multi-undo in interleaved sequence, each undo fed by the effect that offered it
+        val undoEffects = List(3) { viewModel.effects.first() }
+        viewModel.undoDeleteBatch(undoEffects.filterIsInstance<HistoryUiEffect.ShowUndoBatchDelete>().single().deletedSolves)
+        viewModel.restoreSolve(undoEffects.filterIsInstance<HistoryUiEffect.ShowUndoSnackbar>().single().solve)
+        viewModel.restoreSession(undoEffects.filterIsInstance<HistoryUiEffect.ShowUndoSessionDelete>().single().snapshot)
 
         advanceUntilIdle()
 
@@ -498,7 +493,7 @@ class HistoryViewModelStressChallengeTest {
         advanceUntilIdle()
 
         // Expand only S1
-        viewModel.expandSession(s1.id)
+        viewModel.toggleSessionExpanded(s1.id)
         advanceUntilIdle()
 
         // Step 1: Filter to DNF_ONLY
@@ -518,7 +513,7 @@ class HistoryViewModelStressChallengeTest {
         // CRITICAL ASSERTION: Selected solves must strictly be the 2 visible DNF solves!
         // None of the clean/+2 solves in S1, nor any solves in collapsed S2, may be selected!
         assertEquals(dnfIds, viewModel.uiState.value.selectedSolveIds)
-        assertEquals(2, viewModel.getSelectedSolves().size)
+        assertEquals(2, viewModel.uiState.value.selectedSolves().size)
 
         // Delete Selected Solves
         viewModel.deleteSelectedSolves()
@@ -572,7 +567,7 @@ class HistoryViewModelStressChallengeTest {
         viewModel = createViewModel()
         advanceUntilIdle()
 
-        viewModel.expandSession(session.id)
+        viewModel.toggleSessionExpanded(session.id)
         advanceUntilIdle()
 
         // First call: Selects all 3 visible solves
@@ -620,18 +615,17 @@ class HistoryViewModelStressChallengeTest {
         launch {
             repeat(15) {
                 viewModel.setSessionSort(SessionSortOrder.NAME_ASC)
-                viewModel.setSolveSort(SolveSortOrder.FASTEST)
-                viewModel.setPenaltyFilter(PenaltyFilter.CLEAN)
+                viewModel.setSolveSort(SolveSortOrder.LOWEST_TIME)
+                viewModel.setPenaltyFilter(PenaltyFilter.CLEAN_ONLY)
                 viewModel.setTimeRangeFilter(8000L, 15000L)
                 viewModel.setDateRangeFilter(DatePreset.TODAY)
 
                 viewModel.setSessionSort(SessionSortOrder.MOST_SOLVES)
-                viewModel.setSolveSort(SolveSortOrder.SLOWEST)
-                viewModel.setPenaltyFilter(PenaltyFilter.PLUS_TWO)
+                viewModel.setSolveSort(SolveSortOrder.HIGHEST_TIME)
+                viewModel.setPenaltyFilter(PenaltyFilter.PLUS_TWO_ONLY)
                 viewModel.setTimeRangeFilter(null, null)
 
-                viewModel.resetSolveFilters()
-                viewModel.resetSessionFilters()
+                viewModel.resetAllFilters()
             }
             viewModel.resetAllFilters()
         }
@@ -660,7 +654,7 @@ class HistoryViewModelStressChallengeTest {
         viewModel = createViewModel()
         advanceUntilIdle()
 
-        viewModel.expandSession(guestSession.id)
+        viewModel.toggleSessionExpanded(guestSession.id)
         advanceUntilIdle()
 
         // Guest session is expanded and has solves cached
@@ -685,8 +679,9 @@ class HistoryViewModelStressChallengeTest {
         val solvesInCache = viewModel.uiState.value.sessionGroups.flatMap { it.solves }
         assertTrue(solvesInCache.isEmpty())
 
-        // Collapsing the session cleanly removes and cancels any background job
-        viewModel.collapseSession(guestSession.id)
+        // Collapsing the session cleanly removes and cancels any background job (the switch has
+        // already collapsed it, so there is nothing left to toggle)
+        if (guestSession.id in viewModel.expandedSessionIds.value) viewModel.toggleSessionExpanded(guestSession.id)
         advanceUntilIdle()
         val jobsAfterCollapse = getExpandedJobs(viewModel)
         assertFalse(jobsAfterCollapse.containsKey(guestSession.id))
@@ -702,7 +697,7 @@ class HistoryViewModelStressChallengeTest {
         viewModel = createViewModel()
         advanceUntilIdle()
 
-        viewModel.expandSession(s1.id)
+        viewModel.toggleSessionExpanded(s1.id)
         advanceUntilIdle()
 
         // 1. Batch delete & double undo
@@ -711,12 +706,13 @@ class HistoryViewModelStressChallengeTest {
         advanceUntilIdle()
         assertEquals(2, database.solveDao().getSolvesBySession("guest", s1.id).size)
 
-        viewModel.undoDeleteBatch()
+        val batchEffect = viewModel.effects.first { it is HistoryUiEffect.ShowUndoBatchDelete } as HistoryUiEffect.ShowUndoBatchDelete
+        viewModel.undoDeleteBatch(batchEffect.deletedSolves)
         advanceUntilIdle()
         assertEquals(3, database.solveDao().getSolvesBySession("guest", s1.id).size)
 
-        // Second undo call must be a safe no-op (no double restore, no SQLite duplicate primary key crash)
-        viewModel.undoDeleteBatch()
+        // Second undo call (a double tap on Undo) must be harmless (no duplicate rows, no SQLite duplicate primary key crash)
+        viewModel.undoDeleteBatch(batchEffect.deletedSolves)
         advanceUntilIdle()
         assertEquals(3, database.solveDao().getSolvesBySession("guest", s1.id).size)
 
@@ -725,12 +721,13 @@ class HistoryViewModelStressChallengeTest {
         advanceUntilIdle()
         assertEquals(0, database.sessionDao().getAllActiveSessionsForOwner("guest").size)
 
-        viewModel.undoDeleteSession()
+        val sessionEffect = viewModel.effects.first { it is HistoryUiEffect.ShowUndoSessionDelete } as HistoryUiEffect.ShowUndoSessionDelete
+        viewModel.restoreSession(sessionEffect.snapshot)
         advanceUntilIdle()
         assertEquals(1, database.sessionDao().getAllActiveSessionsForOwner("guest").size)
 
-        // Second undo call must be a safe no-op
-        viewModel.undoDeleteSession()
+        // Second undo call must be harmless
+        viewModel.restoreSession(sessionEffect.snapshot)
         advanceUntilIdle()
         assertEquals(1, database.sessionDao().getAllActiveSessionsForOwner("guest").size)
 
@@ -739,12 +736,13 @@ class HistoryViewModelStressChallengeTest {
         advanceUntilIdle()
         assertEquals(0, database.solveDao().getSolvesBySession("guest", s1.id).size)
 
-        viewModel.undoDeleteAllSolves()
+        val clearEffect = viewModel.effects.first { it is HistoryUiEffect.ShowUndoClearAll } as HistoryUiEffect.ShowUndoClearAll
+        viewModel.undoDeleteAllSolves(clearEffect.deletedSolves)
         advanceUntilIdle()
         assertEquals(3, database.solveDao().getSolvesBySession("guest", s1.id).size)
 
-        // Second undo call must be a safe no-op
-        viewModel.undoDeleteAllSolves()
+        // Second undo call must be harmless
+        viewModel.undoDeleteAllSolves(clearEffect.deletedSolves)
         advanceUntilIdle()
         assertEquals(3, database.solveDao().getSolvesBySession("guest", s1.id).size)
     }
@@ -795,12 +793,10 @@ class HistoryViewModelStressChallengeTest {
         override suspend fun initialize() = Unit
         override suspend fun register(email: String, password: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun login(email: String, password: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
-        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun verifyEmail(token: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun resendVerificationEmail(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun requestPasswordReset(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun resetPassword(token: String, newPassword: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
-        override suspend fun refreshSession(): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun logout(): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun adoptGuestData(userId: String) = Unit
     }

@@ -22,6 +22,7 @@ import com.maciekhetman.cubetimer.model.SolveTime
 import com.maciekhetman.cubetimer.model.StatsFilter
 import com.maciekhetman.cubetimer.model.User
 import com.maciekhetman.cubetimer.model.currentUser
+import com.maciekhetman.cubetimer.testutil.awaitCondition
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.runBlocking
@@ -31,6 +32,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -50,7 +52,7 @@ import org.robolectric.RobolectricTestRunner
  * - Rapid session switching across 10+ sessions with reactive StateFlow updates
  * - Empty session filtering and safe statistical evaluation (no NaN, no IndexOutOfBounds)
  * - Massive volume datasets (5,000 solves) with multi-session filtering and batch deletion
- * - Rapid concurrent filter switching (150+ switches across ActiveSession, AllSessions, SpecificSession)
+ * - Rapid concurrent filter switching (150+ switches across ActiveSession, AllSessions)
  * - Guest vs authenticated user session state isolation
  * - Statistical edge cases: Single-solve, +2 penalties, WCA DNF trimming, multi-DNF invalidation
  */
@@ -122,6 +124,26 @@ class SessionAndStatsFilterStressTest {
         Dispatchers.resetMain()
     }
 
+    /**
+     * Writes [solves] through the repository, like the timer does, and waits for the view model to
+     * show them: Room emits on its own threads, so advanceUntilIdle() alone is not enough.
+     */
+    private suspend fun TestScope.seedSolves(solves: List<SolveTime>) {
+        solvesRepository.restoreSolves(solves, ownerId = fakeAuthManager.currentOwnerId)
+        awaitCondition("view model shows the ${solves.size} seeded solves") {
+            val shownIds = timerViewModel.allSolves.value.map { it.id }.toSet()
+            solves.all { it.id in shownIds }
+        }
+    }
+
+    /** Changes a solve's penalty through the repository and waits for the view model to show it. */
+    private suspend fun TestScope.updatePenalty(solve: SolveTime, penalty: Penalty) {
+        solvesRepository.updateSolvePenalty(solve, penalty, ownerId = fakeAuthManager.currentOwnerId)
+        awaitCondition("view model shows ${solve.id} as $penalty") {
+            timerViewModel.allSolves.value.firstOrNull { it.id == solve.id }?.penalty == penalty
+        }
+    }
+
     // ---------------------------------------------------------------------------------------------
     // RAPID ACTIVE SESSION SWITCHING
     // ---------------------------------------------------------------------------------------------
@@ -159,7 +181,7 @@ class SessionAndStatsFilterStressTest {
                 all100Solves.add(solve)
             }
         }
-        timerViewModel.restoreSolves(all100Solves)
+        seedSolves(all100Solves)
         advanceUntilIdle()
 
         assertEquals(100, timerViewModel.solves.value.size)
@@ -259,7 +281,7 @@ class SessionAndStatsFilterStressTest {
         }
 
         // Insert in bulk
-        timerViewModel.restoreSolves(solvesAlpha + solvesBeta)
+        seedSolves(solvesAlpha + solvesBeta)
         advanceUntilIdle()
 
         // 1. Verify ActiveSession filter (Session Alpha active) -> 3,000 solves
@@ -271,11 +293,6 @@ class SessionAndStatsFilterStressTest {
         timerViewModel.setStatsFilter(StatsFilter.AllSessions)
         advanceUntilIdle()
         assertEquals(5000, timerViewModel.statsFilteredSolves.value.size)
-
-        // 3. Verify SpecificSession filter (Session Beta) -> 2,000 solves
-        timerViewModel.setStatsFilter(StatsFilter.SpecificSession(sessionBeta.id, "Beta"))
-        advanceUntilIdle()
-        assertEquals(2000, timerViewModel.statsFilteredSolves.value.size)
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -311,15 +328,12 @@ class SessionAndStatsFilterStressTest {
                 )
             }
         }
-        timerViewModel.restoreSolves(solves)
+        seedSolves(solves)
         advanceUntilIdle()
 
         val filters = listOf(
             StatsFilter.ActiveSession,
-            StatsFilter.AllSessions,
-            StatsFilter.SpecificSession(s1.id, "S1"),
-            StatsFilter.SpecificSession(s2.id, "S2"),
-            StatsFilter.SpecificSession(s3.id, "S3")
+            StatsFilter.AllSessions
         )
 
         for (step in 0 until 150) {
@@ -338,10 +352,6 @@ class SessionAndStatsFilterStressTest {
                 }
                 is StatsFilter.AllSessions -> {
                     assertEquals(300, currentFiltered.size)
-                }
-                is StatsFilter.SpecificSession -> {
-                    assertEquals(100, currentFiltered.size)
-                    assertTrue(currentFiltered.all { it.sessionId == filter.sessionId })
                 }
             }
         }
@@ -362,7 +372,7 @@ class SessionAndStatsFilterStressTest {
         // 1. Guest creates solves
         val guestSolve1 = SolveTime(id = "g_solve_1", timeInMillis = 15000L, penalty = Penalty.NONE, scramble = "U", mode = Mode.CUBE_3x3, timestamp = 1000L, sessionId = guestSession.id)
         val guestSolve2 = SolveTime(id = "g_solve_2", timeInMillis = 16000L, penalty = Penalty.NONE, scramble = "U", mode = Mode.CUBE_3x3, timestamp = 2000L, sessionId = guestSession.id)
-        timerViewModel.restoreSolves(listOf(guestSolve1, guestSolve2))
+        seedSolves(listOf(guestSolve1, guestSolve2))
         advanceUntilIdle()
 
         assertEquals(2, timerViewModel.solves.value.size)
@@ -385,7 +395,7 @@ class SessionAndStatsFilterStressTest {
         advanceUntilIdle()
 
         val userSolve = SolveTime(id = "u_solve_1", timeInMillis = 8500L, penalty = Penalty.NONE, scramble = "U", mode = Mode.CUBE_3x3, timestamp = 5000L, sessionId = userSession.id)
-        timerViewModel.restoreSolves(listOf(userSolve))
+        seedSolves(listOf(userSolve))
         advanceUntilIdle()
 
         assertEquals(1, timerViewModel.solves.value.size)
@@ -426,7 +436,7 @@ class SessionAndStatsFilterStressTest {
 
         // Single clean solve: 11250ms
         val singleClean = SolveTime(id = "s_clean", timeInMillis = 11250L, penalty = Penalty.NONE, scramble = "U", mode = Mode.CUBE_3x3, timestamp = 1000L, sessionId = edgeSession.id)
-        timerViewModel.restoreSolves(listOf(singleClean))
+        seedSolves(listOf(singleClean))
         advanceUntilIdle()
 
         val list1 = timerViewModel.statsFilteredSolves.value
@@ -438,7 +448,7 @@ class SessionAndStatsFilterStressTest {
         assertNull(AverageCalculator.averageOfN(list1, 12))
 
         // Update single solve to +2 penalty -> displayTime is 13250ms
-        timerViewModel.updateSolvePenalty(singleClean, Penalty.PLUS_TWO)
+        updatePenalty(singleClean, Penalty.PLUS_TWO)
         advanceUntilIdle()
 
         val list2 = timerViewModel.statsFilteredSolves.value
@@ -447,7 +457,7 @@ class SessionAndStatsFilterStressTest {
         assertEquals(13250L, AverageCalculator.mean(list2))
 
         // Update single solve to DNF penalty -> 0 valid solves
-        timerViewModel.updateSolvePenalty(singleClean, Penalty.DNF)
+        updatePenalty(singleClean, Penalty.DNF)
         advanceUntilIdle()
 
         val list3 = timerViewModel.statsFilteredSolves.value
@@ -480,7 +490,7 @@ class SessionAndStatsFilterStressTest {
             SolveTime(id = "d4", timeInMillis = 13000L, penalty = Penalty.NONE, scramble = "U", mode = Mode.CUBE_3x3, timestamp = 4L, sessionId = dnfSession.id),
             SolveTime(id = "d5", timeInMillis = 14000L, penalty = Penalty.DNF, scramble = "U", mode = Mode.CUBE_3x3, timestamp = 5L, sessionId = dnfSession.id)
         )
-        timerViewModel.restoreSolves(solves5With1Dnf)
+        seedSolves(solves5With1Dnf)
         advanceUntilIdle()
 
         val filtered5 = timerViewModel.statsFilteredSolves.value
@@ -489,7 +499,7 @@ class SessionAndStatsFilterStressTest {
         assertEquals(12000L, AverageCalculator.bestAverageOfN(filtered5, 5))
 
         // Update d4 to DNF -> 2 DNFs in 5 solves -> Ao5 must evaluate to null (DNF)
-        timerViewModel.updateSolvePenalty(solves5With1Dnf[3], Penalty.DNF)
+        updatePenalty(solves5With1Dnf[3], Penalty.DNF)
         advanceUntilIdle()
 
         val filteredWith2Dnf = timerViewModel.statsFilteredSolves.value
@@ -507,7 +517,7 @@ class SessionAndStatsFilterStressTest {
                 sessionId = dnfSession.id
             )
         }
-        timerViewModel.restoreSolves(filteredWith2Dnf + extra7)
+        seedSolves(filteredWith2Dnf + extra7)
         advanceUntilIdle()
 
         val filtered12 = timerViewModel.statsFilteredSolves.value
@@ -516,7 +526,7 @@ class SessionAndStatsFilterStressTest {
         assertNull("Ao12 with 2 DNFs must be null", AverageCalculator.averageOfN(filtered12, 12))
 
         // Fix one DNF back to NONE -> now only 1 DNF out of 12 solves -> Ao12 must be valid Long
-        timerViewModel.updateSolvePenalty(solves5With1Dnf[3], Penalty.NONE)
+        updatePenalty(solves5With1Dnf[3], Penalty.NONE)
         advanceUntilIdle()
 
         val filtered12With1Dnf = timerViewModel.statsFilteredSolves.value
@@ -543,7 +553,6 @@ class SessionAndStatsFilterStressTest {
             _activeSession.value = sessionsMap[sessionId]
         }
 
-        override fun getActiveSessionFlow(mode: Mode): Flow<Session?> = _activeSession.asStateFlow()
         override fun getActiveSessionFlow(ownerId: String, mode: Mode): Flow<Session?> = _activeSession.asStateFlow()
         override suspend fun getOrCreateActiveSession(ownerId: String, mode: Mode, solveTimestamp: Long?): Session {
             return _activeSession.value ?: sessionsMap.values.first()
@@ -562,12 +571,10 @@ class SessionAndStatsFilterStressTest {
         override suspend fun initialize() = Unit
         override suspend fun register(email: String, password: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun login(email: String, password: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
-        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun verifyEmail(token: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun resendVerificationEmail(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun requestPasswordReset(email: String): AuthResult<Unit> = AuthResult.Success(Unit)
         override suspend fun resetPassword(token: String, newPassword: String): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
-        override suspend fun refreshSession(): AuthResult<User> = AuthResult.Success(User(id = "u1", email = "u@test.com"))
         override suspend fun logout(): AuthResult<Unit> {
             setAuthState(AuthState.Guest)
             return AuthResult.Success(Unit)

@@ -6,7 +6,6 @@ import com.maciekhetman.cubetimer.data.local.CubeDatabase
 import com.maciekhetman.cubetimer.data.remote.CubeSyncApiClient
 import com.maciekhetman.cubetimer.data.remote.dto.AuthResponse
 import com.maciekhetman.cubetimer.data.remote.dto.ChangePasswordRequest
-import com.maciekhetman.cubetimer.data.remote.dto.GoogleAuthRequest
 import com.maciekhetman.cubetimer.data.remote.dto.LoginRequest
 import com.maciekhetman.cubetimer.data.remote.dto.RegisterRequest
 import com.maciekhetman.cubetimer.data.remote.dto.SnapshotRequest
@@ -251,8 +250,8 @@ class AuthManagerAwaitInitializedTest {
             return gates.removeFirst().await().getOrThrow()
         }
 
-        override suspend fun sync(request: SyncRequest, authToken: String?): SyncResponse = SyncResponse()
-        override suspend fun snapshot(request: SnapshotRequest, authToken: String?) = SnapshotResponse()
+        override suspend fun sync(request: SyncRequest): SyncResponse = SyncResponse()
+        override suspend fun snapshot(request: SnapshotRequest) = SnapshotResponse()
         override suspend fun register(request: RegisterRequest): StatusResponse = throw NotImplementedError()
         override suspend fun resendVerificationEmail(email: String): StatusResponse = throw NotImplementedError()
         override suspend fun verifyEmail(token: String): AuthResponse = throw NotImplementedError()
@@ -260,11 +259,8 @@ class AuthManagerAwaitInitializedTest {
         override suspend fun logout(refreshToken: String) = Unit
         override suspend fun requestPasswordReset(email: String): StatusResponse = throw NotImplementedError()
         override suspend fun confirmPasswordReset(token: String, newPassword: String): AuthResponse = throw NotImplementedError()
-        override suspend fun loginWithGoogle(request: GoogleAuthRequest): AuthResponse = throw NotImplementedError()
-        override suspend fun linkGoogle(request: GoogleAuthRequest, authToken: String?) = Unit
-        override suspend fun getCurrentUser(authToken: String?): UserDto = throw NotImplementedError()
-        override suspend fun changePassword(request: ChangePasswordRequest, authToken: String?) = Unit
-        override suspend fun deleteAccount(authToken: String?) = Unit
+        override suspend fun changePassword(request: ChangePasswordRequest) = Unit
+        override suspend fun deleteAccount() = Unit
     }
 
     /** In-memory token storage; like EncryptedTokenStorage, the access token starts out absent. */
@@ -282,7 +278,6 @@ class AuthManagerAwaitInitializedTest {
             accessToken.value = token
         }
         override fun getRefreshToken(): String? = storedRefreshToken
-        override fun setRefreshToken(token: String?) { storedRefreshToken = token }
         override fun getUserId(): String? = storedCachedUser?.id
         override fun getUserEmail(): String? = storedCachedUser?.email
         override fun getUserRole(): String? = storedCachedUser?.let { if (it.userRole == UserRole.ADMIN) "admin" else "user" }
@@ -308,7 +303,6 @@ class AuthManagerAwaitInitializedTest {
                 userRole = UserRole.fromString(userRole)
             )
         }
-        override fun saveUser(user: User) { storedCachedUser = user }
         override fun getDeviceId(): String = "device-await-init"
         override fun clearAuthData() {
             setAccessToken(null)

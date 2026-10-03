@@ -1,7 +1,6 @@
 package com.maciekhetman.cubetimer.data.remote
 
 import com.maciekhetman.cubetimer.data.remote.dto.ChangePasswordRequest
-import com.maciekhetman.cubetimer.data.remote.dto.GoogleAuthRequest
 import com.maciekhetman.cubetimer.data.remote.dto.LoginRequest
 import com.maciekhetman.cubetimer.data.remote.dto.RegisterRequest
 import com.maciekhetman.cubetimer.model.AuthException
@@ -278,83 +277,11 @@ class CubeSyncApiClientTest {
     }
 
     @Test
-    fun `loginWithGoogle returns AuthResponse`() = runTest {
-        mockWebServer.enqueue(
-            MockResponse()
-                .setResponseCode(200)
-                .setBody("""
-                    {
-                        "access_token": "acc-google",
-                        "refresh_token": "ref-google",
-                        "user": {
-                            "id": "u-google",
-                            "email": "googleuser@gmail.com",
-                            "user_role": "user",
-                            "email_verified": true
-                        }
-                    }
-                """.trimIndent())
-        )
-
-        val auth = apiClient.loginWithGoogle(
-            GoogleAuthRequest(idToken = "google-id-token-xyz", clientId = "client-1", nonce = "nonce-1")
-        )
-        assertEquals("acc-google", auth.accessToken)
-        assertEquals("googleuser@gmail.com", auth.user.email)
-
-        val req = mockWebServer.takeRequest()
-        assertEquals("/v1/auth/federated/google", req.path)
-        val body = req.body.readUtf8()
-        assertTrue(body.contains("\"id_token\":\"google-id-token-xyz\""))
-        assertTrue(body.contains("\"client_id\":\"client-1\""))
-        assertTrue(body.contains("\"nonce\":\"nonce-1\""))
-    }
-
-    @Test
-    fun `linkGoogle attaches authorization header and succeeds`() = runTest {
-        mockWebServer.enqueue(MockResponse().setResponseCode(200).setBody("{}"))
-
-        apiClient.linkGoogle(
-            GoogleAuthRequest(idToken = "id-token-link", clientId = "client-1", nonce = "nonce-1"),
-            authToken = "Bearer jwt-session-token"
-        )
-        val req = mockWebServer.takeRequest()
-        assertEquals("/v1/auth/link/google", req.path)
-        assertEquals("Bearer jwt-session-token", req.getHeader("Authorization"))
-        val body = req.body.readUtf8()
-        assertTrue(body.contains("\"client_id\":\"client-1\""))
-        assertTrue(body.contains("\"nonce\":\"nonce-1\""))
-    }
-
-    @Test
-    fun `getCurrentUser returns UserDto`() = runTest {
-        mockWebServer.enqueue(
-            MockResponse()
-                .setResponseCode(200)
-                .setBody("""
-                    {
-                        "id": "u-me",
-                        "email": "me@example.com",
-                        "display_name": "My Name",
-                        "user_role": "admin",
-                        "email_verified": true
-                    }
-                """.trimIndent())
-        )
-
-        val user = apiClient.getCurrentUser("jwt-token")
-        assertEquals("u-me", user.id)
-        assertEquals("me@example.com", user.email)
-        assertEquals("admin", user.userRole)
-    }
-
-    @Test
     fun `changePassword executes successfully`() = runTest {
         mockWebServer.enqueue(MockResponse().setResponseCode(200).setBody("{}"))
 
         apiClient.changePassword(
-            ChangePasswordRequest(currentPassword = "OldPassword1!", newPassword = "NewPassword1!"),
-            authToken = "jwt-token"
+            ChangePasswordRequest(currentPassword = "OldPassword1!", newPassword = "NewPassword1!")
         )
         val req = mockWebServer.takeRequest()
         assertEquals("/v1/me/password", req.path)
@@ -364,7 +291,7 @@ class CubeSyncApiClientTest {
     fun `deleteAccount executes successfully`() = runTest {
         mockWebServer.enqueue(MockResponse().setResponseCode(204))
 
-        apiClient.deleteAccount("jwt-token")
+        apiClient.deleteAccount()
         val req = mockWebServer.takeRequest()
         assertEquals("/v1/me", req.path)
         assertEquals("DELETE", req.method)

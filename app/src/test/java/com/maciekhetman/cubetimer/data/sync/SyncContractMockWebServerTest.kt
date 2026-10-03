@@ -299,14 +299,12 @@ class SyncContractMockWebServerTest {
         override fun getAccessToken(): String? = accessToken
         override fun setAccessToken(token: String?) { accessToken = token ?: "" }
         override fun getRefreshToken(): String? = "test-refresh-token"
-        override fun setRefreshToken(token: String?) {}
         override fun getUserId(): String? = "user-mws-1"
         override fun getUserEmail(): String? = "mws@example.com"
         override fun getUserRole(): String? = "user"
         override fun isUserEmailVerified(): Boolean = true
         override fun getDisplayName(): String? = "MWS User"
         override fun saveAuthSession(accessToken: String, refreshToken: String, userId: String, userEmail: String, userRole: String, emailVerified: Boolean, displayName: String?) {}
-        override fun saveUser(user: User) {}
         override fun clearAuthData() {}
         override fun clearAll() {}
         override fun getCachedUser(): User? = null
@@ -321,12 +319,10 @@ class SyncContractMockWebServerTest {
         override suspend fun initialize() {}
         override suspend fun register(email: String, password: String) = throw NotImplementedError()
         override suspend fun login(email: String, password: String) = throw NotImplementedError()
-        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String) = throw NotImplementedError()
         override suspend fun verifyEmail(token: String) = throw NotImplementedError()
         override suspend fun resendVerificationEmail(email: String) = throw NotImplementedError()
         override suspend fun requestPasswordReset(email: String) = throw NotImplementedError()
         override suspend fun resetPassword(token: String, newPassword: String) = throw NotImplementedError()
-        override suspend fun refreshSession() = throw NotImplementedError()
         override suspend fun logout() = throw NotImplementedError()
         override suspend fun adoptGuestData(userId: String) {}
     }

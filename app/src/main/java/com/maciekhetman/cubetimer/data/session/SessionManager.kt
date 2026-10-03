@@ -12,11 +12,6 @@ import kotlinx.coroutines.flow.Flow
 interface SessionManager {
 
     /**
-     * Observe the active (open automatic) session for a given mode using the current authenticated owner.
-     */
-    fun getActiveSessionFlow(mode: Mode): Flow<Session?>
-
-    /**
      * Observe the active (open automatic) session for a specific owner and mode.
      */
     fun getActiveSessionFlow(ownerId: String, mode: Mode): Flow<Session?>

@@ -11,20 +11,15 @@ import com.maciekhetman.cubetimer.model.SolveTime
  *                               or null if no prior valid solve exists (i.e. this was the first solve).
  * @property deltaMs Time difference in milliseconds (priorBest - effectiveDuration) if this solve was a PB
  *                   and a prior best existed; null otherwise.
- * @property formattedDelta Formatted badge text for UI presentation:
- *                          - e.g. "PB (-0.85s vs 12.40s)" for improvements over a prior best
- *                          - e.g. "PB (First solve)" for the first non-DNF solve of an event
- *                          - null if not a PB (or DNF)
  */
 data class HistoricalPbResult(
     val isPb: Boolean,
     val priorBestDurationMs: Long?,
-    val deltaMs: Long?,
-    val formattedDelta: String?
+    val deltaMs: Long?
 )
 
 /**
- * Pure domain utility for calculating and formatting Historical Personal Best singles.
+ * Pure domain utility for calculating Historical Personal Best singles.
  */
 object HistoricalPbCalculator {
 
@@ -34,7 +29,7 @@ object HistoricalPbCalculator {
      * @param durationMs Raw solve duration in milliseconds.
      * @param penalty Penalty applied to the solve ([Penalty.NONE], [Penalty.PLUS_TWO], [Penalty.DNF]).
      * @param priorBestDurationMs Fastest prior effective duration (ms) for this event before this solve's timestamp.
-     * @return [HistoricalPbResult] containing PB status, prior best duration, delta, and formatted text.
+     * @return [HistoricalPbResult] containing PB status, prior best duration, and delta.
      */
     fun calculate(
         durationMs: Long,
@@ -46,8 +41,7 @@ object HistoricalPbCalculator {
             return HistoricalPbResult(
                 isPb = false,
                 priorBestDurationMs = priorBestDurationMs,
-                deltaMs = null,
-                formattedDelta = null
+                deltaMs = null
             )
         }
 
@@ -63,20 +57,17 @@ object HistoricalPbCalculator {
             return HistoricalPbResult(
                 isPb = true,
                 priorBestDurationMs = null,
-                deltaMs = null,
-                formattedDelta = "PB (First solve)"
+                deltaMs = null
             )
         }
 
         // Strict improvement over prior best
         if (effectiveDuration < priorBestDurationMs) {
             val deltaMs = priorBestDurationMs - effectiveDuration
-            val formatted = formatPbDelta(deltaMs, priorBestDurationMs)
             return HistoricalPbResult(
                 isPb = true,
                 priorBestDurationMs = priorBestDurationMs,
-                deltaMs = deltaMs,
-                formattedDelta = formatted
+                deltaMs = deltaMs
             )
         }
 
@@ -84,8 +75,7 @@ object HistoricalPbCalculator {
         return HistoricalPbResult(
             isPb = false,
             priorBestDurationMs = priorBestDurationMs,
-            deltaMs = null,
-            formattedDelta = null
+            deltaMs = null
         )
     }
 
@@ -100,13 +90,4 @@ object HistoricalPbCalculator {
         penalty = solve.penalty,
         priorBestDurationMs = priorBestDurationMs
     )
-
-    /**
-     * Formats PB delta string: e.g. "PB (-0.85s vs 12.40s)".
-     */
-    fun formatPbDelta(deltaMs: Long, priorBestMs: Long): String {
-        val deltaStr = "${TimeFormatter.formatTime(deltaMs)}s"
-        val priorStr = "${TimeFormatter.formatTime(priorBestMs)}s"
-        return "PB (-$deltaStr vs $priorStr)"
-    }
 }

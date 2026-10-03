@@ -4,6 +4,7 @@ import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.platform.ComposeView
+import com.maciekhetman.cubetimer.domain.AverageCalculator
 import com.maciekhetman.cubetimer.model.Mode
 import com.maciekhetman.cubetimer.model.Penalty
 import com.maciekhetman.cubetimer.model.SolveTime
@@ -143,10 +144,16 @@ class StatsScreenRobustnessChallengeTest {
         val activity = Robolectric.buildActivity(ComponentActivity::class.java).setup().get()
 
         val dnfSolves = listOf(solve(0L, Penalty.DNF), solve(0L, Penalty.DNF))
+        // The values StatsScreen derives from the solves it shows.
+        val allTimePb = dnfSolves.filter { it.penalty != Penalty.DNF }.minByOrNull { it.displayTime }
         val composeView = ComposeView(activity).apply {
             setContent {
                 MaterialTheme {
-                    StatsHeroCard(solves = dnfSolves)
+                    StatsHeroCard(
+                        allTimePb = allTimePb,
+                        sessionAo5 = AverageCalculator.averageOfN(dnfSolves, 5),
+                        sessionAo12 = AverageCalculator.averageOfN(dnfSolves, 12)
+                    )
                 }
             }
         }

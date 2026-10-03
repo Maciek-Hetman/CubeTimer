@@ -510,41 +510,6 @@ class ConflictResolutionKeepLocalRegressionTest {
     }
 
     // ---------------------------------------------------------------------------------------
-    // Last write wins
-    // ---------------------------------------------------------------------------------------
-
-    @Test
-    fun lastWriteWins_doesNotTakeServerDataOnTheRowForTheLocalEdit() = runTest {
-        insertSession()
-        // The row was overwritten by server changes up to v3 (updated_at 11:00); the conflict's
-        // snapshot is v2 (10:00). The row's updated_at is the server's, not the user's edit time,
-        // so it must not make "local" look newer and re-send the user's older payload over v3.
-        insertSolve(durationMs = 12_345L, version = 3L, penalty = "dnf", updatedAt = "2026-09-01T11:00:00.000Z")
-        val snapshot = serverSolve(version = 2L, durationMs = 11_500L, updatedAt = "2026-09-01T10:00:00.000Z")
-        val conflict = resolver.recordConflict(
-            ownerId = owner,
-            mutationId = "mut-lww",
-            entityType = "solve",
-            entityId = solveId,
-            serverVersion = 2L,
-            serverUpdatedAt = null,
-            localPayloadJson = json.encodeToString(
-                SolveSyncPayload.serializer(),
-                SolveSyncPayload(id = solveId, sessionId = sessionId, durationMs = 10_000L, penalty = "plus_two", solvedAt = solvedAt, scramble = "R U R' U'", event = "3x3")
-            ),
-            serverPayloadJson = json.encodeToString(SolveSnapshotDto.serializer(), snapshot)
-        )
-
-        assertTrue(resolver.resolveConflict(conflict.conflictId, ConflictPolicy.LAST_WRITE_WINS))
-
-        assertEquals(0, syncOutboxDao.countPending(owner))
-        val row = solveDao.getSolveById(solveId)!!
-        assertEquals(3L, row.version)
-        assertEquals(12_345L, row.durationMs)
-        assertTrue(conflictDao.getConflictById(conflict.conflictId)!!.resolved)
-    }
-
-    // ---------------------------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------------------------
 
@@ -567,8 +532,7 @@ class ConflictResolutionKeepLocalRegressionTest {
         durationMs: Long,
         version: Long = 1L,
         penalty: String = "none",
-        timingDevice: String = "keyboard",
-        updatedAt: String = solvedAt
+        timingDevice: String = "keyboard"
     ): SolveEntity {
         val solve = SolveEntity(
             id = solveId,
@@ -580,7 +544,6 @@ class ConflictResolutionKeepLocalRegressionTest {
             solvedAt = solvedAt,
             scramble = "R U R' U'",
             version = version,
-            updatedAt = updatedAt,
             timingDevice = timingDevice
         )
         solveDao.insert(solve)
@@ -641,12 +604,12 @@ class ConflictResolutionKeepLocalRegressionTest {
         val syncRequests = mutableListOf<SyncRequest>()
         var respond: suspend (SyncRequest) -> SyncResponse = { SyncResponse() }
 
-        override suspend fun sync(request: SyncRequest, authToken: String?): SyncResponse {
+        override suspend fun sync(request: SyncRequest): SyncResponse {
             syncRequests += request
             return respond(request)
         }
 
-        override suspend fun snapshot(request: SnapshotRequest, authToken: String?): SnapshotResponse =
+        override suspend fun snapshot(request: SnapshotRequest): SnapshotResponse =
             throw AssertionError("snapshot bootstrap not expected")
 
         override suspend fun register(request: com.maciekhetman.cubetimer.data.remote.dto.RegisterRequest) = throw NotImplementedError()
@@ -657,11 +620,8 @@ class ConflictResolutionKeepLocalRegressionTest {
         override suspend fun logout(refreshToken: String) = Unit
         override suspend fun requestPasswordReset(email: String) = throw NotImplementedError()
         override suspend fun confirmPasswordReset(token: String, newPassword: String) = throw NotImplementedError()
-        override suspend fun loginWithGoogle(request: com.maciekhetman.cubetimer.data.remote.dto.GoogleAuthRequest) = throw NotImplementedError()
-        override suspend fun linkGoogle(request: com.maciekhetman.cubetimer.data.remote.dto.GoogleAuthRequest, authToken: String?) = Unit
-        override suspend fun getCurrentUser(authToken: String?) = throw NotImplementedError()
-        override suspend fun changePassword(request: com.maciekhetman.cubetimer.data.remote.dto.ChangePasswordRequest, authToken: String?) = Unit
-        override suspend fun deleteAccount(authToken: String?) = Unit
+        override suspend fun changePassword(request: com.maciekhetman.cubetimer.data.remote.dto.ChangePasswordRequest) = Unit
+        override suspend fun deleteAccount() = Unit
     }
 
     private class FakeTokenStorage(private val userId: String) : TokenStorage {
@@ -669,14 +629,12 @@ class ConflictResolutionKeepLocalRegressionTest {
         override fun getAccessToken(): String? = "valid-token"
         override fun setAccessToken(token: String?) {}
         override fun getRefreshToken(): String? = "refresh-token"
-        override fun setRefreshToken(token: String?) {}
         override fun getUserId(): String? = userId
         override fun getUserEmail(): String? = "cuber@example.com"
         override fun getUserRole(): String? = "user"
         override fun isUserEmailVerified(): Boolean = true
         override fun getDisplayName(): String? = "Cuber"
         override fun saveAuthSession(accessToken: String, refreshToken: String, userId: String, userEmail: String, userRole: String, emailVerified: Boolean, displayName: String?) {}
-        override fun saveUser(user: User) {}
         override fun clearAuthData() {}
         override fun clearAll() {}
         override fun getCachedUser(): User? = null
@@ -690,12 +648,10 @@ class ConflictResolutionKeepLocalRegressionTest {
         override suspend fun initialize() {}
         override suspend fun register(email: String, password: String) = throw NotImplementedError()
         override suspend fun login(email: String, password: String) = throw NotImplementedError()
-        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String) = throw NotImplementedError()
         override suspend fun verifyEmail(token: String) = throw NotImplementedError()
         override suspend fun resendVerificationEmail(email: String) = throw NotImplementedError()
         override suspend fun requestPasswordReset(email: String) = throw NotImplementedError()
         override suspend fun resetPassword(token: String, newPassword: String) = throw NotImplementedError()
-        override suspend fun refreshSession() = throw NotImplementedError()
         override suspend fun logout() = throw NotImplementedError()
         override suspend fun adoptGuestData(userId: String) {}
     }

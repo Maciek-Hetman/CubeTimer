@@ -88,19 +88,23 @@ class SyncOutboxDaoDeadLetterTest {
     @Test
     fun deadRows_doNotProtectTheirEntity_norCountAsANewerLocalEdit() = runTest {
         dao.enqueueAll(listOf(mutation("old", entityId = "solve-x", time = 1), mutation("dead-newest", entityId = "solve-x", time = 2)))
-        assertEquals(2, dao.countPendingForEntity(owner, "solve", "solve-x"))
+        assertEquals(2, liveRowsFor("solve-x"))
         assertEquals("dead-newest", dao.getPendingMutationForEntity(owner, "solve", "solve-x")?.id)
 
         dao.markDead("dead-newest", "rejected", attemptAt = 1L)
 
-        assertEquals(1, dao.countPendingForEntity(owner, "solve", "solve-x"))
+        assertEquals(1, liveRowsFor("solve-x"))
         assertEquals("old", dao.getPendingMutationForEntity(owner, "solve", "solve-x")?.id)
 
         dao.markDead("old", "rejected", attemptAt = 2L)
 
-        assertEquals(0, dao.countPendingForEntity(owner, "solve", "solve-x"))
+        assertEquals(0, liveRowsFor("solve-x"))
         assertNull(dao.getPendingMutationForEntity(owner, "solve", "solve-x"))
     }
+
+    /** The live (not dead) outbox rows queued for the solve [entityId], as the sync engine's protected-entity keys list them. */
+    private suspend fun liveRowsFor(entityId: String): Int =
+        dao.getLiveEntityKeys(owner).count { it.entityType == "solve" && it.entityId == entityId }
 
     @Test
     fun markAllFailed_updatesEveryRowInOneStatement() = runTest {

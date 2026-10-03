@@ -61,14 +61,6 @@ interface AuthManager {
     suspend fun login(email: String, password: String): AuthResult<User>
 
     /**
-     * Authenticate using a Google Sign-in ID token.
-     * [clientId] is the OAuth client ID the token was issued for (its `aud`) and [nonce] the value
-     * passed to Google when requesting it; the backend rejects the token if either doesn't match.
-     * Adopts guest data and sets active user session.
-     */
-    suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String): AuthResult<User>
-
-    /**
      * Verify an email verification token received via email.
      * Creates session, adopts guest data, and authenticates user.
      */
@@ -89,11 +81,6 @@ interface AuthManager {
      * Creates session, adopts guest data, and authenticates user.
      */
     suspend fun resetPassword(token: String, newPassword: String): AuthResult<User>
-
-    /**
-     * Refreshes the active session using the stored refresh token.
-     */
-    suspend fun refreshSession(): AuthResult<User>
 
     /**
      * Log out current user, close open auto sessions, revoke refresh token,

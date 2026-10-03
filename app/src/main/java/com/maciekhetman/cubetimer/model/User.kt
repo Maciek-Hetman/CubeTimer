@@ -10,10 +10,7 @@ data class User(
     val emailVerified: Boolean = false,
     val userRole: UserRole = UserRole.USER,
     val createdAt: String? = null
-) {
-    val isEmailVerified: Boolean
-        get() = emailVerified
-}
+)
 
 enum class UserRole {
     USER,

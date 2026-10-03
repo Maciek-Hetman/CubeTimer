@@ -8,6 +8,7 @@ import com.maciekhetman.cubetimer.model.AuthException
 import com.maciekhetman.cubetimer.model.AuthState
 import com.maciekhetman.cubetimer.model.User
 import com.maciekhetman.cubetimer.ui.auth.AuthDialogType
+import com.maciekhetman.cubetimer.ui.auth.AuthLink
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -261,8 +262,7 @@ class AuthViewModelTest {
 
     @Test
     fun testResetPasswordSuccessClosesDialog() = testScope.runTest {
-        viewModel.openDialog(AuthDialogType.RESET_PASSWORD)
-        viewModel.onTokenChanged("valid-reset-token")
+        viewModel.openEmailLink(AuthLink.ResetPassword("valid-reset-token"))
         viewModel.onPasswordChanged("NewSecurePassword123!")
         viewModel.onConfirmPasswordChanged("NewSecurePassword123!")
 
@@ -335,9 +335,6 @@ class AuthViewModelTest {
             AuthException.InvalidToken(raw),
             AuthException.InvalidRefreshToken(raw),
             AuthException.RefreshTokenReused(raw),
-            AuthException.AccountLinkRequired(raw),
-            AuthException.InvalidSocialToken(raw),
-            AuthException.IdentityAlreadyLinked(raw),
             AuthException.RateLimited(raw),
             AuthException.InvalidPassword(raw),
             AuthException.InvalidEmail(raw),
@@ -468,8 +465,6 @@ class AuthViewModelTest {
             return loginResult
         }
 
-        override suspend fun loginWithGoogle(idToken: String, clientId: String, nonce: String): AuthResult<User> = loginResult
-
         override suspend fun verifyEmail(token: String): AuthResult<User> {
             verifyEmailCallCount++
             return verifyEmailResult
@@ -495,8 +490,6 @@ class AuthViewModelTest {
             resetPasswordCallCount++
             return resetPasswordResult
         }
-
-        override suspend fun refreshSession(): AuthResult<User> = loginResult
 
         override suspend fun logout(): AuthResult<Unit> {
             logoutCallCount++
