@@ -46,6 +46,11 @@ so a full run takes several minutes.
 - Compose tests driving a real `TimerViewModel`: its setters write from `viewModelScope`, whose work is posted to
   the main looper, and the Compose rule's `waitUntil` doesn't drain that under Robolectric — idle it while waiting
   (`shadowOf(Looper.getMainLooper()).idle()`, as `SettingsScreenTest.waitFor` does).
+- Room and DataStore emit on their own threads, so `advanceUntilIdle()` alone doesn't wait for a write to reach a
+  ViewModel's flows: poll with `TestScope.awaitCondition` (`testutil/AwaitCondition.kt`).
+- Windows: androidx.core's `FileProvider` only matches `/` paths, so the share-URI test is skipped there; and a
+  DataStore file rename occasionally fails under Robolectric (seen in `TimerScreenInspectionTest`) — rerun once
+  before suspecting a change.
 - Test names encode provenance: `*Test` (spec), `*StressTest` / `*ChallengeTest` (adversarial suites written
   against a milestone). Treat the challenge/stress tests as behavioural contracts — they pin down edge cases
   that are not obvious from the production code.
@@ -55,9 +60,11 @@ so a full run takes several minutes.
 ### Dependency wiring
 No DI framework. `CubeTimerApplication` is the manual singleton graph (`database`, `tokenStorage`,
 `apiClient`, `authManager`, `syncEngine`, `sessionRepository`, `sessionManager`, `solvesRepository`,
-`syncStateManager`, `bluetoothTimerManager`), all `by lazy`. ViewModels are constructed by an anonymous
-`ViewModelProvider.Factory` in `MainActivity.onCreate`. Adding a dependency to a ViewModel means editing
-both files. `SyncWorker` is built by a custom `WorkerFactory` in `workManagerConfiguration`.
+`csvImporter`, `syncStateManager`, `bluetoothTimerManager`), all `by lazy`. `TimerViewModel` and `AuthViewModel`
+are constructed by an anonymous `ViewModelProvider.Factory` in `MainActivity.onCreate` (adding a dependency means
+editing both files); `HistoryViewModel` and `ConflictViewModel` come from `viewModel()` through their
+`(Application)` constructors, which pull from `CubeTimerApplication`. `SyncWorker` is built by a custom
+`WorkerFactory` in `workManagerConfiguration`.
 
 ### Layers
 - `data/local` — Room (`CubeDatabase`, v2, `exportSchema` to `app/schemas/`, no destructive-migration fallback,
@@ -118,9 +125,18 @@ schedules an immediate `SyncWorker` (periodic 15 min otherwise) → `SyncEngineI
 the cursor in `sync_metadata`, and loops while `has_more`. A 409 `cursor_expired` falls back to
 `runSnapshotBootstrap` against `POST /v1/snapshot`, which pages all sessions, then all solves: the last session
 page answers `has_more: false, next_entity: "solve"` — that is a hand-over, not the end. Conflicts are persisted
-as `ConflictEntity` and resolved by `ConflictResolver` (or by the user via keep-local / keep-server in
-`SyncStatusDialog`). A mutation the server rejects on its own is marked `status = 'dead'` and never resent;
-a remote solve whose session isn't available locally is skipped rather than failing the page's FK check.
+as `ConflictEntity` and only the user resolves them (keep-local / keep-server in `SyncStatusDialog`, applied by
+`ConflictResolver`); there is no automatic policy. A mutation the server rejects on its own is marked
+`status = 'dead'` and never resent; a remote solve whose session isn't available locally is skipped rather than
+failing the page's FK check. CSV import writes through `CubeTimerApplication.csvImporter`, which triggers a sync
+like every other write path.
+
+Sync status: a network failure (`NetworkError` / `IOException`) is not an error — it is not stored as
+`sync_metadata.last_error`, and the UI shows Offline (also while the device is online but the server can't be
+reached). Other failures are sticky until a sync succeeds. `SyncStatusDialog` never shows
+`SyncUiState.errorMessage` (raw exception/server text) — it shows a translated hint. `is_syncing` is persisted per
+owner; the app's `SyncStateManager` (`clearStaleSyncingFlags = true`) clears flags left by a process killed
+mid-sync, once per process start.
 The client pins `X-Sync-Protocol: 1`: v2 slims a conflict's `current` to an `{id, version, updated_at}` stub,
 which would leave keep-server with nothing to apply. `CubeTimerApplication.BASE_URL` is `https://api.cubetimer.cc`; the web client (CubeTimer-web, which emailed
 links open) lives at `https://cubetimer.cc`.
@@ -227,5 +243,8 @@ signed-in owners' session-less solves are left alone, as the server accepts them
 - BLE: Android allows one outstanding GATT operation per connection — route every write through the
   connection's op lock. QiYi timers ignore everything until they get a hello carrying their MAC (advertised in
   manufacturer data `0x0504`, else the device address) and re-send recorded solves until acknowledged.
+- Week math: the Stats activity heatmap (`ActivityTracker`) is Sunday-first in every locale (`activityGridStart`,
+  `java.time`). `Calendar.set(DAY_OF_WEEK, …)` resolves within the locale's week (Monday-first in Polish), which
+  once shifted the grid a week into the future — don't use `Calendar` week fields for it.
 - `.agents/` is a gitignored scratch directory used by a multi-agent workflow (briefings, handoffs). It is not
   part of the app.
