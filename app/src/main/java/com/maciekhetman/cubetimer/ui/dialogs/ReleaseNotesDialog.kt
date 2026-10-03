@@ -32,9 +32,12 @@ private val ReleaseNotes = listOf(
         version = "2.0.0",
         changes = listOf(
             R.string.release_notes_2_0_0_sync,
+            R.string.release_notes_2_0_0_bluetooth,
+            R.string.release_notes_2_0_0_history,
             R.string.release_notes_2_0_0_account,
             R.string.release_notes_2_0_0_inspection,
             R.string.release_notes_2_0_0_start_delay,
+            R.string.release_notes_2_0_0_scramble_preview,
             R.string.release_notes_2_0_0_settings,
             R.string.release_notes_2_0_0_polish,
             R.string.release_notes_2_0_0_csv,

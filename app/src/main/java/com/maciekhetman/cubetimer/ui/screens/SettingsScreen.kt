@@ -28,7 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.BluetoothConnected
 import androidx.compose.material.icons.filled.BluetoothDisabled
-import androidx.compose.material.icons.filled.BluetoothSearching
+import androidx.compose.material.icons.automirrored.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.CloudDone
@@ -394,7 +394,7 @@ private fun BluetoothTimerRow(status: BluetoothTimerStatus, onClick: () -> Unit)
                 imageVector = when (status) {
                     is BluetoothTimerStatus.Connected -> Icons.Filled.BluetoothConnected
                     BluetoothTimerStatus.Disconnected, BluetoothTimerStatus.Unsupported -> Icons.Filled.BluetoothDisabled
-                    BluetoothTimerStatus.Scanning, is BluetoothTimerStatus.Connecting -> Icons.Filled.BluetoothSearching
+                    BluetoothTimerStatus.Scanning, is BluetoothTimerStatus.Connecting -> Icons.AutoMirrored.Filled.BluetoothSearching
                 },
                 tint = if (unavailable) colors.onErrorContainer else colors.primary,
                 containerColor = if (unavailable) colors.errorContainer else colors.surfaceContainerHighest

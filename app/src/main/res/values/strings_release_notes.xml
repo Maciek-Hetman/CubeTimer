@@ -5,6 +5,9 @@
     <string name="release_notes_version">Version %1$s</string>
 
     <string name="release_notes_2_0_0_sync">Cloud sync: sign in to keep your solves and sessions on every device, and resolve sync conflicts from the sync dialog.</string>
+    <string name="release_notes_2_0_0_bluetooth">Bluetooth timers: connect a GAN or QiYi smart timer and it starts and stops your solves.</string>
+    <string name="release_notes_2_0_0_history">A new History screen: solves grouped into sessions, with filters, sorting, undo and solve cards you can share.</string>
+    <string name="release_notes_2_0_0_scramble_preview">Tap the scramble to see a 2D preview of the scrambled puzzle.</string>
     <string name="release_notes_2_0_0_account">Account tools: email verification and password reset links, change password and delete account, all in the app.</string>
     <string name="release_notes_2_0_0_inspection">Optional WCA inspection with a 15-second countdown and automatic +2 / DNF.</string>
     <string name="release_notes_2_0_0_start_delay">Start delay from 0 to 500 ms, so a tap can start the timer right away.</string>

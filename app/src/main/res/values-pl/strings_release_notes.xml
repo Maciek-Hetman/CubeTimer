@@ -5,6 +5,9 @@
     <string name="release_notes_version">Wersja %1$s</string>
 
     <string name="release_notes_2_0_0_sync">Synchronizacja w chmurze: zaloguj się, aby mieć rozwiązania i sesje na każdym urządzeniu, a konflikty rozwiązuj w oknie synchronizacji.</string>
+    <string name="release_notes_2_0_0_bluetooth">Timery Bluetooth: połącz timer GAN lub QiYi – to on będzie uruchamiał i zatrzymywał pomiar ułożeń.</string>
+    <string name="release_notes_2_0_0_history">Nowy ekran Historia: ułożenia pogrupowane w sesje, filtry, sortowanie, cofanie zmian oraz karty ułożeń do udostępniania.</string>
+    <string name="release_notes_2_0_0_scramble_preview">Dotknij scramble\'a, aby zobaczyć jego podgląd 2D.</string>
     <string name="release_notes_2_0_0_account">Narzędzia konta: linki do weryfikacji e-maila i resetu hasła, zmiana hasła i usunięcie konta bezpośrednio w aplikacji.</string>
     <string name="release_notes_2_0_0_inspection">Opcjonalna inspekcja WCA z odliczaniem 15 sekund oraz automatycznym +2 / DNF.</string>
     <string name="release_notes_2_0_0_start_delay">Opóźnienie startu od 0 do 500 ms, dzięki czemu zwykłe dotknięcie może od razu uruchomić timer.</string>
